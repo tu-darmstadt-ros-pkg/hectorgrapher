@@ -148,7 +148,6 @@ void TSDFRangeDataInserter2D::Insert(const sensor::RangeData& range_data,
     normals = EstimateNormals(sorted_range_data,
                               options_.normal_estimation_options());
   }
-
   const Eigen::Vector2f origin = sorted_range_data.origin.head<2>();
   for (size_t hit_index = 0; hit_index < sorted_range_data.returns.size();
        ++hit_index) {
@@ -170,11 +169,11 @@ void TSDFRangeDataInserter2D::InsertHit(
   const float range = ray.norm();
   const float truncation_distance =
       static_cast<float>(options_.truncation_distance());
-  if (range < truncation_distance) return;
   const float truncation_ratio = truncation_distance / range;
   const Eigen::Vector2f ray_begin =
-      options_.update_free_space() ? origin
-                                   : origin + (1.0f - truncation_ratio) * ray;
+      options_.update_free_space() || range < truncation_distance
+          ? origin
+          : origin + (1.0f - truncation_ratio) * ray;
   const Eigen::Vector2f ray_end = origin + (1.0f + truncation_ratio) * ray;
   std::pair<Eigen::Array2i, Eigen::Array2i> superscaled_ray =
       SuperscaleRay(ray_begin, ray_end, tsdf);
@@ -200,7 +199,7 @@ void TSDFRangeDataInserter2D::InsertHit(
 
   // Update Cells.
   for (const Eigen::Array2i& cell_index : ray_mask) {
-    if (tsdf->CellIsUpdated(cell_index)) continue;
+    // if (tsdf->CellIsUpdated(cell_index)) continue;
     Eigen::Vector2f cell_center = tsdf->limits().GetCellCenter(cell_index);
     float distance_cell_to_origin = (cell_center - origin).norm();
     float update_tsd = range - distance_cell_to_origin;

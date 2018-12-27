@@ -46,7 +46,7 @@ class DummyFileResolver : public FileResolver {
   }
 };
 
-std::unique_ptr<LuaParameterDictionary> MakeDictionary(
+inline std::unique_ptr<LuaParameterDictionary> MakeDictionary(
     const std::string& code) {
   return absl::make_unique<LuaParameterDictionary>(
       code, absl::make_unique<DummyFileResolver>());

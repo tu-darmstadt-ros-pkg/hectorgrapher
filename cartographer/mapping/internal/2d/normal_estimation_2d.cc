@@ -15,12 +15,15 @@
  */
 
 #include "cartographer/mapping/internal/2d/normal_estimation_2d.h"
-
 namespace cartographer {
 namespace mapping {
 namespace {
 
 float NormalTo2DAngle(const Eigen::Vector3f& v) {
+  return std::atan2(v[1], v[0]);
+}
+
+float Normal2DTo2DAngle(const Eigen::Vector2f& v) {
   return std::atan2(v[1], v[0]);
 }
 
@@ -59,6 +62,36 @@ float EstimateNormal(const sensor::PointCloud& returns,
   }
   return NormalTo2DAngle(mean_normal);
 }
+
+float EstimateNormalPCA(const sensor::PointCloud& returns,
+                        const size_t estimation_point_index,
+                        const size_t sample_window_begin,
+                        const size_t sample_window_end,
+                        const Eigen::Vector3f& sensor_origin) {
+  const Eigen::Vector3f& estimation_point =
+      returns[estimation_point_index].position;
+  if (sample_window_end - sample_window_begin < 2) {
+    return NormalTo2DAngle(sensor_origin - estimation_point);
+  }
+  Eigen::MatrixXf initial_points =
+      Eigen::MatrixXf(2, sample_window_end - sample_window_begin);
+  for (size_t sample_point_index = sample_window_begin;
+       sample_point_index < sample_window_end; ++sample_point_index) {
+    const Eigen::Vector3f& sample_point = returns[sample_point_index].position;
+    initial_points.col(sample_point_index - sample_window_begin) =
+        sample_point.head<2>();
+  }
+  Eigen::Vector2f centroid = initial_points.rowwise().mean();
+  initial_points.colwise() -= centroid;
+  Eigen::JacobiSVD<Eigen::MatrixXf> svd(initial_points, Eigen::ComputeFullU);
+  Eigen::Vector2f normal = svd.matrixU().col(1);
+  const Eigen::Vector3f& estimation_point_to_observation =
+      sensor_origin - estimation_point;
+  if (normal.dot(estimation_point_to_observation.head<2>()) < 0) {
+    normal = -normal;
+  }
+  return Normal2DTo2DAngle(normal);
+}
 }  // namespace
 
 proto::NormalEstimationOptions2D CreateNormalEstimationOptions2D(
@@ -67,6 +100,7 @@ proto::NormalEstimationOptions2D CreateNormalEstimationOptions2D(
   options.set_num_normal_samples(
       parameter_dictionary->GetInt("num_normal_samples"));
   options.set_sample_radius(parameter_dictionary->GetDouble("sample_radius"));
+  options.set_use_pca(parameter_dictionary->GetBool("use_pca"));
   CHECK_GT(options.num_normal_samples(), 0);
   CHECK_GT(options.sample_radius(), 0.0);
   return options;
@@ -100,10 +134,16 @@ std::vector<float> EstimateNormals(
              sample_radius;
          ++sample_window_end) {
     }
-    const float normal_estimate =
-        EstimateNormal(range_data.returns, current_point, sample_window_begin,
-                       sample_window_end, range_data.origin);
-    normals.push_back(normal_estimate);
+
+    if (normal_estimation_options.use_pca()) {
+      normals.push_back(EstimateNormalPCA(
+          range_data.returns, current_point, sample_window_begin,
+          sample_window_end, range_data.origin));
+    } else {
+      normals.push_back(EstimateNormal(range_data.returns, current_point,
+                                       sample_window_begin, sample_window_end,
+                                       range_data.origin));
+    }
   }
   return normals;
 }
