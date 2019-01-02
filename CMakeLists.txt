@@ -41,10 +41,10 @@ find_package(Eigen3 REQUIRED)
 find_package(LuaGoogle REQUIRED)
 # On Windows, Protobuf is incorrectly found by the bundled CMake module. Prefer native CMake config, if possible.
 set(protobuf_MODULE_COMPATIBLE TRUE CACHE INTERNAL "")
-find_package(Protobuf 3.0.0 CONFIG)
-if (NOT Protobuf_FOUND)
-  find_package(Protobuf 3.0.0 REQUIRED)
-endif()
+
+set(PROTOBUF_INCLUDE_DIRS "/home/kevin/tsdf_ws/external/protobuf3/include")
+set(PROTOBUF_LIBRARY "/home/kevin/tsdf_ws/external/protobuf3/lib/libprotobuf.a")
+set(PROTOBUF_PROTOC_EXECUTABLE "/home/kevin/tsdf_ws/external/protobuf3/bin/protoc")
 
 if (${BUILD_GRPC})
   find_package(async_grpc REQUIRED)
@@ -259,7 +259,7 @@ endif()
 target_link_libraries(${PROJECT_NAME} PUBLIC ${CAIRO_LIBRARIES})
 
 target_include_directories(${PROJECT_NAME} SYSTEM PUBLIC
-  ${PROTOBUF_INCLUDE_DIR})
+  ${PROTOBUF_INCLUDE_DIRS})
 # TODO(hrapp): This should not explicitly list pthread and use
 # PROTOBUF_LIBRARIES, but that failed on first try.
 target_link_libraries(${PROJECT_NAME} PUBLIC ${PROTOBUF_LIBRARY} standalone_absl)
