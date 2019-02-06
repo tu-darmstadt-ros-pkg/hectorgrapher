@@ -250,6 +250,8 @@ target_include_directories(${PROJECT_NAME} SYSTEM PUBLIC
   "${Boost_INCLUDE_DIRS}")
 target_link_libraries(${PROJECT_NAME} PUBLIC ${Boost_LIBRARIES})
 
+find_package(gflags REQUIRED)
+find_package(glog)
 if (WIN32)
   find_package(glog REQUIRED)
   set(GLOG_LIBRARY glog::glog)
