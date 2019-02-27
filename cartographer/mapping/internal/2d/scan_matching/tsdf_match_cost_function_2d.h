@@ -29,6 +29,7 @@ namespace scan_matching {
 // a 'pose'. The cost increases with the signed distance of the matched point
 // location in the 'grid'.
 ceres::CostFunction* CreateTSDFMatchCostFunction2D(
+        const double empty_space_cost,
     const double scaling_factor, const sensor::PointCloud& point_cloud,
     const TSDF2D& grid);
 

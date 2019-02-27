@@ -31,6 +31,7 @@ POSE_GRAPH = {
       occupied_space_weight = 20.,
       translation_weight = 10.,
       rotation_weight = 1.,
+      empty_space_cost = 0.,
       ceres_solver_options = {
         use_nonmonotonic_steps = true,
         max_num_iterations = 10,

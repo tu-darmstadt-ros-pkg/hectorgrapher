@@ -47,6 +47,7 @@ proto::CeresScanMatcherOptions2D CreateCeresScanMatcherOptions2D(
   *options.mutable_ceres_solver_options() =
       common::CreateCeresSolverOptionsProto(
           parameter_dictionary->GetDictionary("ceres_solver_options").get());
+  options.set_empty_space_cost(parameter_dictionary->GetDouble("empty_space_cost"));
   return options;
 }
 
@@ -83,6 +84,7 @@ void CeresScanMatcher2D::Match(const Eigen::Vector2d& target_translation,
     case GridType::TSDF:
       problem.AddResidualBlock(
           CreateTSDFMatchCostFunction2D(
+                  options_.empty_space_cost(),
               options_.occupied_space_weight() /
                   std::sqrt(static_cast<double>(point_cloud.size())),
               point_cloud, static_cast<const TSDF2D&>(grid)),

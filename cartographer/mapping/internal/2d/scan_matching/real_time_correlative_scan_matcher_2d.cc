@@ -37,9 +37,11 @@ namespace {
 
 float ComputeCandidateScore(const TSDF2D& tsdf,
                             const DiscreteScan2D& discrete_scan,
-                            int x_index_offset, int y_index_offset) {
+                            int x_index_offset, int y_index_offset,
+                            double empty_space_cost) {
   float candidate_score = 0.f;
   float summed_weight = 0.f;
+  float empty_space_weight = 0.f;
   for (const Eigen::Array2i& xy_index : discrete_scan) {
     const Eigen::Array2i proposed_xy_index(xy_index.x() + x_index_offset,
                                            xy_index.y() + y_index_offset);
@@ -51,9 +53,12 @@ float ComputeCandidateScore(const TSDF2D& tsdf,
     const float weight = tsd_and_weight.second;
     candidate_score += normalized_tsd_score * weight;
     summed_weight += weight;
+    if(weight == 0.f) {
+      empty_space_weight += empty_space_cost;
+    }
   }
   if (summed_weight == 0.f) return 0.f;
-  candidate_score /= summed_weight;
+  candidate_score /= (summed_weight + empty_space_weight);
   CHECK_GE(candidate_score, 0.f);
   return candidate_score;
 }
@@ -164,7 +169,7 @@ void RealTimeCorrelativeScanMatcher2D::ScoreCandidates(
         candidate.score = ComputeCandidateScore(
             static_cast<const TSDF2D&>(grid),
             discrete_scans[candidate.scan_index], candidate.x_index_offset,
-            candidate.y_index_offset);
+            candidate.y_index_offset, options_.empty_space_cost());
         break;
     }
     candidate.score *=

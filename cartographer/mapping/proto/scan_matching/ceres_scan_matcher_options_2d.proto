@@ -28,4 +28,5 @@ message CeresScanMatcherOptions2D {
   // Configure the Ceres solver. See the Ceres documentation for more
   // information: https://code.google.com/p/ceres-solver/
   common.proto.CeresSolverOptions ceres_solver_options = 9;
+  double empty_space_cost = 10;
 }

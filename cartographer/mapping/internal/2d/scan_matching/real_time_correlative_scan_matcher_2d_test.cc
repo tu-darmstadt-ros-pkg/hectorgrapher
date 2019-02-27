@@ -44,6 +44,7 @@ CreateRealTimeCorrelativeScanMatcherTestOptions2D() {
       "angular_search_window = 0.16, "
       "translation_delta_cost_weight = 0., "
       "rotation_delta_cost_weight = 0., "
+      "empty_space_cost = 0., "
       "}");
   return CreateRealTimeCorrelativeScanMatcherOptions(
       parameter_dictionary.get());

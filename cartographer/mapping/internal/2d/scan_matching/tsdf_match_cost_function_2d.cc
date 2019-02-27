@@ -29,10 +29,12 @@ namespace scan_matching {
 // location in the 'grid'.
 class TSDFMatchCostFunction2D {
  public:
-  TSDFMatchCostFunction2D(const double residual_scaling_factor,
+  TSDFMatchCostFunction2D(const double empty_space_cost,
+                          const double residual_scaling_factor,
                           const sensor::PointCloud& point_cloud,
                           const TSDF2D& grid)
-      : residual_scaling_factor_(residual_scaling_factor),
+      : empty_space_cost_(empty_space_cost),
+        residual_scaling_factor_(residual_scaling_factor),
         point_cloud_(point_cloud),
         interpolated_grid_(grid) {}
 
@@ -53,10 +55,16 @@ class TSDFMatchCostFunction2D {
       const Eigen::Matrix<T, 3, 1> world = transform * point;
       const T point_weight = interpolated_grid_.GetWeight(world[0], world[1]);
       summed_weight += point_weight;
+      if(point_weight > T(0)) {
       residual[i] =
           T(point_cloud_.size()) * residual_scaling_factor_ *
           interpolated_grid_.GetCorrespondenceCost(world[0], world[1]) *
           point_weight;
+      }
+      else {
+        residual[i] =
+                    T(point_cloud_.size()) * residual_scaling_factor_ * empty_space_cost_;
+      }
     }
     if (summed_weight == T(0)) return false;
     for (size_t i = 0; i < point_cloud_.size(); ++i) {
@@ -69,18 +77,19 @@ class TSDFMatchCostFunction2D {
   TSDFMatchCostFunction2D(const TSDFMatchCostFunction2D&) = delete;
   TSDFMatchCostFunction2D& operator=(const TSDFMatchCostFunction2D&) = delete;
 
+  const double empty_space_cost_;
   const double residual_scaling_factor_;
   const sensor::PointCloud& point_cloud_;
   const InterpolatedTSDF2D interpolated_grid_;
 };
 
-ceres::CostFunction* CreateTSDFMatchCostFunction2D(
+ceres::CostFunction* CreateTSDFMatchCostFunction2D(const double empty_space_cost,
     const double scaling_factor, const sensor::PointCloud& point_cloud,
     const TSDF2D& tsdf) {
   return new ceres::AutoDiffCostFunction<TSDFMatchCostFunction2D,
                                          ceres::DYNAMIC /* residuals */,
                                          3 /* pose variables */>(
-      new TSDFMatchCostFunction2D(scaling_factor, point_cloud, tsdf),
+      new TSDFMatchCostFunction2D(empty_space_cost, scaling_factor, point_cloud, tsdf),
       point_cloud.size());
 }
 

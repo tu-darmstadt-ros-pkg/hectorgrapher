@@ -40,12 +40,14 @@ TRAJECTORY_BUILDER_2D = {
     angular_search_window = math.rad(20.),
     translation_delta_cost_weight = 1e-1,
     rotation_delta_cost_weight = 1e-1,
+    empty_space_cost = 0.,
   },
 
   ceres_scan_matcher = {
     occupied_space_weight = 1.,
     translation_weight = 10.,
     rotation_weight = 40.,
+    empty_space_cost = 0.,
     ceres_solver_options = {
       use_nonmonotonic_steps = false,
       max_num_iterations = 20,

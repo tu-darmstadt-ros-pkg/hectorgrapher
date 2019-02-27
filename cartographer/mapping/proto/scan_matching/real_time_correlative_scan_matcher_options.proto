@@ -28,4 +28,6 @@ message RealTimeCorrelativeScanMatcherOptions {
   // Weights applied to each part of the score.
   double translation_delta_cost_weight = 3;
   double rotation_delta_cost_weight = 4;
+
+  double empty_space_cost = 5;
 }

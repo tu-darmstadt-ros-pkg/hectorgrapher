@@ -16,8 +16,11 @@ CreateRealTimeCorrelativeScanMatcherOptions(
       parameter_dictionary->GetDouble("translation_delta_cost_weight"));
   options.set_rotation_delta_cost_weight(
       parameter_dictionary->GetDouble("rotation_delta_cost_weight"));
+  options.set_empty_space_cost(parameter_dictionary->GetDouble("empty_space_cost"));
+
   CHECK_GE(options.translation_delta_cost_weight(), 0.);
   CHECK_GE(options.rotation_delta_cost_weight(), 0.);
+  CHECK_GE(options.empty_space_cost(), 0.);
   return options;
 }
 
