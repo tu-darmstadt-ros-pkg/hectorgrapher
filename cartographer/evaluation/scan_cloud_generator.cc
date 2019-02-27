@@ -41,26 +41,26 @@ void ScanCloudGenerator::generateRectangle(
 
   for (float x = x_min; x <= x_max + 1e-5; x += resolution_) {
     float y = y_min;
-    e_orientation = error_translation_direction(e1);
-    e_x = std::cos(e_orientation) * e_scale;
-    e_y = std::sin(e_orientation) * e_scale;
+    e_orientation = normal_distribution(e1);
+    e_x = x / sqrt(x * x + y * y) * e_orientation;
+    e_y = y / sqrt(x * x + y * y) * e_orientation;
     cloud.push_back({Eigen::Vector3f(x + e_x, y + e_y, 0.)});
     y = y_max;
-    e_orientation = error_translation_direction(e1);
-    e_x = std::cos(e_orientation) * e_scale;
-    e_y = std::sin(e_orientation) * e_scale;
+    e_orientation = normal_distribution(e1);
+    e_x = x / sqrt(x * x + y * y) * e_orientation;
+    e_y = y / sqrt(x * x + y * y) * e_orientation;
     cloud.push_back({Eigen::Vector3f(x + e_x, y + e_y, 0.)});
   }
   for (float y = y_min; y <= y_max + 1e-5; y += resolution_) {
     float x = x_min;
-    e_orientation = error_translation_direction(e1);
-    e_x = std::cos(e_orientation) * e_scale;
-    e_y = std::sin(e_orientation) * e_scale;
+    e_orientation = normal_distribution(e1);
+    e_x = x / sqrt(x * x + y * y) * e_orientation;
+    e_y = y / sqrt(x * x + y * y) * e_orientation;
     cloud.push_back({Eigen::Vector3f(x + e_x, y + e_y, 0.)});
     x = x_max;
-    e_orientation = error_translation_direction(e1);
-    e_x = std::cos(e_orientation) * e_scale;
-    e_y = std::sin(e_orientation) * e_scale;
+    e_orientation = normal_distribution(e1);
+    e_x = x / sqrt(x * x + y * y) * e_orientation;
+    e_y = y / sqrt(x * x + y * y) * e_orientation;
     cloud.push_back({Eigen::Vector3f(x + e_x, y + e_y, 0.)});
   }
 }

@@ -18,6 +18,7 @@
 #define CARTOGRAPHER_MAPPING_INTERNAL_NORMAL_ESTIMATION_2D_H_
 
 #include <vector>
+#include "cartographer/mapping/2d/tsdf_2d.h"
 #include "cartographer/mapping/proto/2d/normal_estimation_options_2d.pb.h"
 #include "cartographer/sensor/point_cloud.h"
 #include "cartographer/sensor/range_data.h"
@@ -35,6 +36,9 @@ proto::NormalEstimationOptions2D CreateNormalEstimationOptions2D(
 std::vector<float> EstimateNormals(
     const sensor::RangeData& range_data,
     const proto::NormalEstimationOptions2D& normal_estimation_options);
+
+std::vector<float> EstimateNormalsFromTSDF(const sensor::RangeData& range_data,
+                                           const mapping::TSDF2D& tsdf);
 
 }  // namespace mapping
 }  // namespace cartographer

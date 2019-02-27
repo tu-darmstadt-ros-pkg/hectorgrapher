@@ -148,5 +148,40 @@ std::vector<float> EstimateNormals(
   return normals;
 }
 
+std::vector<float> EstimateNormalsFromTSDF(const sensor::RangeData& range_data,
+                                           const mapping::TSDF2D& tsdf) {
+  std::vector<float> normals;
+  normals.reserve(range_data.returns.size());
+  for (size_t current_point_idx = 0;
+       current_point_idx < range_data.returns.size(); ++current_point_idx) {
+    const Eigen::Vector3f& hit = range_data.returns[current_point_idx].position;
+    // limits.GetCellIndex(Vector2f(-0.5f, 0.5f)
+    tsdf.GetTSD(tsdf.limits().GetCellIndex(hit.head<2>()));
+    Eigen::Vector2f center =
+        tsdf.limits().GetCellCenter(tsdf.limits().GetCellIndex(hit.head<2>()));
+    float x0 =
+        center[0] < hit[0] ? center[0] : center[0] - tsdf.limits().resolution();
+    float y0 =
+        center[1] < hit[1] ? center[1] : center[1] - tsdf.limits().resolution();
+    float x1 = x0 + tsdf.limits().resolution();
+    float y1 = y0 + tsdf.limits().resolution();
+
+    float m00 = tsdf.GetTSD(tsdf.limits().GetCellIndex({x0, y0}));
+    float m10 = tsdf.GetTSD(tsdf.limits().GetCellIndex({x1, y0}));
+    float m01 = tsdf.GetTSD(tsdf.limits().GetCellIndex({x0, y1}));
+    float m11 = tsdf.GetTSD(tsdf.limits().GetCellIndex({x1, y1}));
+
+    float dMdx =
+        ((center[1] - y0) * (m11 - m01) + (y1 - center[1]) * (m10 - m00)) /
+        (y1 - y0);
+    float dMdy =
+        ((center[0] - x0) * (m11 - m10) + (x1 - center[0]) * (m01 - m00)) /
+        (x1 - x0);
+
+    normals.push_back(Normal2DTo2DAngle({dMdx, dMdy}));
+  }
+  return normals;
+}
+
 }  // namespace mapping
 }  // namespace cartographer

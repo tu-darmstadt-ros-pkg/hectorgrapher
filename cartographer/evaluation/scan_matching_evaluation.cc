@@ -12,6 +12,7 @@
 #include "cartographer/mapping/2d/probability_grid_range_data_inserter_2d.h"
 #include "cartographer/mapping/2d/tsdf_2d.h"
 #include "cartographer/mapping/2d/tsdf_range_data_inserter_2d.h"
+#include "cartographer/mapping/internal/2d/normal_estimation_2d.h"
 #include "cartographer/mapping/internal/2d/scan_matching/ceres_scan_matcher_2d.h"
 #include "cartographer/mapping/internal/2d/scan_matching/occupied_space_cost_function_2d.h"
 namespace cartographer {
@@ -21,6 +22,27 @@ static int rendered_grid_id = 0;
 static std::random_device rd;
 static std::default_random_engine e1(42);
 static mapping::ValueConversionTables conversion_tables;
+
+struct RangeDataSorter {
+  RangeDataSorter(Eigen::Vector3f origin) { origin_ = origin.head<2>(); }
+  bool operator()(const sensor::RangefinderPoint& lhs,
+                  const sensor::RangefinderPoint& rhs) {
+    const Eigen::Vector2f delta_lhs =
+        (lhs.position.head<2>() - origin_).normalized();
+    const Eigen::Vector2f delta_rhs =
+        (rhs.position.head<2>() - origin_).normalized();
+    if ((delta_lhs[1] < 0.f) != (delta_rhs[1] < 0.f)) {
+      return delta_lhs[1] < 0.f;
+    } else if (delta_lhs[1] < 0.f) {
+      return delta_lhs[0] < delta_rhs[0];
+    } else {
+      return delta_lhs[0] > delta_rhs[0];
+    }
+  }
+
+ private:
+  Eigen::Vector2f origin_;
+};
 }  // namespace
 
 struct Sample {
@@ -156,7 +178,8 @@ generateRangeDataInserter<
 void renderGridwithScan(
     const cartographer::mapping::ProbabilityGrid& grid, const Sample& sample,
     const cartographer::transform::Rigid2d& initial_transform,
-    const cartographer::transform::Rigid2d& matched_transform) {
+    const cartographer::transform::Rigid2d& matched_transform,
+    const cartographer::mapping::proto::RangeDataInserterOptions& options) {
   sensor::RangeData initial_pose_estimate_range_data =
       cartographer::sensor::TransformRangeData(
           sample.range_data,
@@ -217,7 +240,8 @@ void renderGridwithScan(
 void renderGridwithScan(
     const cartographer::mapping::TSDF2D& grid, const Sample& sample,
     const cartographer::transform::Rigid2d& initial_transform,
-    const cartographer::transform::Rigid2d& matched_transform) {
+    const cartographer::transform::Rigid2d& matched_transform,
+    const cartographer::mapping::proto::RangeDataInserterOptions& options) {
   sensor::RangeData initial_pose_estimate_range_data =
       cartographer::sensor::TransformRangeData(
           sample.range_data,
@@ -259,6 +283,7 @@ void renderGridwithScan(
     }
   }
 
+  // Scan Points
   cairo_set_source_rgb(grid_surface_context, 0.8, 0.0, 0);
   for (auto& scan : initial_pose_estimate_range_data.returns) {
     float x = scale * (limits.max().x() - scan.position[0]);
@@ -275,8 +300,56 @@ void renderGridwithScan(
     cairo_rectangle(grid_surface_context, (x - 0.15) * scale,
                     (y - 0.15) * scale, 0.3 * scale, 0.3 * scale);
   }
-
   cairo_fill(grid_surface_context);
+
+  // Scan Normals
+  sensor::RangeData sorted_range_data = matched_range_data;
+  std::vector<float> normals;
+  std::sort(sorted_range_data.returns.begin(), sorted_range_data.returns.end(),
+            RangeDataSorter(sorted_range_data.origin));
+  normals = cartographer::mapping::EstimateNormals(
+      sorted_range_data, options.tsdf_range_data_inserter_options_2d()
+                             .normal_estimation_options());
+  cairo_set_source_rgb(grid_surface_context, 0.3, 0.8, 0);
+  cairo_set_line_width(grid_surface_context, 1);
+  int return_idx = 0;
+  for (auto& scan : sorted_range_data.returns) {
+    float cr = return_idx % 2 == 0 ? 0.8 : 0.2;
+    cr = (10.f * float(return_idx) / float(sorted_range_data.returns.size()));
+    cr -= floor(cr);
+    cr = 0.8;
+    cairo_set_source_rgb(grid_surface_context, 1. - cr, cr, 0);
+    float x = scale * (limits.max().x() - scan.position[0]);
+    float y = scale * (limits.max().y() - scan.position[1]);
+    float dx = -1. * cos(normals[return_idx]);
+    float dy = -1. * sin(normals[return_idx]);
+    cairo_move_to(grid_surface_context, x * scale, y * scale);
+    cairo_line_to(grid_surface_context, (x + dx) * scale, (y + dy) * scale);
+    return_idx++;
+    cairo_stroke(grid_surface_context);
+  }
+
+  // Normals from Map
+  normals =
+      cartographer::mapping::EstimateNormalsFromTSDF(sorted_range_data, grid);
+  cairo_set_source_rgb(grid_surface_context, 0.3, 0.8, 0);
+  cairo_set_line_width(grid_surface_context, 1);
+  return_idx = 0;
+  for (auto& scan : sorted_range_data.returns) {
+    float cr = return_idx % 2 == 0 ? 0.8 : 0.2;
+    cr = (10.f * float(return_idx) / float(sorted_range_data.returns.size()));
+    cr -= floor(cr);
+    cr = 0.8;
+    cairo_set_source_rgb(grid_surface_context, 0, 1. - cr, cr);
+    float x = scale * (limits.max().x() - scan.position[0]);
+    float y = scale * (limits.max().y() - scan.position[1]);
+    float dx = -1. * cos(normals[return_idx]);
+    float dy = -1. * sin(normals[return_idx]);
+    cairo_move_to(grid_surface_context, x * scale, y * scale);
+    cairo_line_to(grid_surface_context, (x + dx) * scale, (y + dy) * scale);
+    return_idx++;
+    cairo_stroke(grid_surface_context);
+  }
 
   time_t seconds;
   time(&seconds);
@@ -305,16 +378,19 @@ void EvaluateScanMatcher(
 
   for (auto sample : test_set) {
     SampleResult sample_result;
-    MatchScan(sample, ceres_scan_matcher_options, *grid.get(), &sample_result);
+    MatchScan(sample, ceres_scan_matcher_options, range_data_inserter_options,
+              *grid.get(), &sample_result);
     results->push_back(sample_result);
   }
 }
 
 template <typename GridType>
-void MatchScan(const Sample& sample,
-               const cartographer::mapping::scan_matching::proto::
-                   CeresScanMatcherOptions2D& ceres_scan_matcher_options,
-               const GridType& grid, SampleResult* sample_result) {
+void MatchScan(
+    const Sample& sample,
+    const cartographer::mapping::scan_matching::proto::
+        CeresScanMatcherOptions2D& ceres_scan_matcher_options,
+    const cartographer::mapping::proto::RangeDataInserterOptions& options,
+    const GridType& grid, SampleResult* sample_result) {
   cartographer::mapping::scan_matching::CeresScanMatcher2D scan_matcher(
       ceres_scan_matcher_options);
 
@@ -342,8 +418,8 @@ void MatchScan(const Sample& sample,
   //              << sample_result->matching_iterations << " \t"
   //              << sample_result->matching_time;
 
-  renderGridwithScan(grid, sample, initial_pose_estimate,
-                     matched_pose_estimate);
+  renderGridwithScan(grid, sample, initial_pose_estimate, matched_pose_estimate,
+                     options);
 }
 
 template <typename GridType, typename RangeDataInserter>
@@ -417,7 +493,7 @@ void RunScanMatchingEvaluation() {
       "maximum_weight = 2.,"
       "update_free_space = false,"
       "normal_estimation_options = {"
-      "num_normal_samples = 4,"
+      "num_normal_samples = 400,"
       "sample_radius = 0.15,"
       "use_pca = false,"
       "},"
@@ -435,6 +511,7 @@ void RunScanMatchingEvaluation() {
           occupied_space_weight = 1.,
           translation_weight = 0.0,
           rotation_weight = 0.0,
+          empty_space_cost = 0.0,
           ceres_solver_options = {
             use_nonmonotonic_steps = true,
             max_num_iterations = 50,
@@ -445,7 +522,7 @@ void RunScanMatchingEvaluation() {
       ceres_scan_matcher_options =
           cartographer::mapping::scan_matching::CreateCeresScanMatcherOptions2D(
               parameter_dictionary.get());
-  int n_training = 1;
+  int n_training = 10;
   int n_test = 1;
 
   std::ofstream log_file;
@@ -468,9 +545,9 @@ void RunScanMatchingEvaluation() {
     for (double error_rot : rot_errors) {
       const ScanCloudGenerator::ModelType model_type =
           ScanCloudGenerator::ModelType::RECTANGLE;
-      const Eigen::Vector2d size = {3.1, 0.3};
+      const Eigen::Vector2d size = {3.1, 3.3};
       const double resolution = 0.03;
-      const float cloud_noise = 0.0001;
+      const float cloud_noise = 0.01;
       std::vector<Sample> training_set;
       std::vector<Sample> test_set;
       GenerateSampleSet(n_training, n_test, error_trans, error_rot, model_type,
