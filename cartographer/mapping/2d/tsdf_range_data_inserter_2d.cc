@@ -94,6 +94,10 @@ float ComputeRangeWeightFactor(float range, int exponent) {
   }
   return weight;
 }
+
+float WeightedMeanOfTwoAngles(float a, float wa, float b, float wb) {
+  return std::atan2(wa * sin(a) + wb * sin(b), wa * cos(a) + wb * cos(b));
+}
 }  // namespace
 
 proto::TSDFRangeDataInserterOptions2D CreateTSDFRangeDataInserterOptions2D(
@@ -145,8 +149,35 @@ void TSDFRangeDataInserter2D::Insert(const sensor::RangeData& range_data,
     std::sort(sorted_range_data.returns.begin(),
               sorted_range_data.returns.end(),
               RangeDataSorter(sorted_range_data.origin));
-    normals = EstimateNormals(sorted_range_data,
-                              options_.normal_estimation_options());
+    std::vector<float> scan_normals = EstimateNormals(
+        sorted_range_data, options_.normal_estimation_options());
+    std::vector<float> tsdf_normals =
+        EstimateNormalsFromTSDF(sorted_range_data, *tsdf);
+
+    for (size_t hit_index = 0; hit_index < sorted_range_data.returns.size();
+         ++hit_index) {
+      const Eigen::Vector2f hit =
+          sorted_range_data.returns[hit_index].position.head<2>();
+
+      bool use_tsdf_normals = false;
+      float weight = tsdf->GetWeight(tsdf->limits().GetCellIndex(
+          hit));  // todo(kdaun) min from interpolation region?
+      if (weight == 0.f || tsdf_normals[hit_index] < -5.f ||
+          !use_tsdf_normals) {
+        normals.push_back(scan_normals[hit_index]);
+        if (hit_index % 2000 == 0) LOG(INFO) << "pass";
+      } else {
+        float ratio = weight / (options_.maximum_weight() * 2);
+        float normal = (1.f - ratio) * scan_normals[hit_index] +
+                       ratio * tsdf_normals[hit_index];
+        normal = WeightedMeanOfTwoAngles(scan_normals[hit_index], 1.f - ratio,
+                                         tsdf_normals[hit_index], ratio);
+        normals.push_back(normal);
+        if (hit_index % 2000 == 0)
+          LOG(INFO) << ratio << "\t" << scan_normals[hit_index] << "\t"
+                    << tsdf_normals[hit_index] << "\t" << normal;
+      }
+    }
   }
   const Eigen::Vector2f origin = sorted_range_data.origin.head<2>();
   for (size_t hit_index = 0; hit_index < sorted_range_data.returns.size();

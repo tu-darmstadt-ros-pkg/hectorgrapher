@@ -122,7 +122,8 @@ void GenerateSampleSet(int n_training, int n_test, double error_trans,
   }
 }
 template <typename GridType>
-std::unique_ptr<GridType> generateGrid() {
+std::unique_ptr<GridType> generateGrid(
+    const cartographer::mapping::proto::RangeDataInserterOptions& options) {
   std::unique_ptr<GridType> grid = absl::make_unique<GridType>(
       cartographer::mapping::MapLimits(
           0.05, Eigen::Vector2d(1., 1.),
@@ -133,14 +134,16 @@ std::unique_ptr<GridType> generateGrid() {
 
 template <>
 std::unique_ptr<cartographer::mapping::TSDF2D>
-generateGrid<cartographer::mapping::TSDF2D>() {
+generateGrid<cartographer::mapping::TSDF2D>(
+    const cartographer::mapping::proto::RangeDataInserterOptions& options) {
   std::unique_ptr<cartographer::mapping::TSDF2D> grid =
       absl::make_unique<cartographer::mapping::TSDF2D>(
           cartographer::mapping::MapLimits(
               0.05, Eigen::Vector2d(1., 1.),
               cartographer::mapping::CellLimits(40, 40)),
-          0.3, 10000.0, &conversion_tables);
-  // TODO(kdaun) initialize with options
+          options.tsdf_range_data_inserter_options_2d().truncation_distance(),
+          options.tsdf_range_data_inserter_options_2d().maximum_weight(),
+          &conversion_tables);
   return std::move(grid);
 }
 
@@ -274,10 +277,6 @@ void renderGridWeightswithScan(
           grid.GetWeight({iy, ix}) /
           options.tsdf_range_data_inserter_options_2d().maximum_weight();
       if (normalized_tsdf > 0.f) {
-        LOG(INFO) << grid.GetWeight({iy, ix});
-        LOG(INFO)
-            << "max "
-            << options.tsdf_range_data_inserter_options_2d().maximum_weight();
         g = 1. - std::pow(std::abs(normalized_tsdf), 0.5);
         b = g;
       } else {
@@ -323,10 +322,11 @@ void renderGridWeightswithScan(
                              .normal_estimation_options());
 
   std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-  std::cout << "Time difference = "
-            << std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin)
-                   .count()
-            << std::endl;
+  //  std::cout << "Time difference = "
+  //            << std::chrono::duration_cast<std::chrono::nanoseconds>(end -
+  //            begin)
+  //                   .count()
+  //            << std::endl;
   cairo_set_source_rgb(grid_surface_context, 0.3, 0.8, 0);
   cairo_set_line_width(grid_surface_context, 1);
   int return_idx = 0;
@@ -353,12 +353,12 @@ void renderGridWeightswithScan(
       cartographer::mapping::EstimateNormalsFromTSDF(sorted_range_data, grid);
   std::chrono::steady_clock::time_point endtsdf =
       std::chrono::steady_clock::now();
-  std::cout << "Time difference = "
-            << std::chrono::duration_cast<std::chrono::nanoseconds>(endtsdf -
-                                                                    begintsdf)
-                   .count()
-            << std::endl;
-
+  //  std::cout << "Time difference = "
+  //            << std::chrono::duration_cast<std::chrono::nanoseconds>(endtsdf
+  //            -
+  //                                                                    begintsdf)
+  //                   .count()
+  //            << std::endl;
   cairo_set_source_rgb(grid_surface_context, 0.3, 0.8, 0);
   cairo_set_line_width(grid_surface_context, 1);
   return_idx = 0;
@@ -543,7 +543,8 @@ void EvaluateScanMatcher(
     std::vector<SampleResult>* results) {
   std::unique_ptr<RangeDataInserter> range_data_inserter =
       generateRangeDataInserter<RangeDataInserter>(range_data_inserter_options);
-  std::unique_ptr<GridType> grid = generateGrid<GridType>();
+  std::unique_ptr<GridType> grid =
+      generateGrid<GridType>(range_data_inserter_options);
 
   for (auto sample : training_set) {
     range_data_inserter->Insert(sample.range_data, grid.get());
@@ -663,7 +664,7 @@ void RunScanMatchingEvaluation() {
       "},"
       "tsdf_range_data_inserter = {"
       "truncation_distance = 0.25,"
-      "maximum_weight = 10000.,"
+      "maximum_weight = 1000.,"
       "update_free_space = false,"
       "normal_estimation_options = {"
       "num_normal_samples = 400,"
@@ -696,7 +697,7 @@ void RunScanMatchingEvaluation() {
           cartographer::mapping::scan_matching::CreateCeresScanMatcherOptions2D(
               parameter_dictionary.get());
   int n_training = 100;
-  int n_test = 1;
+  int n_test = 10;
 
   std::ofstream log_file;
   std::string log_file_path;

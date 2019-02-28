@@ -172,6 +172,15 @@ std::vector<float> EstimateNormalsFromTSDF(const sensor::RangeData& range_data,
     float m01 = tsdf.GetTSD(tsdf.limits().GetCellIndex({x0, y1}));
     float m11 = tsdf.GetTSD(tsdf.limits().GetCellIndex({x1, y1}));
 
+    float w00 = tsdf.GetWeight(tsdf.limits().GetCellIndex({x0, y0}));
+    float w10 = tsdf.GetWeight(tsdf.limits().GetCellIndex({x1, y0}));
+    float w01 = tsdf.GetWeight(tsdf.limits().GetCellIndex({x0, y1}));
+    float w11 = tsdf.GetWeight(tsdf.limits().GetCellIndex({x1, y1}));
+    if (w00 == 0.f || w01 == 0.f || w10 == 0.f || w11 == 0.f) {
+      normals.push_back(-10.f);
+      continue;
+    }
+
     float dMdx =
         ((center[1] - y0) * (m11 - m01) + (y1 - center[1]) * (m10 - m00)) /
         (y1 - y0);

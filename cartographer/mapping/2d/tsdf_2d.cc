@@ -31,15 +31,12 @@ TSDF2D::TSDF2D(const MapLimits& limits, float truncation_distance,
       weight_cells_(
           limits.cell_limits().num_x_cells * limits.cell_limits().num_y_cells,
           value_converter_->getUnknownWeightValue()) {
-  LOG(INFO) << "tsdf2d max_weight " << max_weight;
 }
 
 TSDF2D::TSDF2D(const proto::Grid2D& proto,
                ValueConversionTables* conversion_tables)
     : Grid2D(proto, conversion_tables), conversion_tables_(conversion_tables) {
   CHECK(proto.has_tsdf_2d());
-  LOG(INFO) << "tsdf2d proto.tsdf_2d().max_weight() "
-            << proto.tsdf_2d().max_weight();
   value_converter_ = absl::make_unique<TSDValueConverter>(
       proto.tsdf_2d().truncation_distance(), proto.tsdf_2d().max_weight(),
       conversion_tables_);
@@ -148,7 +145,7 @@ bool TSDF2D::DrawToSubmapTexture(
 
   std::string cells;
   for (const Eigen::Array2i& xy_index : XYIndexRangeIterator(cell_limits)) {
-    if (!IsKnown(xy_index + offset)) {
+    if (!IsKnown(xy_index + offset) || GetTSD(xy_index + offset) < -0.03) {
       cells.push_back(0);  // value
       cells.push_back(0);  // alpha
       continue;
@@ -161,7 +158,7 @@ bool TSDF2D::DrawToSubmapTexture(
     // detect visually for the user, though.
     float normalized_tsdf = std::abs(GetTSD(xy_index + offset));
     normalized_tsdf =
-        std::pow(normalized_tsdf / value_converter_->getMaxTSD(), 0.5f);
+        std::pow(normalized_tsdf / value_converter_->getMaxTSD(), 2.7f);
     float normalized_weight =
         GetWeight(xy_index + offset) / value_converter_->getMaxWeight();
     const int delta = static_cast<int>(
