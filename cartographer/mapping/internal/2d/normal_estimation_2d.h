@@ -34,7 +34,7 @@ proto::NormalEstimationOptions2D CreateNormalEstimationOptions2D(
 // Assumes the angles in the range data returns are sorted with respect to
 // the orientation of the vector from 'origin' to 'return'.
 std::vector<float> EstimateNormals(
-    const sensor::RangeData& range_data,
+    const sensor::RangeData& sorted_range_data,
     const proto::NormalEstimationOptions2D& normal_estimation_options);
 
 std::vector<float> EstimateNormalsFromTSDF(const sensor::RangeData& range_data,

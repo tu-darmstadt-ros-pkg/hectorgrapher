@@ -110,39 +110,40 @@ proto::NormalEstimationOptions2D CreateNormalEstimationOptions2D(
 // Assumes the angles in the range data returns are sorted with respect to
 // the orientation of the vector from 'origin' to 'return'.
 std::vector<float> EstimateNormals(
-    const sensor::RangeData& range_data,
+    const sensor::RangeData& sorted_range_data,
     const proto::NormalEstimationOptions2D& normal_estimation_options) {
   std::vector<float> normals;
-  normals.reserve(range_data.returns.size());
+  normals.reserve(sorted_range_data.returns.size());
   const size_t max_num_samples = normal_estimation_options.num_normal_samples();
   const float sample_radius = normal_estimation_options.sample_radius();
-  for (size_t current_point = 0; current_point < range_data.returns.size();
-       ++current_point) {
-    const Eigen::Vector3f& hit = range_data.returns[current_point].position;
+  for (size_t current_point = 0;
+       current_point < sorted_range_data.returns.size(); ++current_point) {
+    const Eigen::Vector3f& hit =
+        sorted_range_data.returns[current_point].position;
     size_t sample_window_begin = current_point;
     for (; sample_window_begin > 0 &&
            current_point - sample_window_begin < max_num_samples / 2 &&
-           (hit - range_data.returns[sample_window_begin - 1].position).norm() <
-               sample_radius;
+           (hit - sorted_range_data.returns[sample_window_begin - 1].position)
+                   .norm() < sample_radius;
          --sample_window_begin) {
     }
     size_t sample_window_end = current_point;
     for (;
-         sample_window_end < range_data.returns.size() &&
+         sample_window_end < sorted_range_data.returns.size() &&
          sample_window_end - current_point < ceil(max_num_samples / 2.0) + 1 &&
-         (hit - range_data.returns[sample_window_end].position).norm() <
+         (hit - sorted_range_data.returns[sample_window_end].position).norm() <
              sample_radius;
          ++sample_window_end) {
     }
 
     if (normal_estimation_options.use_pca()) {
       normals.push_back(EstimateNormalPCA(
-          range_data.returns, current_point, sample_window_begin,
-          sample_window_end, range_data.origin));
+          sorted_range_data.returns, current_point, sample_window_begin,
+          sample_window_end, sorted_range_data.origin));
     } else {
-      normals.push_back(EstimateNormal(range_data.returns, current_point,
+      normals.push_back(EstimateNormal(sorted_range_data.returns, current_point,
                                        sample_window_begin, sample_window_end,
-                                       range_data.origin));
+                                       sorted_range_data.origin));
     }
   }
   return normals;
@@ -156,7 +157,7 @@ std::vector<float> EstimateNormalsFromTSDF(const sensor::RangeData& range_data,
        current_point_idx < range_data.returns.size(); ++current_point_idx) {
     const Eigen::Vector3f& hit = range_data.returns[current_point_idx].position;
     // limits.GetCellIndex(Vector2f(-0.5f, 0.5f)
-    tsdf.GetTSD(tsdf.limits().GetCellIndex(hit.head<2>()));
+    // tsdf.GetTSD(tsdf.limits().GetCellIndex(hit.head<2>()));
     Eigen::Vector2f center =
         tsdf.limits().GetCellCenter(tsdf.limits().GetCellIndex(hit.head<2>()));
     float x0 =
@@ -177,6 +178,7 @@ std::vector<float> EstimateNormalsFromTSDF(const sensor::RangeData& range_data,
     float dMdy =
         ((center[0] - x0) * (m11 - m10) + (x1 - center[0]) * (m01 - m00)) /
         (x1 - x0);
+    // TODO(kdaun) check for empty cells
 
     normals.push_back(Normal2DTo2DAngle({dMdx, dMdy}));
   }

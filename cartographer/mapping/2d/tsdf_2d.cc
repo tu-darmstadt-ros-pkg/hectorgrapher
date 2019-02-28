@@ -30,12 +30,16 @@ TSDF2D::TSDF2D(const MapLimits& limits, float truncation_distance,
           truncation_distance, max_weight, conversion_tables_)),
       weight_cells_(
           limits.cell_limits().num_x_cells * limits.cell_limits().num_y_cells,
-          value_converter_->getUnknownWeightValue()) {}
+          value_converter_->getUnknownWeightValue()) {
+  LOG(INFO) << "tsdf2d max_weight " << max_weight;
+}
 
 TSDF2D::TSDF2D(const proto::Grid2D& proto,
                ValueConversionTables* conversion_tables)
     : Grid2D(proto, conversion_tables), conversion_tables_(conversion_tables) {
   CHECK(proto.has_tsdf_2d());
+  LOG(INFO) << "tsdf2d proto.tsdf_2d().max_weight() "
+            << proto.tsdf_2d().max_weight();
   value_converter_ = absl::make_unique<TSDValueConverter>(
       proto.tsdf_2d().truncation_distance(), proto.tsdf_2d().max_weight(),
       conversion_tables_);
