@@ -51,11 +51,16 @@ class TSDF2D : public Grid2D {
       transform::Rigid3d local_pose) const override;
   bool CellIsUpdated(const Eigen::Array2i& cell_index) const;
 
- private:
   ValueConversionTables* conversion_tables_;
+
+ private:
   std::unique_ptr<TSDValueConverter> value_converter_;
   std::vector<uint16> weight_cells_;  // Highest bit is update marker.
 };
+
+TSDF2D CreateESDFFromTSDF(float truncation_distance, float max_weight,
+                          ValueConversionTables* conversion_tables,
+                          const TSDF2D& tsdf);
 
 }  // namespace mapping
 }  // namespace cartographer

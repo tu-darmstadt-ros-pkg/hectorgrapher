@@ -13,11 +13,9 @@ size_t sgn(T val) {
 std::vector<std::vector<Eigen::Vector2f>> computeSurfaces(
     const mapping::TSDF2D& grid) {
   std::vector<std::vector<Eigen::Vector2f>> surfaces;
-
   const cartographer::mapping::MapLimits& limits = grid.limits();
-  double scale = 1. / limits.resolution();
-  int scaled_num_x_cells = limits.cell_limits().num_x_cells * scale;
-  int scaled_num_y_cells = limits.cell_limits().num_y_cells * scale;
+  int scaled_num_x_cells = limits.cell_limits().num_x_cells;
+  int scaled_num_y_cells = limits.cell_limits().num_y_cells;
 
   for (int ix = 0; ix < scaled_num_x_cells; ++ix) {
     for (int iy = 0; iy < scaled_num_y_cells; ++iy) {

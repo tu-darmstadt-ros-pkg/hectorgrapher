@@ -16,6 +16,7 @@
 
 #include "cartographer/mapping/2d/tsdf_2d.h"
 
+#include <queue>
 #include "absl/memory/memory.h"
 
 namespace cartographer {
@@ -181,6 +182,48 @@ bool TSDF2D::DrawToSubmapTexture(
       transform::Rigid3d::Translation(Eigen::Vector3d(max_x, max_y, 0.)));
 
   return true;
+}
+
+TSDF2D CreateESDFFromTSDF(float truncation_distance, float max_weight,
+                          ValueConversionTables* conversion_tables,
+                          const TSDF2D& tsdf) {
+  TSDF2D esdf(tsdf.limits(), truncation_distance, max_weight,
+              conversion_tables);
+  std::queue<Eigen::Array2i> update_queue;
+
+  // Find seeds
+  const cartographer::mapping::MapLimits& limits = tsdf.limits();
+  int num_x_cells = limits.cell_limits().num_x_cells;
+  int num_y_cells = limits.cell_limits().num_y_cells;
+  for (int ix = 0; ix < num_x_cells; ++ix) {
+    for (int iy = 0; iy < num_y_cells; ++iy) {
+      if (std::abs(tsdf.GetTSD({iy, ix})) <= tsdf.limits().resolution() * 0.5) {
+        update_queue.push({iy, ix});
+        esdf.SetCell({iy, ix}, std::abs(tsdf.GetTSD({iy, ix})), 1.);
+      }
+    }
+  }
+
+  while (!update_queue.empty()) {
+    Eigen::Array2i cell_idx = update_queue.front();
+    update_queue.pop();
+    float center_tsd = esdf.GetTSD(cell_idx);
+    for (int ix = -1; ix < 2; ix++) {
+      for (int iy = -1; iy < 2; iy++) {
+        if (ix == 0 && iy == 0) continue;
+        Eigen::Array2i candidate = {cell_idx[0] + iy, cell_idx[1] + ix};
+        if (!esdf.limits().Contains(candidate)) continue;
+        float candidate_tsd = esdf.GetTSD(candidate);
+        float d =
+            std::sqrt(std::abs(ix) + std::abs(iy)) * esdf.limits().resolution();
+        if (std::abs(candidate_tsd) > center_tsd + d) {
+          esdf.SetCell(candidate, center_tsd + d, 1.);
+          update_queue.push(candidate);
+        }
+      }
+    }
+  }
+  return esdf;
 }
 
 }  // namespace mapping

@@ -400,7 +400,7 @@ void renderGridWeightswithScan(
   cairo_surface_write_to_png(grid_surface, filename.c_str());
 }
 
-void renderGridwithScan(
+void renderGridwithScanBase(
     const cartographer::mapping::TSDF2D& grid, const Sample& sample,
     const cartographer::transform::Rigid2d& initial_transform,
     const cartographer::transform::Rigid2d& matched_transform,
@@ -530,6 +530,20 @@ void renderGridwithScan(
   cairo_surface_write_to_png(grid_surface, filename.c_str());
   renderGridWeightswithScan(grid, sample, initial_transform, matched_transform,
                             options);
+}
+
+void renderGridwithScan(
+    const cartographer::mapping::TSDF2D& grid, const Sample& sample,
+    const cartographer::transform::Rigid2d& initial_transform,
+    const cartographer::transform::Rigid2d& matched_transform,
+    const cartographer::mapping::proto::RangeDataInserterOptions& options) {
+  renderGridwithScanBase(grid, sample, initial_transform, matched_transform,
+                         options);
+  cartographer::mapping::TSDF2D esdf =
+      cartographer::mapping::CreateESDFFromTSDF(2.0f, 10.f,
+                                                grid.conversion_tables_, grid);
+  renderGridwithScanBase(esdf, sample, initial_transform, matched_transform,
+                         options);
 }
 
 template <typename GridType, typename RangeDataInserter>
@@ -697,7 +711,7 @@ void RunScanMatchingEvaluation() {
           cartographer::mapping::scan_matching::CreateCeresScanMatcherOptions2D(
               parameter_dictionary.get());
   int n_training = 100;
-  int n_test = 10;
+  int n_test = 1;
 
   std::ofstream log_file;
   std::string log_file_path;

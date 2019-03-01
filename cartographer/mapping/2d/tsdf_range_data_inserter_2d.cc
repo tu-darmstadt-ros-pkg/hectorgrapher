@@ -278,7 +278,7 @@ void TSDFRangeDataInserter2D::Insert(const sensor::RangeData& range_data,
       if (weight == 0.f || tsdf_normals[hit_index] < -5.f ||
           !use_tsdf_normals) {
         normals.push_back(scan_normals[hit_index]);
-        if (hit_index % 2000 == 0) LOG(INFO) << "pass";
+        //        if (hit_index % 2000 == 0) LOG(INFO) << "pass";
       } else {
         float ratio = weight / (options_.maximum_weight() * 2);
         float normal = (1.f - ratio) * scan_normals[hit_index] +
