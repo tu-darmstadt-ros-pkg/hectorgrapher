@@ -197,7 +197,7 @@ TSDF2D CreateESDFFromTSDF(float truncation_distance, float max_weight,
   int num_y_cells = limits.cell_limits().num_y_cells;
   for (int ix = 0; ix < num_x_cells; ++ix) {
     for (int iy = 0; iy < num_y_cells; ++iy) {
-      if (std::abs(tsdf.GetTSD({iy, ix})) <= tsdf.limits().resolution() * 0.5) {
+      if (std::abs(tsdf.GetTSD({iy, ix})) <= tsdf.limits().resolution()) {
         update_queue.push({iy, ix});
         esdf.SetCell({iy, ix}, std::abs(tsdf.GetTSD({iy, ix})), 1.);
       }

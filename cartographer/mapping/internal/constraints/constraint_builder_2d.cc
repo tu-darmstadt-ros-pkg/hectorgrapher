@@ -155,6 +155,17 @@ void ConstraintBuilder2D::WhenDone(
   when_done_task_ = absl::make_unique<common::Task>();
 }
 
+std::unique_ptr<scan_matching::FastScanMatcherInterface2D>
+createFastScanMatcher2D(
+    const Grid2D& grid,
+    const scan_matching::proto::FastCorrelativeScanMatcherOptions2D&
+        scan_matcher_options) {
+  std::unique_ptr<scan_matching::FastScanMatcherInterface2D> res =
+      absl::make_unique<scan_matching::FastCorrelativeScanMatcher2D>(
+          grid, scan_matcher_options);
+  return res;
+}
+
 const ConstraintBuilder2D::SubmapScanMatcher*
 ConstraintBuilder2D::DispatchScanMatcherConstruction(const SubmapId& submap_id,
                                                      const Grid2D* const grid) {
@@ -166,12 +177,11 @@ ConstraintBuilder2D::DispatchScanMatcherConstruction(const SubmapId& submap_id,
   submap_scan_matcher.grid = grid;
   auto& scan_matcher_options = options_.fast_correlative_scan_matcher_options();
   auto scan_matcher_task = absl::make_unique<common::Task>();
-  scan_matcher_task->SetWorkItem(
-      [&submap_scan_matcher, &scan_matcher_options]() {
-        submap_scan_matcher.fast_correlative_scan_matcher =
-            absl::make_unique<scan_matching::FastCorrelativeScanMatcher2D>(
-                *submap_scan_matcher.grid, scan_matcher_options);
-      });
+  scan_matcher_task->SetWorkItem([&submap_scan_matcher,
+                                  &scan_matcher_options]() {
+    submap_scan_matcher.fast_correlative_scan_matcher = createFastScanMatcher2D(
+        *submap_scan_matcher.grid, scan_matcher_options);
+  });
   submap_scan_matcher.creation_task_handle =
       thread_pool_->Schedule(std::move(scan_matcher_task));
   return &submap_scan_matchers_.at(submap_id);

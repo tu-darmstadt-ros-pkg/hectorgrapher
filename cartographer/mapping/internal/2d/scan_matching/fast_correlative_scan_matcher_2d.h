@@ -32,6 +32,7 @@
 #include "cartographer/common/port.h"
 #include "cartographer/mapping/2d/grid_2d.h"
 #include "cartographer/mapping/internal/2d/scan_matching/correlative_scan_matcher_2d.h"
+#include "cartographer/mapping/internal/2d/scan_matching/fast_scan_matcher_interface_2d.h"
 #include "cartographer/mapping/proto/scan_matching/fast_correlative_scan_matcher_options_2d.pb.h"
 #include "cartographer/sensor/point_cloud.h"
 
@@ -109,7 +110,7 @@ class PrecomputationGridStack2D {
 };
 
 // An implementation of "Real-Time Correlative Scan Matching" by Olson.
-class FastCorrelativeScanMatcher2D {
+class FastCorrelativeScanMatcher2D : public FastScanMatcherInterface2D {
  public:
   FastCorrelativeScanMatcher2D(
       const Grid2D& grid,
@@ -126,14 +127,15 @@ class FastCorrelativeScanMatcher2D {
   // with the result.
   bool Match(const transform::Rigid2d& initial_pose_estimate,
              const sensor::PointCloud& point_cloud, float min_score,
-             float* score, transform::Rigid2d* pose_estimate) const;
+             float* score, transform::Rigid2d* pose_estimate) const override;
 
   // Aligns 'point_cloud' within the full 'grid', i.e., not
   // restricted to the configured search window. If a score above 'min_score'
   // (excluding equality) is possible, true is returned, and 'score' and
   // 'pose_estimate' are updated with the result.
   bool MatchFullSubmap(const sensor::PointCloud& point_cloud, float min_score,
-                       float* score, transform::Rigid2d* pose_estimate) const;
+                       float* score,
+                       transform::Rigid2d* pose_estimate) const override;
 
  private:
   // The actual implementation of the scan matcher, called by Match() and
