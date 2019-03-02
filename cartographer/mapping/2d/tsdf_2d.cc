@@ -193,8 +193,8 @@ TSDF2D CreateESDFFromTSDF(float truncation_distance, float max_weight,
 
   // Find seeds
   const cartographer::mapping::MapLimits& limits = tsdf.limits();
-  int num_x_cells = limits.cell_limits().num_x_cells;
-  int num_y_cells = limits.cell_limits().num_y_cells;
+  int num_x_cells = limits.cell_limits().num_y_cells;
+  int num_y_cells = limits.cell_limits().num_x_cells;
   for (int ix = 0; ix < num_x_cells; ++ix) {
     for (int iy = 0; iy < num_y_cells; ++iy) {
       if (std::abs(tsdf.GetTSD({iy, ix})) <= tsdf.limits().resolution()) {

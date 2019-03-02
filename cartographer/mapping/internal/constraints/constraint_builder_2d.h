@@ -34,6 +34,7 @@
 #include "cartographer/mapping/2d/submap_2d.h"
 #include "cartographer/mapping/internal/2d/scan_matching/ceres_scan_matcher_2d.h"
 #include "cartographer/mapping/internal/2d/scan_matching/fast_correlative_scan_matcher_2d.h"
+#include "cartographer/mapping/internal/2d/scan_matching/fast_esdf_scan_matcher_2d.h"
 #include "cartographer/mapping/internal/2d/scan_matching/fast_scan_matcher_interface_2d.h"
 #include "cartographer/mapping/pose_graph_interface.h"
 #include "cartographer/mapping/proto/pose_graph/constraint_builder_options.pb.h"
