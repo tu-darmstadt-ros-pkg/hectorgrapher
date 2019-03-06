@@ -184,11 +184,11 @@ bool TSDF2D::DrawToSubmapTexture(
   return true;
 }
 
-TSDF2D CreateESDFFromTSDF(float truncation_distance, float max_weight,
+TSDF2D CreateESDFFromTSDF(float truncation_distance,
                           ValueConversionTables* conversion_tables,
                           const TSDF2D& tsdf) {
-  TSDF2D esdf(tsdf.limits(), truncation_distance, max_weight,
-              conversion_tables);
+  TSDF2D esdf(tsdf.limits(), truncation_distance,
+              tsdf.value_converter_->getMaxWeight(), conversion_tables);
   std::queue<Eigen::Array2i> update_queue;
 
   // Find seeds
@@ -217,7 +217,7 @@ TSDF2D CreateESDFFromTSDF(float truncation_distance, float max_weight,
         float d =
             std::sqrt(std::abs(ix) + std::abs(iy)) * esdf.limits().resolution();
         if (std::abs(candidate_tsd) > center_tsd + d) {
-          esdf.SetCell(candidate, center_tsd + d, 1.);
+          esdf.SetCell(candidate, center_tsd + d, tsdf.GetWeight(candidate));
           update_queue.push(candidate);
         }
       }

@@ -305,7 +305,7 @@ void TSDFRangeDataInserter2D::Insert(const sensor::RangeData& range_data,
   tsdf->FinishUpdate();
   //  if (sorted_range_data.returns.size() % 25 == 0) {
   //    renderGridwithScan(*tsdf, range_data, options_);
-  //    TSDF2D esdf = CreateESDFFromTSDF(1.0, 10., tsdf->conversion_tables_,
+  //    TSDF2D esdf = CreateESDFFromTSDF(1.0, tsdf->conversion_tables_,
   //    *tsdf);
   //    renderGridwithScan(esdf, range_data, options_);
   //  }

@@ -540,8 +540,8 @@ void renderGridwithScan(
   renderGridwithScanBase(grid, sample, initial_transform, matched_transform,
                          options);
   cartographer::mapping::TSDF2D esdf =
-      cartographer::mapping::CreateESDFFromTSDF(2.0f, 10.f,
-                                                grid.conversion_tables_, grid);
+      cartographer::mapping::CreateESDFFromTSDF(2.0f, grid.conversion_tables_,
+                                                grid);
   renderGridwithScanBase(esdf, sample, initial_transform, matched_transform,
                          options);
 }

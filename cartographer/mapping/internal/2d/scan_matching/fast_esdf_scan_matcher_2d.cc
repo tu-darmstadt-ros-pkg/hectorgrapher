@@ -87,7 +87,7 @@ FastESDFScanMatcher2D::FastESDFScanMatcher2D(
   precomputation_grid_ = absl::make_unique<TSDF2D>(
       CreateESDFFromTSDF(std::pow(options.branch_and_bound_depth(), 2) *
                              grid.limits().resolution(),
-                         1., tsdf.conversion_tables_, tsdf));
+                         tsdf.conversion_tables_, tsdf));
   // renderGrid(tsdf);
   // renderGrid(*precomputation_grid_.get());
 }
@@ -167,18 +167,22 @@ FastESDFScanMatcher2D::ComputeLowestResolutionCandidates(
     const SearchParameters& search_parameters) const {
   std::vector<Candidate2D> lowest_resolution_candidates =
       GenerateLowestResolutionCandidates(search_parameters);
-  float search_bound =
-      std::pow(2, max_depth_) * precomputation_grid_->limits().resolution();
+  float search_bound_delta =
+      max_depth_ > 1
+          ? std::pow(3, max_depth_ - 2) * std::sqrt(2) *
+                precomputation_grid_->limits().resolution()
+          : 0.f;
+  //  std::pow(3, max_depth_) * precomputation_grid_->limits().resolution();
   ScoreCandidates(*precomputation_grid_.get(), discrete_scans,
                   search_parameters, &lowest_resolution_candidates,
-                  search_bound);
+                  search_bound_delta);
   return lowest_resolution_candidates;
 }
 
 std::vector<Candidate2D>
 FastESDFScanMatcher2D::GenerateLowestResolutionCandidates(
     const SearchParameters& search_parameters) const {
-  const int linear_step_size = 1 << max_depth_;
+  const int linear_step_size = std::pow(3, max_depth_ - 1);
   int num_candidates = 0;
   for (int scan_index = 0; scan_index != search_parameters.num_scans;
        ++scan_index) {
@@ -225,9 +229,11 @@ void FastESDFScanMatcher2D::ScoreCandidates(
       const Eigen::Array2i proposed_xy_index(
           xy_index.x() + candidate.x_index_offset,
           xy_index.y() + candidate.y_index_offset);
-      sum += std::max(std::abs(precomputation_grid.GetTSD(proposed_xy_index)) -
-                          search_bound,
-                      0.f);
+      float update =
+          std::max(std::abs(precomputation_grid.GetTSD(proposed_xy_index)) -
+                       search_bound,
+                   0.f);
+      sum += update;
     }
     candidate.score =
         sum / static_cast<float>(discrete_scans[candidate.scan_index].size());
@@ -247,18 +253,21 @@ Candidate2D FastESDFScanMatcher2D::BranchAndBound(
 
   Candidate2D best_high_resolution_candidate(0, 0, 0, search_parameters);
   best_high_resolution_candidate.score = max_score;
+
+  // LOG(INFO)<<"Depth  "<<candidate_depth <<"\t"<<std::pow(3, candidate_depth -
+  // 1);
   for (const Candidate2D& candidate : candidates) {
     if (candidate.score >= max_score) {
       break;
     }
     std::vector<Candidate2D> higher_resolution_candidates;
-    const int half_width = 1 << (candidate_depth - 1);
-    for (int x_offset : {0, half_width}) {
+    const int half_width = std::pow(3, candidate_depth - 1);
+    for (int x_offset : {-half_width, 0, half_width}) {
       if (candidate.x_index_offset + x_offset >
           search_parameters.linear_bounds[candidate.scan_index].max_x) {
         break;
       }
-      for (int y_offset : {0, half_width}) {
+      for (int y_offset : {-half_width, 0, half_width}) {
         if (candidate.y_index_offset + y_offset >
             search_parameters.linear_bounds[candidate.scan_index].max_y) {
           break;
@@ -269,18 +278,21 @@ Candidate2D FastESDFScanMatcher2D::BranchAndBound(
       }
     }
 
-    float search_bound = std::pow(2, candidate_depth - 2) *
-                         precomputation_grid_->limits().resolution();
-    if (candidate_depth == 1) search_bound = 0.f;
+    float search_bound_delta =
+        candidate_depth > 1
+            ? std::pow(3, candidate_depth - 2) * std::sqrt(2) *
+                  precomputation_grid_->limits().resolution()
+            : 0.f;
     ScoreCandidates(*precomputation_grid_.get(), discrete_scans,
                     search_parameters, &higher_resolution_candidates,
-                    search_bound);
+                    search_bound_delta);
     best_high_resolution_candidate = std::min(
         best_high_resolution_candidate,
         BranchAndBound(discrete_scans, search_parameters,
                        higher_resolution_candidates, candidate_depth - 1,
                        best_high_resolution_candidate.score));
   }
+
   return best_high_resolution_candidate;
 }
 
