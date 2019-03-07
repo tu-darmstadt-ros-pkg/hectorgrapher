@@ -146,7 +146,7 @@ bool TSDF2D::DrawToSubmapTexture(
 
   std::string cells;
   for (const Eigen::Array2i& xy_index : XYIndexRangeIterator(cell_limits)) {
-    if (!IsKnown(xy_index + offset) || GetTSD(xy_index + offset) < -0.03) {
+    if (!IsKnown(xy_index + offset) || GetTSD(xy_index + offset) < -0.00) {
       cells.push_back(0);  // value
       cells.push_back(0);  // alpha
       continue;
@@ -159,7 +159,7 @@ bool TSDF2D::DrawToSubmapTexture(
     // detect visually for the user, though.
     float normalized_tsdf = std::abs(GetTSD(xy_index + offset));
     normalized_tsdf =
-        std::pow(normalized_tsdf / value_converter_->getMaxTSD(), 2.7f);
+        std::pow(normalized_tsdf / value_converter_->getMaxTSD(), 3.7f);
     float normalized_weight =
         GetWeight(xy_index + offset) / value_converter_->getMaxWeight();
     const int delta = static_cast<int>(

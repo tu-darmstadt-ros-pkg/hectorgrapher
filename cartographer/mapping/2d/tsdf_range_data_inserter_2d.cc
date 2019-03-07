@@ -109,8 +109,8 @@ void renderGridwithScan(
   cairo_surface_t* grid_surface;
   cairo_t* grid_surface_context;
 
-  int scaled_num_x_cells = limits.cell_limits().num_x_cells * scale;
-  int scaled_num_y_cells = limits.cell_limits().num_y_cells * scale;
+  int scaled_num_x_cells = limits.cell_limits().num_y_cells * scale;
+  int scaled_num_y_cells = limits.cell_limits().num_x_cells * scale;
   grid_surface = cairo_image_surface_create(
       CAIRO_FORMAT_ARGB32, scaled_num_x_cells, scaled_num_y_cells);
   grid_surface_context = cairo_create(grid_surface);
@@ -272,23 +272,25 @@ void TSDFRangeDataInserter2D::Insert(const sensor::RangeData& range_data,
       const Eigen::Vector2f hit =
           sorted_range_data.returns[hit_index].position.head<2>();
 
-      bool use_tsdf_normals = false;
+      bool use_tsdf_normals = true;
       float weight = tsdf->GetWeight(tsdf->limits().GetCellIndex(
           hit));  // todo(kdaun) min from interpolation region?
-      if (weight == 0.f || tsdf_normals[hit_index] < -5.f ||
+      if (weight == 0.f ||
+          tsdf_normals[hit_index] < -5.f ||  // 5.f is ugly hack to avoid using
+                                             // of invalid normals --> use Nan
           !use_tsdf_normals) {
         normals.push_back(scan_normals[hit_index]);
         //        if (hit_index % 2000 == 0) LOG(INFO) << "pass";
       } else {
-        float ratio = weight / (options_.maximum_weight() * 2);
-        float normal = (1.f - ratio) * scan_normals[hit_index] +
-                       ratio * tsdf_normals[hit_index];
-        normal = WeightedMeanOfTwoAngles(scan_normals[hit_index], 1.f - ratio,
-                                         tsdf_normals[hit_index], ratio);
+        float ratio = weight / (options_.maximum_weight() * 2.0);
+        float normal =
+            WeightedMeanOfTwoAngles(scan_normals[hit_index], 1.f - ratio,
+                                    tsdf_normals[hit_index], ratio);
         normals.push_back(normal);
-        if (hit_index % 2000 == 0)
-          LOG(INFO) << ratio << "\t" << scan_normals[hit_index] << "\t"
-                    << tsdf_normals[hit_index] << "\t" << normal;
+        //        if (hit_index % 2000 == 0)
+        //          LOG(INFO) << ratio << "\t" << scan_normals[hit_index] <<
+        //          "\t"
+        //                    << tsdf_normals[hit_index] << "\t" << normal;
       }
     }
   }
@@ -303,12 +305,12 @@ void TSDFRangeDataInserter2D::Insert(const sensor::RangeData& range_data,
     InsertHit(options_, hit, origin, normal, tsdf);
   }
   tsdf->FinishUpdate();
-  //  if (sorted_range_data.returns.size() % 25 == 0) {
-  //    renderGridwithScan(*tsdf, range_data, options_);
-  //    TSDF2D esdf = CreateESDFFromTSDF(1.0, tsdf->conversion_tables_,
-  //    *tsdf);
-  //    renderGridwithScan(esdf, range_data, options_);
-  //  }
+  //    if (sorted_range_data.returns.size() % 25 == 0) {
+  //      renderGridwithScan(*tsdf, range_data, options_);
+  //      TSDF2D esdf = CreateESDFFromTSDF(1.0, tsdf->conversion_tables_,
+  //      *tsdf);
+  //      renderGridwithScan(esdf, range_data, options_);
+  //    }
 }
 
 void TSDFRangeDataInserter2D::InsertHit(
@@ -337,9 +339,7 @@ void TSDFRangeDataInserter2D::InsertHit(
     const Eigen::Vector2f negative_ray = -ray;
     float angle_ray_normal =
         common::NormalizeAngleDifference(normal - common::atan2(negative_ray));
-    weight_factor_angle_ray_normal = GaussianKernel(
-        angle_ray_normal,
-        options_.update_weight_angle_scan_normal_to_ray_kernel_bandwith());
+    weight_factor_angle_ray_normal = std::cos(angle_ray_normal);
   }
   float weight_factor_range = 1.f;
   if (options_.update_weight_range_exponent() != 0) {
@@ -363,9 +363,15 @@ void TSDFRangeDataInserter2D::InsertHit(
         common::Clamp(update_tsd, -truncation_distance, truncation_distance);
     float update_weight = weight_factor_range * weight_factor_angle_ray_normal;
     if (options_.update_weight_distance_cell_to_hit_kernel_bandwith() != 0.f) {
-      update_weight *= GaussianKernel(
-          update_tsd,
+      float d = update_tsd;  // for some reason this works better than range -
+                             // distance_cell_to_origin TODO(kdaun) Understand.
+      // std::max(double(std::abs(range - distance_cell_to_origin)),
+      // options.truncation_distance());//update_tsd;//range -
+      // distance_cell_to_origin;
+      float exp_update = std::exp(
+          -std::abs(d) *
           options_.update_weight_distance_cell_to_hit_kernel_bandwith());
+      update_weight *= exp_update;
     }
     UpdateCell(cell_index, update_tsd, update_weight, tsdf);
   }

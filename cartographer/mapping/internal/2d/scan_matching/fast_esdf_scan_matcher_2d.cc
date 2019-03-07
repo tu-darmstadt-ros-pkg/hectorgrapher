@@ -169,7 +169,7 @@ FastESDFScanMatcher2D::ComputeLowestResolutionCandidates(
       GenerateLowestResolutionCandidates(search_parameters);
   float search_bound_delta =
       max_depth_ > 1
-          ? std::pow(3, max_depth_ - 2) * std::sqrt(2) *
+          ? std::pow(3, max_depth_ - 2) * std::sqrt(4.5) *
                 precomputation_grid_->limits().resolution()
           : 0.f;
   //  std::pow(3, max_depth_) * precomputation_grid_->limits().resolution();
@@ -280,7 +280,7 @@ Candidate2D FastESDFScanMatcher2D::BranchAndBound(
 
     float search_bound_delta =
         candidate_depth > 1
-            ? std::pow(3, candidate_depth - 2) * std::sqrt(2) *
+            ? std::pow(3, candidate_depth - 2) * std::sqrt(4.5) *
                   precomputation_grid_->limits().resolution()
             : 0.f;
     ScoreCandidates(*precomputation_grid_.get(), discrete_scans,
