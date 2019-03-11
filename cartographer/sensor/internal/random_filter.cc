@@ -17,20 +17,39 @@
 #include "cartographer/sensor/internal/random_filter.h"
 
 #include <cmath>
+#include <algorithm>
+#include <vector>
 
 #include "cartographer/common/math.h"
 
 namespace cartographer {
 namespace sensor {
 
+template <class T>
+void samplePoints(std::vector<T>& point_cloud ,size_t min_num_points){
+  std::random_shuffle(point_cloud.begin(), point_cloud.end());
+
+  auto number_to_remove = point_cloud.size() - min_num_points;
+
+  for (size_t n = 0; n < number_to_remove; ++n) {
+    point_cloud.pop_back();
+  }
+}
+
 PointCloud RandomFilter::Filter(const PointCloud& point_cloud) {
-  PointCloud results;
+
+  PointCloud results = point_cloud;
+
+  samplePoints<RangefinderPoint>(results, options_.min_num_points());
 
   return results;
 }
 
 TimedPointCloud RandomFilter::Filter(const TimedPointCloud& timed_point_cloud) {
-  TimedPointCloud results;
+
+  TimedPointCloud results = timed_point_cloud;
+
+  samplePoints<TimedRangefinderPoint>(results, options_.min_num_points());
 
   return results;
 }
@@ -38,7 +57,10 @@ TimedPointCloud RandomFilter::Filter(const TimedPointCloud& timed_point_cloud) {
 std::vector<TimedPointCloudOriginData::RangeMeasurement> RandomFilter::Filter(
     const std::vector<TimedPointCloudOriginData::RangeMeasurement>&
         range_measurements) {
-  std::vector<TimedPointCloudOriginData::RangeMeasurement> results;
+
+  std::vector<TimedPointCloudOriginData::RangeMeasurement> results = range_measurements;
+
+  samplePoints<TimedPointCloudOriginData::RangeMeasurement>(results, options_.min_num_points());
 
   return results;
 }
