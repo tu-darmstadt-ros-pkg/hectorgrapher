@@ -25,6 +25,8 @@
 #include "cartographer/sensor/proto/adaptive_voxel_filter_options.pb.h"
 #include "cartographer/sensor/timed_point_cloud_data.h"
 
+#include <iostream>
+
 namespace cartographer {
 namespace sensor {
 
@@ -34,7 +36,10 @@ namespace sensor {
 class RandomFilter {
  public:
   // 'size' is the length of a voxel edge.
-  explicit RandomFilter(const proto::AdaptiveVoxelFilterOptions& options) : options_(options) {}
+  explicit RandomFilter(const proto::AdaptiveVoxelFilterOptions& options) {
+
+    number_of_points_ = options.min_num_points();
+  }
 
   RandomFilter(const RandomFilter&) = delete;
   RandomFilter& operator=(const RandomFilter&) = delete;
@@ -51,7 +56,7 @@ class RandomFilter {
           range_measurements);
 
  private:
-  const proto::AdaptiveVoxelFilterOptions options_;
+  float number_of_points_;
 };
 
 }  // namespace sensor

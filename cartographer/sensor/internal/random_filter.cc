@@ -25,23 +25,21 @@
 namespace cartographer {
 namespace sensor {
 
+
 template <class T>
 void samplePoints(std::vector<T>& point_cloud ,size_t min_num_points){
   std::random_shuffle(point_cloud.begin(), point_cloud.end());
 
-  auto number_to_remove = point_cloud.size() - min_num_points;
-
-  for (size_t n = 0; n < number_to_remove; ++n) {
+  while (point_cloud.size() > min_num_points)
     point_cloud.pop_back();
-  }
 }
+
 
 PointCloud RandomFilter::Filter(const PointCloud& point_cloud) {
 
   PointCloud results = point_cloud;
 
-  samplePoints<RangefinderPoint>(results, options_.min_num_points());
-
+  samplePoints<RangefinderPoint>(results, number_of_points_);
   return results;
 }
 
@@ -49,8 +47,7 @@ TimedPointCloud RandomFilter::Filter(const TimedPointCloud& timed_point_cloud) {
 
   TimedPointCloud results = timed_point_cloud;
 
-  samplePoints<TimedRangefinderPoint>(results, options_.min_num_points());
-
+  samplePoints<TimedRangefinderPoint>(results, number_of_points_);
   return results;
 }
 
@@ -60,8 +57,7 @@ std::vector<TimedPointCloudOriginData::RangeMeasurement> RandomFilter::Filter(
 
   std::vector<TimedPointCloudOriginData::RangeMeasurement> results = range_measurements;
 
-  samplePoints<TimedPointCloudOriginData::RangeMeasurement>(results, options_.min_num_points());
-
+  samplePoints<TimedPointCloudOriginData::RangeMeasurement>(results, number_of_points_);
   return results;
 }
 
