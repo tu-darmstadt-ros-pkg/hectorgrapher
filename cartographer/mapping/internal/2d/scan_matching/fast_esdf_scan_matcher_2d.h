@@ -41,6 +41,13 @@ namespace cartographer {
 namespace mapping {
 namespace scan_matching {
 
+struct BBEvaluatedCandidates {
+  double x;
+  double y;
+  float score;
+  float search_bound;
+};
+
 // An implementation of "Real-Time Correlative Scan Matching" by Olson.
 class FastESDFScanMatcher2D : public FastScanMatcherInterface2D {
  public:
@@ -79,18 +86,21 @@ class FastESDFScanMatcher2D : public FastScanMatcherInterface2D {
       transform::Rigid2d* pose_estimate) const;
   std::vector<Candidate2D> ComputeLowestResolutionCandidates(
       const std::vector<DiscreteScan2D>& discrete_scans,
-      const SearchParameters& search_parameters) const;
+      const SearchParameters& search_parameters,
+      std::vector<BBEvaluatedCandidates>& bb_regions) const;
   std::vector<Candidate2D> GenerateLowestResolutionCandidates(
       const SearchParameters& search_parameters) const;
   void ScoreCandidates(const TSDF2D& precomputation_grid,
                        const std::vector<DiscreteScan2D>& discrete_scans,
                        const SearchParameters& search_parameters,
                        std::vector<Candidate2D>* const candidates,
-                       float search_bound) const;
-  Candidate2D BranchAndBound(const std::vector<DiscreteScan2D>& discrete_scans,
-                             const SearchParameters& search_parameters,
-                             const std::vector<Candidate2D>& candidates,
-                             int candidate_depth, float max_score) const;
+                       float search_bound,
+                       std::vector<BBEvaluatedCandidates>& bb_regions) const;
+  Candidate2D BranchAndBound(
+      const std::vector<DiscreteScan2D>& discrete_scans,
+      const SearchParameters& search_parameters,
+      const std::vector<Candidate2D>& candidates, int candidate_depth,
+      float max_score, std::vector<BBEvaluatedCandidates>& bb_regions) const;
 
   const proto::FastCorrelativeScanMatcherOptions2D options_;
   MapLimits limits_;

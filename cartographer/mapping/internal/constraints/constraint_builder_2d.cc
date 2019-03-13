@@ -38,93 +38,13 @@
 #include "glog/logging.h"
 
 #include "cairo.h"
+#include "cartographer/evaluation/grid_drawer.h"
 #include "cartographer/evaluation/marching_squares.h"
 #include "cartographer/mapping/2d/tsdf_range_data_inserter_2d.h"
 
 namespace cartographer {
 namespace mapping {
 namespace constraints {
-namespace {
-
-void renderGridwithScanBase(
-    const cartographer::mapping::TSDF2D& grid,
-    const sensor::PointCloud& range_data,
-    const cartographer::transform::Rigid2d& initial_transform,
-    const cartographer::transform::Rigid2d& matched_transform) {
-  sensor::PointCloud initial_pose_estimate_range_data =
-      cartographer::sensor::TransformPointCloud(
-          range_data, transform::Embed3D(initial_transform.cast<float>()));
-  sensor::PointCloud matched_range_data =
-      cartographer::sensor::TransformPointCloud(
-          range_data, transform::Embed3D(matched_transform.cast<float>()));
-
-  const cartographer::mapping::MapLimits& limits = grid.limits();
-  double scale = 1. / limits.resolution();
-  cairo_surface_t* grid_surface;
-  cairo_t* grid_surface_context;
-
-  int scaled_num_y_cells = limits.cell_limits().num_x_cells * scale;
-  int scaled_num_x_cells = limits.cell_limits().num_y_cells * scale;
-  grid_surface = cairo_image_surface_create(
-      CAIRO_FORMAT_ARGB32, scaled_num_x_cells, scaled_num_y_cells);
-  grid_surface_context = cairo_create(grid_surface);
-  cairo_device_to_user_distance(grid_surface_context, &scale, &scale);
-  for (int ix = 0; ix < scaled_num_x_cells; ++ix) {
-    for (int iy = 0; iy < scaled_num_y_cells; ++iy) {
-      float r = 1.f;
-      float g = 1.f;
-      float b = 1.f;
-      float normalized_tsdf =
-          grid.GetTSD({iy, ix}) / grid.GetMaxCorrespondenceCost();
-      if (normalized_tsdf > 0.f) {
-        g = 1. - std::pow(std::abs(normalized_tsdf), 0.5);
-        b = g;
-      } else {
-        r = 1. - std::pow(std::abs(normalized_tsdf), 0.5);
-        g = r;
-      }
-      cairo_set_source_rgb(grid_surface_context, r, g, b);
-      cairo_rectangle(grid_surface_context, scale * (float(ix)),
-                      scale * ((float)iy), scale, scale);
-      cairo_fill(grid_surface_context);
-    }
-  }
-
-  // Scan Points
-  cairo_set_source_rgb(grid_surface_context, 0.0, 0.0, 0);
-  for (auto& scan : initial_pose_estimate_range_data) {
-    float x = scale * (limits.max().x() - scan.position[0]);
-    float y = scale * (limits.max().y() - scan.position[1]);
-    cairo_rectangle(grid_surface_context, (x - 0.5) * scale, (y - 0.5) * scale,
-                    scale, scale);
-  }
-  cairo_fill(grid_surface_context);
-
-  cairo_set_source_rgb(grid_surface_context, 0.0, 0.8, 0);
-  for (auto& scan : matched_range_data) {
-    float x = scale * (limits.max().x() - scan.position[0]);
-    float y = scale * (limits.max().y() - scan.position[1]);
-    cairo_rectangle(grid_surface_context, (x - 0.4) * scale, (y - 0.4) * scale,
-                    0.8 * scale, 0.8 * scale);
-  }
-  cairo_fill(grid_surface_context);
-
-  time_t seconds;
-  time(&seconds);
-
-  auto start = std::chrono::high_resolution_clock::now();
-  std::string filename =
-      "grid_with_inserted_cloud" +
-      std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                         start.time_since_epoch())
-                         .count()) +
-      ".png";
-  cairo_surface_write_to_png(grid_surface, filename.c_str());
-  //  renderGridWeightswithScan(grid, sample, initial_transform,
-  //  matched_transform,
-  //                            options);
-}
-}
 
 static auto* kConstraintsSearchedMetric = metrics::Counter::Null();
 static auto* kConstraintsFoundMetric = metrics::Counter::Null();
@@ -349,10 +269,21 @@ void ConstraintBuilder2D::ComputeConstraint(
                                     options_.loop_closure_translation_weight(),
                                     options_.loop_closure_rotation_weight()},
                                    Constraint::INTER_SUBMAP});
-  // renderGridwithScanBase(*static_cast<const
-  // TSDF2D*>(submap_scan_matcher.grid),
-  // constant_data->filtered_gravity_aligned_point_cloud,
-  // initial_pose_estimate_match, pose_estimate);
+
+  //  evaluation::GridDrawer drawer(submap_scan_matcher.grid->limits());
+  //  drawer.DrawTSD(*static_cast<const TSDF2D*>(submap_scan_matcher.grid));
+  //  drawer.DrawIsoSurface(*static_cast<const
+  //  TSDF2D*>(submap_scan_matcher.grid));
+  //  drawer.DrawPointcloud(constant_data->filtered_gravity_aligned_point_cloud,
+  //  initial_pose_estimate_match, pose_estimate);
+  //  auto start = std::chrono::high_resolution_clock::now();
+  //  std::string filename =
+  //      "grid_with_inserted_cloud" +
+  //          std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(
+  //              start.time_since_epoch())
+  //                             .count()) +
+  //          ".png";
+  //  drawer.ToFile(filename);
 
   if (options_.log_matches()) {
     std::ostringstream info;
