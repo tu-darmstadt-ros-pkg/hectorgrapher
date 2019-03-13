@@ -245,7 +245,7 @@ void FastESDFScanMatcher2D::ScoreCandidates(
           xy_index.y() + candidate.y_index_offset);
       float update =
           std::max(std::abs(precomputation_grid.GetTSD(proposed_xy_index)) -
-                       search_bound,
+                       search_bound * 1.31f,
                    0.f);
       sum += update;
     }

@@ -4,6 +4,7 @@
 #include <cartographer/mapping/2d/map_limits.h>
 #include <cartographer/sensor/point_cloud.h>
 #include "cartographer/mapping/2d/tsdf_2d.h"
+#include "cartographer/mapping/internal/2d/scan_matching/fast_esdf_scan_matcher_2d.h"
 
 #include "cairo.h"
 

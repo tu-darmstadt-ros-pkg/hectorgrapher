@@ -26,6 +26,7 @@ POSE_GRAPH = {
       linear_search_window = 7.,
       angular_search_window = math.rad(30.),
       branch_and_bound_depth = 7,
+      fast_correlative_scan_matcher_type = "CORRELATIVE",
     },
     ceres_scan_matcher = {
       occupied_space_weight = 20.,

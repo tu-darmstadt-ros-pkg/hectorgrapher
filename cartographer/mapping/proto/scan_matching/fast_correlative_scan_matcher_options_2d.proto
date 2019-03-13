@@ -16,6 +16,12 @@ syntax = "proto3";
 
 package cartographer.mapping.scan_matching.proto;
 
+enum FastCorrelativeScanMatcherType2D {
+  INVALID = 0;
+  CORRELATIVE = 1;
+  ESDF = 2;
+}
+
 message FastCorrelativeScanMatcherOptions2D {
   // Minimum linear search window in which the best possible scan alignment
   // will be found.
@@ -27,4 +33,6 @@ message FastCorrelativeScanMatcherOptions2D {
 
   // Number of precomputed grids to use.
   int32 branch_and_bound_depth = 2;
+
+  FastCorrelativeScanMatcherType2D fast_correlative_scan_matcher_type = 5;
 }

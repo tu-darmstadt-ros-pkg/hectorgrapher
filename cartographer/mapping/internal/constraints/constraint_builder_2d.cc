@@ -165,13 +165,18 @@ createFastScanMatcher2D(
     const Grid2D& grid,
     const scan_matching::proto::FastCorrelativeScanMatcherOptions2D&
         scan_matcher_options) {
-  //  std::unique_ptr<scan_matching::FastScanMatcherInterface2D> res =
-  //      absl::make_unique<scan_matching::FastCorrelativeScanMatcher2D>(
-  //          grid, scan_matcher_options);
-
-  std::unique_ptr<scan_matching::FastScanMatcherInterface2D> res =
-      absl::make_unique<scan_matching::FastESDFScanMatcher2D>(
-          grid, scan_matcher_options);
+  std::unique_ptr<scan_matching::FastScanMatcherInterface2D> res;
+  CHECK(scan_matcher_options.fast_correlative_scan_matcher_type() !=
+        scan_matching::proto::FastCorrelativeScanMatcherType2D::INVALID);
+  if (scan_matcher_options.fast_correlative_scan_matcher_type() ==
+      scan_matching::proto::FastCorrelativeScanMatcherType2D::CORRELATIVE) {
+    res = absl::make_unique<scan_matching::FastCorrelativeScanMatcher2D>(
+        grid, scan_matcher_options);
+  } else if (scan_matcher_options.fast_correlative_scan_matcher_type() ==
+             scan_matching::proto::FastCorrelativeScanMatcherType2D::ESDF) {
+    res = absl::make_unique<scan_matching::FastESDFScanMatcher2D>(
+        grid, scan_matcher_options);
+  }
   return res;
 }
 

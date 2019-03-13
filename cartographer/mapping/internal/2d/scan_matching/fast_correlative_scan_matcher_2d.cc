@@ -85,6 +85,18 @@ CreateFastCorrelativeScanMatcherOptions2D(
       parameter_dictionary->GetDouble("angular_search_window"));
   options.set_branch_and_bound_depth(
       parameter_dictionary->GetInt("branch_and_bound_depth"));
+  const std::string fast_correlative_scan_matcher_type_string =
+      parameter_dictionary->GetString("fast_correlative_scan_matcher_type");
+  proto::FastCorrelativeScanMatcherType2D fast_correlative_scan_matcher_type;
+  CHECK(proto::FastCorrelativeScanMatcherType2D_Parse(
+      fast_correlative_scan_matcher_type_string,
+      &fast_correlative_scan_matcher_type))
+      << "Unknown RangeDataInserterOptions_RangeDataInserterType kind: "
+      << fast_correlative_scan_matcher_type_string;
+  CHECK(fast_correlative_scan_matcher_type !=
+        proto::FastCorrelativeScanMatcherType2D::INVALID);
+  options.set_fast_correlative_scan_matcher_type(
+      fast_correlative_scan_matcher_type);
   return options;
 }
 
