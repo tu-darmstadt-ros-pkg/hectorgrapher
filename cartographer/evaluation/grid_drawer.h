@@ -15,6 +15,7 @@ class GridDrawer {
  public:
   GridDrawer(const cartographer::mapping::MapLimits& limits);
   void DrawTSD(const cartographer::mapping::TSDF2D& grid);
+  void DrawWeights(const cartographer::mapping::TSDF2D& grid);
 
   void DrawScan(const sensor::RangeData& range_data,
                 const cartographer::transform::Rigid2d& initial_transform,

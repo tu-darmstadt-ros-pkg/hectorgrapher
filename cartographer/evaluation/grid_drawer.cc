@@ -66,6 +66,32 @@ void GridDrawer::DrawTSD(const cartographer::mapping::TSDF2D& grid) {
   }
 }
 
+void GridDrawer::DrawWeights(const cartographer::mapping::TSDF2D& grid) {
+  double scale = 1. / limits_.resolution();
+  int scaled_num_x_cells = limits_.cell_limits().num_y_cells * scale;
+  int scaled_num_y_cells = limits_.cell_limits().num_x_cells * scale;
+  for (int ix = 0; ix < scaled_num_x_cells; ++ix) {
+    for (int iy = 0; iy < scaled_num_y_cells; ++iy) {
+      float r = 1.f;
+      float g = 1.f;
+      float b = 1.f;
+      float val =
+          grid.GetWeight({iy, ix}) / grid.value_converter_->getMaxWeight();
+      if (val > 0.f) {
+        g = 1. - std::pow(std::abs(val), 0.5);
+        b = g;
+      } else {
+        r = 1. - std::pow(std::abs(val), 0.5);
+        g = r;
+      }
+      cairo_set_source_rgb(grid_surface_context_, r, g, b);
+      cairo_rectangle(grid_surface_context_, scale * (float(ix)),
+                      scale * ((float)iy), scale, scale);
+      cairo_fill(grid_surface_context_);
+    }
+  }
+}
+
 void GridDrawer::DrawScan(
     const sensor::RangeData& range_data,
     const cartographer::transform::Rigid2d& initial_transform,
