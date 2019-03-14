@@ -171,7 +171,7 @@ void GridDrawer::DrawScanNormals(
 
   // Scan Normals
   sensor::RangeData sorted_range_data = transformed_range_data;
-  std::vector<float> normals;
+  std::vector<std::pair<float, float>> normals;
   std::sort(sorted_range_data.returns.begin(), sorted_range_data.returns.end(),
             RangeDataSorter(sorted_range_data.origin));
   normals = cartographer::mapping::EstimateNormals(
@@ -188,8 +188,8 @@ void GridDrawer::DrawScanNormals(
     cairo_set_source_rgb(grid_surface_context_, 1. - cr, cr, 0);
     float x = scale * (limits_.max().x() - scan.position[0]);
     float y = scale * (limits_.max().y() - scan.position[1]);
-    float dx = -1. * cos(normals[return_idx]);
-    float dy = -1. * sin(normals[return_idx]);
+    float dx = -1. * cos(normals[return_idx].first);
+    float dy = -1. * sin(normals[return_idx].first);
     cairo_move_to(grid_surface_context_, x * scale, y * scale);
     cairo_line_to(grid_surface_context_, (x + dx) * scale, (y + dy) * scale);
     return_idx++;
@@ -208,16 +208,17 @@ void GridDrawer::DrawTSDFNormals(
   double scale = 1. / limits_.resolution();
 
   // Normals from Map
-  std::vector<float> normals = cartographer::mapping::EstimateNormalsFromTSDF(
-      transformed_range_data, grid);
+  std::vector<std::pair<float, float>> normals =
+      cartographer::mapping::EstimateNormalsFromTSDF(transformed_range_data,
+                                                     grid);
   cairo_set_source_rgb(grid_surface_context_, 0.3, 0.3, 0.3);
   cairo_set_line_width(grid_surface_context_, 1);
   int return_idx = 0;
   for (auto& scan : transformed_range_data.returns) {
     float x = scale * (limits_.max().x() - scan.position[0]);
     float y = scale * (limits_.max().y() - scan.position[1]);
-    float dx = -1. * cos(normals[return_idx]);
-    float dy = -1. * sin(normals[return_idx]);
+    float dx = -1. * cos(normals[return_idx].first);
+    float dy = -1. * sin(normals[return_idx].first);
     cairo_move_to(grid_surface_context_, x * scale, y * scale);
     cairo_line_to(grid_surface_context_, (x + dx) * scale, (y + dy) * scale);
     return_idx++;

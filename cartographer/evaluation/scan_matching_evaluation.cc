@@ -311,7 +311,7 @@ void renderGridWeightswithScan(
 
   // Scan Normals
   sensor::RangeData sorted_range_data = matched_range_data;
-  std::vector<float> normals;
+  std::vector<std::pair<float, float>> normals;
 
   std::chrono::steady_clock::time_point begin =
       std::chrono::steady_clock::now();
@@ -338,8 +338,8 @@ void renderGridWeightswithScan(
     cairo_set_source_rgb(grid_surface_context, 1. - cr, cr, 0);
     float x = scale * (limits.max().x() - scan.position[0]);
     float y = scale * (limits.max().y() - scan.position[1]);
-    float dx = -1. * cos(normals[return_idx]);
-    float dy = -1. * sin(normals[return_idx]);
+    float dx = -1. * cos(normals[return_idx].first);
+    float dy = -1. * sin(normals[return_idx].first);
     cairo_move_to(grid_surface_context, x * scale, y * scale);
     cairo_line_to(grid_surface_context, (x + dx) * scale, (y + dy) * scale);
     return_idx++;
@@ -370,8 +370,8 @@ void renderGridWeightswithScan(
     cairo_set_source_rgb(grid_surface_context, 0, 1. - cr, cr);
     float x = scale * (limits.max().x() - scan.position[0]);
     float y = scale * (limits.max().y() - scan.position[1]);
-    float dx = -1. * cos(normals[return_idx]);
-    float dy = -1. * sin(normals[return_idx]);
+    float dx = -1. * cos(normals[return_idx].first);
+    float dy = -1. * sin(normals[return_idx].first);
     cairo_move_to(grid_surface_context, x * scale, y * scale);
     cairo_line_to(grid_surface_context, (x + dx) * scale, (y + dy) * scale);
     return_idx++;
@@ -405,131 +405,136 @@ void renderGridwithScanBase(
     const cartographer::transform::Rigid2d& initial_transform,
     const cartographer::transform::Rigid2d& matched_transform,
     const cartographer::mapping::proto::RangeDataInserterOptions& options) {
-  sensor::RangeData initial_pose_estimate_range_data =
-      cartographer::sensor::TransformRangeData(
-          sample.range_data,
-          transform::Embed3D(initial_transform.cast<float>()));
-  sensor::RangeData matched_range_data =
-      cartographer::sensor::TransformRangeData(
-          sample.range_data,
-          transform::Embed3D(matched_transform.cast<float>()));
-
-  const cartographer::mapping::MapLimits& limits = grid.limits();
-  double scale = 1. / limits.resolution();
-  cairo_surface_t* grid_surface;
-  cairo_t* grid_surface_context;
-
-  int scaled_num_x_cells = limits.cell_limits().num_x_cells * scale;
-  int scaled_num_y_cells = limits.cell_limits().num_y_cells * scale;
-  grid_surface = cairo_image_surface_create(
-      CAIRO_FORMAT_ARGB32, scaled_num_x_cells, scaled_num_y_cells);
-  grid_surface_context = cairo_create(grid_surface);
-  cairo_device_to_user_distance(grid_surface_context, &scale, &scale);
-  for (int ix = 0; ix < scaled_num_x_cells; ++ix) {
-    for (int iy = 0; iy < scaled_num_y_cells; ++iy) {
-      float r = 1.f;
-      float g = 1.f;
-      float b = 1.f;
-      float normalized_tsdf =
-          grid.GetTSD({iy, ix}) / grid.GetMaxCorrespondenceCost();
-      if (normalized_tsdf > 0.f) {
-        g = 1. - std::pow(std::abs(normalized_tsdf), 0.5);
-        b = g;
-      } else {
-        r = 1. - std::pow(std::abs(normalized_tsdf), 0.5);
-        g = r;
-      }
-      cairo_set_source_rgb(grid_surface_context, r, g, b);
-      cairo_rectangle(grid_surface_context, scale * (float(ix)),
-                      scale * ((float)iy), scale, scale);
-      cairo_fill(grid_surface_context);
-    }
-  }
-
-  // Scan Points
-  cairo_set_source_rgb(grid_surface_context, 0.8, 0.0, 0);
-  for (auto& scan : initial_pose_estimate_range_data.returns) {
-    float x = scale * (limits.max().x() - scan.position[0]);
-    float y = scale * (limits.max().y() - scan.position[1]);
-    cairo_rectangle(grid_surface_context, (x - 0.15) * scale,
-                    (y - 0.15) * scale, 0.3 * scale, 0.3 * scale);
-  }
-  cairo_fill(grid_surface_context);
-
-  cairo_set_source_rgb(grid_surface_context, 0.0, 0.8, 0);
-  for (auto& scan : matched_range_data.returns) {
-    float x = scale * (limits.max().x() - scan.position[0]);
-    float y = scale * (limits.max().y() - scan.position[1]);
-    cairo_rectangle(grid_surface_context, (x - 0.15) * scale,
-                    (y - 0.15) * scale, 0.3 * scale, 0.3 * scale);
-  }
-  cairo_fill(grid_surface_context);
-
-  // Scan Normals
-  sensor::RangeData sorted_range_data = matched_range_data;
-  std::vector<float> normals;
-  std::sort(sorted_range_data.returns.begin(), sorted_range_data.returns.end(),
-            RangeDataSorter(sorted_range_data.origin));
-  normals = cartographer::mapping::EstimateNormals(
-      sorted_range_data, options.tsdf_range_data_inserter_options_2d()
-                             .normal_estimation_options());
-  cairo_set_source_rgb(grid_surface_context, 0.3, 0.8, 0);
-  cairo_set_line_width(grid_surface_context, 1);
-  int return_idx = 0;
-  for (auto& scan : sorted_range_data.returns) {
-    float cr = return_idx % 2 == 0 ? 0.8 : 0.2;
-    cr = (10.f * float(return_idx) / float(sorted_range_data.returns.size()));
-    cr -= floor(cr);
-    cr = 0.8;
-    cairo_set_source_rgb(grid_surface_context, 1. - cr, cr, 0);
-    float x = scale * (limits.max().x() - scan.position[0]);
-    float y = scale * (limits.max().y() - scan.position[1]);
-    float dx = -1. * cos(normals[return_idx]);
-    float dy = -1. * sin(normals[return_idx]);
-    cairo_move_to(grid_surface_context, x * scale, y * scale);
-    cairo_line_to(grid_surface_context, (x + dx) * scale, (y + dy) * scale);
-    return_idx++;
-    cairo_stroke(grid_surface_context);
-  }
-
-  // Normals from Map
-  normals =
-      cartographer::mapping::EstimateNormalsFromTSDF(sorted_range_data, grid);
-  cairo_set_source_rgb(grid_surface_context, 0.3, 0.3, 0.3);
-  cairo_set_line_width(grid_surface_context, 1);
-  return_idx = 0;
-  for (auto& scan : sorted_range_data.returns) {
-    float x = scale * (limits.max().x() - scan.position[0]);
-    float y = scale * (limits.max().y() - scan.position[1]);
-    float dx = -1. * cos(normals[return_idx]);
-    float dy = -1. * sin(normals[return_idx]);
-    cairo_move_to(grid_surface_context, x * scale, y * scale);
-    cairo_line_to(grid_surface_context, (x + dx) * scale, (y + dy) * scale);
-    return_idx++;
-    cairo_stroke(grid_surface_context);
-  }
-
-  // IsoSurface
-  std::vector<std::vector<Eigen::Vector2f>> surface = computeSurfaces(grid);
-  for (auto& segment : surface) {
-    cairo_set_source_rgb(grid_surface_context, 0, 0, 0);
-    float x = scale * (limits.max().x() - segment[0][0]);
-    float y = scale * (limits.max().y() - segment[0][1]);
-    float x2 = scale * (limits.max().x() - segment[1][0]);
-    float y2 = scale * (limits.max().y() - segment[1][1]);
-    cairo_move_to(grid_surface_context, x * scale, y * scale);
-    cairo_line_to(grid_surface_context, x2 * scale, y2 * scale);
-    cairo_stroke(grid_surface_context);
-  }
-
-  time_t seconds;
-  time(&seconds);
-  std::string filename = "grid_with_inserted_cloud" + std::to_string(seconds) +
-                         std::to_string(rendered_grid_id) + ".png";
-  rendered_grid_id++;
-  cairo_surface_write_to_png(grid_surface, filename.c_str());
-  renderGridWeightswithScan(grid, sample, initial_transform, matched_transform,
-                            options);
+  //  sensor::RangeData initial_pose_estimate_range_data =
+  //      cartographer::sensor::TransformRangeData(
+  //          sample.range_data,
+  //          transform::Embed3D(initial_transform.cast<float>()));
+  //  sensor::RangeData matched_range_data =
+  //      cartographer::sensor::TransformRangeData(
+  //          sample.range_data,
+  //          transform::Embed3D(matched_transform.cast<float>()));
+  //
+  //  const cartographer::mapping::MapLimits& limits = grid.limits();
+  //  double scale = 1. / limits.resolution();
+  //  cairo_surface_t* grid_surface;
+  //  cairo_t* grid_surface_context;
+  //
+  //  int scaled_num_x_cells = limits.cell_limits().num_x_cells * scale;
+  //  int scaled_num_y_cells = limits.cell_limits().num_y_cells * scale;
+  //  grid_surface = cairo_image_surface_create(
+  //      CAIRO_FORMAT_ARGB32, scaled_num_x_cells, scaled_num_y_cells);
+  //  grid_surface_context = cairo_create(grid_surface);
+  //  cairo_device_to_user_distance(grid_surface_context, &scale, &scale);
+  //  for (int ix = 0; ix < scaled_num_x_cells; ++ix) {
+  //    for (int iy = 0; iy < scaled_num_y_cells; ++iy) {
+  //      float r = 1.f;
+  //      float g = 1.f;
+  //      float b = 1.f;
+  //      float normalized_tsdf =
+  //          grid.GetTSD({iy, ix}) / grid.GetMaxCorrespondenceCost();
+  //      if (normalized_tsdf > 0.f) {
+  //        g = 1. - std::pow(std::abs(normalized_tsdf), 0.5);
+  //        b = g;
+  //      } else {
+  //        r = 1. - std::pow(std::abs(normalized_tsdf), 0.5);
+  //        g = r;
+  //      }
+  //      cairo_set_source_rgb(grid_surface_context, r, g, b);
+  //      cairo_rectangle(grid_surface_context, scale * (float(ix)),
+  //                      scale * ((float)iy), scale, scale);
+  //      cairo_fill(grid_surface_context);
+  //    }
+  //  }
+  //
+  //  // Scan Points
+  //  cairo_set_source_rgb(grid_surface_context, 0.8, 0.0, 0);
+  //  for (auto& scan : initial_pose_estimate_range_data.returns) {
+  //    float x = scale * (limits.max().x() - scan.position[0]);
+  //    float y = scale * (limits.max().y() - scan.position[1]);
+  //    cairo_rectangle(grid_surface_context, (x - 0.15) * scale,
+  //                    (y - 0.15) * scale, 0.3 * scale, 0.3 * scale);
+  //  }
+  //  cairo_fill(grid_surface_context);
+  //
+  //  cairo_set_source_rgb(grid_surface_context, 0.0, 0.8, 0);
+  //  for (auto& scan : matched_range_data.returns) {
+  //    float x = scale * (limits.max().x() - scan.position[0]);
+  //    float y = scale * (limits.max().y() - scan.position[1]);
+  //    cairo_rectangle(grid_surface_context, (x - 0.15) * scale,
+  //                    (y - 0.15) * scale, 0.3 * scale, 0.3 * scale);
+  //  }
+  //  cairo_fill(grid_surface_context);
+  //
+  //  // Scan Normals
+  //  sensor::RangeData sorted_range_data = matched_range_data;
+  //  std::vector<float> normals;
+  //  std::sort(sorted_range_data.returns.begin(),
+  //  sorted_range_data.returns.end(),
+  //            RangeDataSorter(sorted_range_data.origin));
+  //  normals = cartographer::mapping::EstimateNormals(
+  //      sorted_range_data, options.tsdf_range_data_inserter_options_2d()
+  //                             .normal_estimation_options());
+  //  cairo_set_source_rgb(grid_surface_context, 0.3, 0.8, 0);
+  //  cairo_set_line_width(grid_surface_context, 1);
+  //  int return_idx = 0;
+  //  for (auto& scan : sorted_range_data.returns) {
+  //    float cr = return_idx % 2 == 0 ? 0.8 : 0.2;
+  //    cr = (10.f * float(return_idx) /
+  //    float(sorted_range_data.returns.size()));
+  //    cr -= floor(cr);
+  //    cr = 0.8;
+  //    cairo_set_source_rgb(grid_surface_context, 1. - cr, cr, 0);
+  //    float x = scale * (limits.max().x() - scan.position[0]);
+  //    float y = scale * (limits.max().y() - scan.position[1]);
+  //    float dx = -1. * cos(normals[return_idx]);
+  //    float dy = -1. * sin(normals[return_idx]);
+  //    cairo_move_to(grid_surface_context, x * scale, y * scale);
+  //    cairo_line_to(grid_surface_context, (x + dx) * scale, (y + dy) * scale);
+  //    return_idx++;
+  //    cairo_stroke(grid_surface_context);
+  //  }
+  //
+  //  // Normals from Map
+  //  normals =
+  //      cartographer::mapping::EstimateNormalsFromTSDF(sorted_range_data,
+  //      grid);
+  //  cairo_set_source_rgb(grid_surface_context, 0.3, 0.3, 0.3);
+  //  cairo_set_line_width(grid_surface_context, 1);
+  //  return_idx = 0;
+  //  for (auto& scan : sorted_range_data.returns) {
+  //    float x = scale * (limits.max().x() - scan.position[0]);
+  //    float y = scale * (limits.max().y() - scan.position[1]);
+  //    float dx = -1. * cos(normals[return_idx]);
+  //    float dy = -1. * sin(normals[return_idx]);
+  //    cairo_move_to(grid_surface_context, x * scale, y * scale);
+  //    cairo_line_to(grid_surface_context, (x + dx) * scale, (y + dy) * scale);
+  //    return_idx++;
+  //    cairo_stroke(grid_surface_context);
+  //  }
+  //
+  //  // IsoSurface
+  //  std::vector<std::vector<Eigen::Vector2f>> surface = computeSurfaces(grid);
+  //  for (auto& segment : surface) {
+  //    cairo_set_source_rgb(grid_surface_context, 0, 0, 0);
+  //    float x = scale * (limits.max().x() - segment[0][0]);
+  //    float y = scale * (limits.max().y() - segment[0][1]);
+  //    float x2 = scale * (limits.max().x() - segment[1][0]);
+  //    float y2 = scale * (limits.max().y() - segment[1][1]);
+  //    cairo_move_to(grid_surface_context, x * scale, y * scale);
+  //    cairo_line_to(grid_surface_context, x2 * scale, y2 * scale);
+  //    cairo_stroke(grid_surface_context);
+  //  }
+  //
+  //  time_t seconds;
+  //  time(&seconds);
+  //  std::string filename = "grid_with_inserted_cloud" +
+  //  std::to_string(seconds) +
+  //                         std::to_string(rendered_grid_id) + ".png";
+  //  rendered_grid_id++;
+  //  cairo_surface_write_to_png(grid_surface, filename.c_str());
+  //  renderGridWeightswithScan(grid, sample, initial_transform,
+  //  matched_transform,
+  //                            options);
 }
 
 void renderGridwithScan(

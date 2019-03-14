@@ -151,9 +151,9 @@ void TSDFRangeDataInserter2D::Insert(const sensor::RangeData& range_data,
     std::sort(sorted_range_data.returns.begin(),
               sorted_range_data.returns.end(),
               RangeDataSorter(sorted_range_data.origin));
-    std::vector<float> scan_normals = EstimateNormals(
+    std::vector<std::pair<float, float>> scan_normals = EstimateNormals(
         sorted_range_data, options_.normal_estimation_options());
-    std::vector<float> tsdf_normals =
+    std::vector<std::pair<float, float>> tsdf_normals =
         EstimateNormalsFromTSDF(sorted_range_data, *tsdf);
 
     for (size_t hit_index = 0; hit_index < sorted_range_data.returns.size();
@@ -161,20 +161,20 @@ void TSDFRangeDataInserter2D::Insert(const sensor::RangeData& range_data,
       const Eigen::Vector2f hit =
           sorted_range_data.returns[hit_index].position.head<2>();
 
-      bool use_tsdf_normals = true;
+      bool use_tsdf_normals = false;
       float weight = tsdf->GetWeight(tsdf->limits().GetCellIndex(
           hit));  // todo(kdaun) min from interpolation region?
-      if (weight == 0.f ||
-          tsdf_normals[hit_index] < -5.f ||  // 5.f is ugly hack to avoid using
-                                             // of invalid normals --> use Nan
+      if (tsdf_normals[hit_index].second ==
+              0.f ||  // 5.f is ugly hack to avoid using
+                      // of invalid normals --> use Nan
           !use_tsdf_normals) {
-        normals.push_back(scan_normals[hit_index]);
+        normals.push_back(scan_normals[hit_index].first);
         //        if (hit_index % 2000 == 0) LOG(INFO) << "pass";
       } else {
         float ratio = weight / (options_.maximum_weight() * 2.0);
         float normal =
-            WeightedMeanOfTwoAngles(scan_normals[hit_index], 1.f - ratio,
-                                    tsdf_normals[hit_index], ratio);
+            WeightedMeanOfTwoAngles(scan_normals[hit_index].first, 1.f - ratio,
+                                    tsdf_normals[hit_index].first, ratio);
         normals.push_back(normal);
         //        if (hit_index % 2000 == 0)
         //          LOG(INFO) << ratio << "\t" << scan_normals[hit_index] <<
