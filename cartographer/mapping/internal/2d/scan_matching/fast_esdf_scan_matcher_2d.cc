@@ -113,14 +113,13 @@ bool FastESDFScanMatcher2D::MatchWithSearchParameters(
       limits_, rotated_scans,
       Eigen::Translation2f(initial_pose_estimate.translation().x(),
                            initial_pose_estimate.translation().y()));
-  search_parameters.ShrinkToFit(discrete_scans, limits_.cell_limits());
+  // search_parameters.ShrinkToFit(discrete_scans, limits_.cell_limits());
 
   std::vector<BBEvaluatedCandidates> bb_regions;
   const std::vector<Candidate2D> lowest_resolution_candidates =
       ComputeLowestResolutionCandidates(discrete_scans, search_parameters,
                                         bb_regions);
 
-  std::vector<BBEvaluatedCandidates> unused_bb_regions;
   const Candidate2D best_candidate = BranchAndBound(
       discrete_scans, search_parameters, lowest_resolution_candidates,
       max_depth_ - 1, max_score, bb_regions);
@@ -129,19 +128,20 @@ bool FastESDFScanMatcher2D::MatchWithSearchParameters(
     //    evaluation::GridDrawer drawer(precomputation_grid_->limits());
     //    drawer.DrawTSD(*precomputation_grid_);
     //    drawer.DrawBBBounds(bb_regions, initial_pose_estimate);
-    //    drawer.DrawPointcloud(point_cloud, initial_pose_estimate,
-    //    transform::Rigid2d(
-    //        {initial_pose_estimate.translation().x() + best_candidate.x,
-    //         initial_pose_estimate.translation().y() + best_candidate.y},
-    //        initial_rotation *
-    //        Eigen::Rotation2Dd(best_candidate.orientation)));
+    //    drawer.DrawPointcloud(
+    //        point_cloud, initial_pose_estimate,
+    //        transform::Rigid2d(
+    //            {initial_pose_estimate.translation().x() + best_candidate.x,
+    //             initial_pose_estimate.translation().y() + best_candidate.y},
+    //            initial_rotation *
+    //            Eigen::Rotation2Dd(best_candidate.orientation)));
     //    auto start = std::chrono::high_resolution_clock::now();
     //    std::string filename =
     //        "grid_with_inserted_cloud" +
-    //            std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(
-    //                start.time_since_epoch())
-    //                               .count()) +
-    //            ".png";
+    //        std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(
+    //                           start.time_since_epoch())
+    //                           .count()) +
+    //        ".png";
     //    drawer.ToFile(filename);
 
     *score = best_candidate.score;
@@ -163,7 +163,7 @@ FastESDFScanMatcher2D::ComputeLowestResolutionCandidates(
       GenerateLowestResolutionCandidates(search_parameters);
   float search_bound_delta =
       max_depth_ > 1
-          ? std::pow(3, max_depth_ - 2) * std::sqrt(4.5) *
+          ? (std::pow(3, max_depth_ - 1) - 1) * std::sqrt(2) * 0.5 *
                 precomputation_grid_->limits().resolution()
           : 0.f;
   // LOG(INFO)<<"depth "<<max_depth_<<" search_bound_delta
@@ -186,23 +186,21 @@ FastESDFScanMatcher2D::GenerateLowestResolutionCandidates(
   center_offsets_y.reserve(search_parameters.num_scans);
   for (int scan_index = 0; scan_index != search_parameters.num_scans;
        ++scan_index) {
-    const int num_lowest_resolution_linear_x_candidates =
-        (search_parameters.linear_bounds[scan_index].max_x -
-         search_parameters.linear_bounds[scan_index].min_x + linear_step_size) /
-        linear_step_size;
+    const int num_lowest_resolution_linear_x_candidates = int(
+        std::ceil(double(search_parameters.linear_bounds[scan_index].max_x -
+                         search_parameters.linear_bounds[scan_index].min_x) /
+                  linear_step_size));
     int center_offset_x = ((search_parameters.linear_bounds[scan_index].max_x -
-                            search_parameters.linear_bounds[scan_index].min_x +
-                            linear_step_size) %
+                            search_parameters.linear_bounds[scan_index].min_x) %
                            linear_step_size) /
                           2;
     center_offsets_x.push_back(center_offset_x);
-    const int num_lowest_resolution_linear_y_candidates =
-        (search_parameters.linear_bounds[scan_index].max_y -
-         search_parameters.linear_bounds[scan_index].min_y + linear_step_size) /
-        linear_step_size;
+    const int num_lowest_resolution_linear_y_candidates = int(
+        std::ceil(double(search_parameters.linear_bounds[scan_index].max_y -
+                         search_parameters.linear_bounds[scan_index].min_y) /
+                  linear_step_size));
     int center_offset_y = ((search_parameters.linear_bounds[scan_index].max_y -
-                            search_parameters.linear_bounds[scan_index].min_y +
-                            linear_step_size) %
+                            search_parameters.linear_bounds[scan_index].min_y) %
                            linear_step_size) /
                           2;
     center_offsets_y.push_back(center_offset_y);
@@ -213,16 +211,18 @@ FastESDFScanMatcher2D::GenerateLowestResolutionCandidates(
   candidates.reserve(num_candidates);
   for (int scan_index = 0; scan_index != search_parameters.num_scans;
        ++scan_index) {
-    for (int x_index_offset = search_parameters.linear_bounds[scan_index].min_x;
+    for (int x_index_offset =
+             search_parameters.linear_bounds[scan_index].min_x +
+             center_offsets_x[scan_index];
          x_index_offset <= search_parameters.linear_bounds[scan_index].max_x;
          x_index_offset += linear_step_size) {
       for (int y_index_offset =
-               search_parameters.linear_bounds[scan_index].min_y;
+               search_parameters.linear_bounds[scan_index].min_y +
+               center_offsets_y[scan_index];
            y_index_offset <= search_parameters.linear_bounds[scan_index].max_y;
            y_index_offset += linear_step_size) {
-        candidates.emplace_back(
-            scan_index, x_index_offset + center_offsets_x[scan_index],
-            y_index_offset + center_offsets_y[scan_index], search_parameters);
+        candidates.emplace_back(scan_index, x_index_offset, y_index_offset,
+                                search_parameters);
       }
     }
   }
@@ -243,10 +243,10 @@ void FastESDFScanMatcher2D::ScoreCandidates(
       const Eigen::Array2i proposed_xy_index(
           xy_index.x() + candidate.x_index_offset,
           xy_index.y() + candidate.y_index_offset);
-      float update =
-          std::max(std::abs(precomputation_grid.GetTSD(proposed_xy_index)) -
-                       search_bound * 1.31f,
-                   0.f);
+      float update = std::max(
+          std::abs(precomputation_grid.GetTSD(proposed_xy_index)) -
+              search_bound * 1.0825f,  // Correction for ESDF approximation
+          0.f);
       sum += update;
     }
     candidate.score =
@@ -279,14 +279,24 @@ Candidate2D FastESDFScanMatcher2D::BranchAndBound(
     std::vector<Candidate2D> higher_resolution_candidates;
     const int half_width = std::pow(3, candidate_depth - 1);
     for (int x_offset : {-half_width, 0, half_width}) {
-      if (candidate.x_index_offset + x_offset >
-          search_parameters.linear_bounds[candidate.scan_index].max_x) {
-        break;
+      int x_upper_bound_delta = x_offset > 0 ? x_offset / 2 : 3 * x_offset / 2;
+      int x_lower_bound_delta = x_offset > 0 ? 3 * x_offset / 2 : x_offset / 2;
+      if ((candidate.x_index_offset + x_upper_bound_delta >
+           search_parameters.linear_bounds[candidate.scan_index].max_x) ||
+          (candidate.x_index_offset + x_lower_bound_delta <
+           search_parameters.linear_bounds[candidate.scan_index].min_x)) {
+        continue;
       }
       for (int y_offset : {-half_width, 0, half_width}) {
-        if (candidate.y_index_offset + y_offset >
-            search_parameters.linear_bounds[candidate.scan_index].max_y) {
-          break;
+        int y_upper_bound_delta =
+            y_offset > 0 ? y_offset / 2 : 3 * y_offset / 2;
+        int y_lower_bound_delta =
+            y_offset > 0 ? 3 * y_offset / 2 : y_offset / 2;
+        if ((candidate.y_index_offset + y_upper_bound_delta >
+             search_parameters.linear_bounds[candidate.scan_index].max_y) ||
+            (candidate.y_index_offset + y_lower_bound_delta <
+             search_parameters.linear_bounds[candidate.scan_index].min_y)) {
+          continue;
         }
         higher_resolution_candidates.emplace_back(
             candidate.scan_index, candidate.x_index_offset + x_offset,
@@ -296,7 +306,7 @@ Candidate2D FastESDFScanMatcher2D::BranchAndBound(
 
     float search_bound_delta =
         candidate_depth > 1
-            ? std::pow(3, candidate_depth - 2) * std::sqrt(4.5) *
+            ? (std::pow(3, candidate_depth - 1) - 1) * std::sqrt(2) * 0.5 *
                   precomputation_grid_->limits().resolution()
             : 0.f;
     ScoreCandidates(*precomputation_grid_.get(), discrete_scans,
