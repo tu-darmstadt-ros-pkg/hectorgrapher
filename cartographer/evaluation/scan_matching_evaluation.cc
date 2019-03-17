@@ -683,11 +683,13 @@ void RunScanMatchingEvaluation() {
       "},"
       "tsdf_range_data_inserter = {"
       "truncation_distance = 0.25,"
-      "maximum_weight = 1000.,"
+      "maximum_weight = 300.,"
       "update_free_space = false,"
       "normal_estimation_options = {"
       "num_normal_samples = 400,"
       "sample_radius = 0.15,"
+      "tsdf_weight_scale = 0.5,"
+      "const_weight = 0.1,"
       "use_pca = false,"
       "},"
       "project_sdf_distance_to_scan_normal = true,"
@@ -715,8 +717,8 @@ void RunScanMatchingEvaluation() {
       ceres_scan_matcher_options =
           cartographer::mapping::scan_matching::CreateCeresScanMatcherOptions2D(
               parameter_dictionary.get());
-  int n_training = 100;
-  int n_test = 1;
+  int n_training = 250;
+  int n_test = 10;
 
   std::ofstream log_file;
   std::string log_file_path;

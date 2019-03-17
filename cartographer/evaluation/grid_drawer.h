@@ -35,6 +35,22 @@ class GridDrawer {
                        const sensor::RangeData& range_data,
                        const cartographer::transform::Rigid2d& transform);
 
+  void DrawWeightedTSDFNormals(
+      const cartographer::mapping::TSDF2D& grid,
+      const sensor::RangeData& range_data,
+      const cartographer::transform::Rigid2d& transform, float max_weight);
+
+  void DrawWeightedScanNormals(
+      const sensor::RangeData& range_data,
+      const cartographer::transform::Rigid2d& transform,
+  const cartographer::mapping::proto::TSDFRangeDataInserterOptions2D& options,
+  float max_weight);
+
+  void DrawWeightedNormals(std::vector<std::pair<float, float>> normals,
+                       const sensor::RangeData& range_data,
+                       const cartographer::transform::Rigid2d& transform, float max_weight);
+
+
   void DrawIsoSurface(const cartographer::mapping::TSDF2D& grid);
   void DrawBBBounds(
       const std::vector<

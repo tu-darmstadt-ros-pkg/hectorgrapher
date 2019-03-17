@@ -19,6 +19,7 @@
 #include "cartographer/mapping/internal/2d/normal_estimation_2d.h"
 #include "cartographer/mapping/internal/2d/ray_to_pixel_mask.h"
 #include "cartographer/evaluation/marching_squares.h"
+#include "cartographer/evaluation/grid_drawer.h"
 #include "cairo.h"
 
 namespace cartographer {
@@ -146,14 +147,20 @@ void TSDFRangeDataInserter2D::Insert(const sensor::RangeData& range_data,
       options_.update_weight_angle_scan_normal_to_ray_kernel_bandwith() != 0.f;
   sensor::RangeData sorted_range_data = range_data;
   std::vector<float> normals;
+
+  std::vector<std::pair<float, float>> scan_normals;
+  std::vector<std::pair<float, float>> tsdf_normals;
+  std::vector<std::pair<float, float>> scan_render_normals;
+  std::vector<std::pair<float, float>> tsdf_render_normals;
+  std::vector<std::pair<float, float>> combined_render_normals;
   if (options_.project_sdf_distance_to_scan_normal() ||
       scale_update_weight_angle_scan_normal_to_ray) {
     std::sort(sorted_range_data.returns.begin(),
               sorted_range_data.returns.end(),
               RangeDataSorter(sorted_range_data.origin));
-    std::vector<std::pair<float, float>> scan_normals = EstimateNormals(
+    scan_normals = EstimateNormals(
         sorted_range_data, options_.normal_estimation_options());
-    std::vector<std::pair<float, float>> tsdf_normals =
+    tsdf_normals =
         EstimateNormalsFromTSDF(sorted_range_data, *tsdf);
 
     for (size_t hit_index = 0; hit_index < sorted_range_data.returns.size();
@@ -161,17 +168,16 @@ void TSDFRangeDataInserter2D::Insert(const sensor::RangeData& range_data,
       const Eigen::Vector2f hit =
           sorted_range_data.returns[hit_index].position.head<2>();
 
-      bool use_tsdf_normals = false;
-      float weight = tsdf->GetWeight(tsdf->limits().GetCellIndex(
-          hit));  // todo(kdaun) min from interpolation region?
+      bool use_tsdf_normals = true;
       if (tsdf_normals[hit_index].second ==
-              0.f ||  // 5.f is ugly hack to avoid using
-                      // of invalid normals --> use Nan
-          !use_tsdf_normals) {
+              0.f ||  !use_tsdf_normals) {
         normals.push_back(scan_normals[hit_index].first);
         //        if (hit_index % 2000 == 0) LOG(INFO) << "pass";
       } else {
-        float ratio = weight / (options_.maximum_weight() * 2.0);
+        float scan_weight = std::min(float(scan_normals[hit_index].second)/20.f, 1.f);
+        float tsdf_weight = options_.normal_estimation_options().tsdf_weight_scale() * std::min(float (tsdf_normals[hit_index].second)/tsdf->value_converter_->getMaxWeight(), 1.f);
+        float const_weight = options_.normal_estimation_options().const_weight();
+        float ratio = tsdf_weight / (scan_weight + tsdf_weight + const_weight);
         float normal =
             WeightedMeanOfTwoAngles(scan_normals[hit_index].first, 1.f - ratio,
                                     tsdf_normals[hit_index].first, ratio);
@@ -181,8 +187,48 @@ void TSDFRangeDataInserter2D::Insert(const sensor::RangeData& range_data,
         //          "\t"
         //                    << tsdf_normals[hit_index] << "\t" << normal;
       }
+
+
+      float scan_weight = std::min(float(scan_normals[hit_index].second)/20.f, 1.f);
+      float tsdf_weight = options_.normal_estimation_options().tsdf_weight_scale() * std::min(float (tsdf_normals[hit_index].second)/tsdf->value_converter_->getMaxWeight(), 1.f);
+      float const_weight = options_.normal_estimation_options().const_weight();
+      float ratio = tsdf_weight / (scan_weight + tsdf_weight + const_weight);
+      float normal =
+          WeightedMeanOfTwoAngles(scan_normals[hit_index].first, 1.f - ratio,
+                                  tsdf_normals[hit_index].first, ratio);
+      tsdf_render_normals.emplace_back(tsdf_normals[hit_index].first, 0.f);
+      scan_render_normals.emplace_back(scan_normals[hit_index].first, 1.0f);
+      combined_render_normals.emplace_back(normal, 0.5f);
     }
   }
+//  evaluation::GridDrawer drawer_scan_normals(tsdf->limits());
+//  drawer_scan_normals.DrawTSD(*tsdf);
+//  drawer_scan_normals.DrawPointcloud(
+//                range_data.returns,
+//                transform::Rigid2d({0.0,0.0}, Eigen::Rotation2Dd(0.0)),
+//                transform::Rigid2d({0.0,0.0}, Eigen::Rotation2Dd(0.0)));
+//  drawer_scan_normals.DrawWeightedNormals(scan_normals, sorted_range_data, transform::Rigid2d({0.0,0.0}, Eigen::Rotation2Dd(0.0)), 20);
+
+
+  evaluation::GridDrawer drawer_tsdf_normals(tsdf->limits());
+//  drawer_tsdf_normals.DrawTSD(*tsdf);
+  drawer_tsdf_normals.DrawIsoSurface(*tsdf);
+  drawer_tsdf_normals.DrawPointcloud(
+      range_data.returns,
+      transform::Rigid2d({0.0,0.0}, Eigen::Rotation2Dd(0.0)),
+      transform::Rigid2d({0.0,0.0}, Eigen::Rotation2Dd(0.0)));
+  drawer_tsdf_normals.DrawWeightedNormals(tsdf_render_normals, sorted_range_data, transform::Rigid2d({0.0,0.0}, Eigen::Rotation2Dd(0.0)), 1.f);
+  drawer_tsdf_normals.DrawWeightedNormals(scan_render_normals, sorted_range_data, transform::Rigid2d({0.0,0.0}, Eigen::Rotation2Dd(0.0)), 1.f);
+  drawer_tsdf_normals.DrawWeightedNormals(combined_render_normals, sorted_range_data, transform::Rigid2d({0.0,0.0}, Eigen::Rotation2Dd(0.0)), 1.f);
+  auto start = std::chrono::high_resolution_clock::now();
+  std::string timestamp=
+      std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(
+          start.time_since_epoch())
+                         .count());
+//  drawer_scan_normals.ToFile("scan_normals_" + timestamp + ".png");
+  drawer_tsdf_normals.ToFile("tsdf_normals_" + timestamp + ".png");
+
+
   const Eigen::Vector2f origin = sorted_range_data.origin.head<2>();
   for (size_t hit_index = 0; hit_index < sorted_range_data.returns.size();
        ++hit_index) {
@@ -194,12 +240,31 @@ void TSDFRangeDataInserter2D::Insert(const sensor::RangeData& range_data,
     InsertHit(options_, hit, origin, normal, tsdf);
   }
   tsdf->FinishUpdate();
-  //    if (sorted_range_data.returns.size() % 25 == 0) {
-  //      renderGridwithScan(*tsdf, range_data, options_);
-  //      TSDF2D esdf = CreateESDFFromTSDF(1.0, tsdf->conversion_tables_,
-  //      *tsdf);
-  //      renderGridwithScan(esdf, range_data, options_);
-  //    }
+
+//  evaluation::GridDrawer drawer_scan_normals(tsdf->limits());
+//  drawer_scan_normals.DrawTSD(*tsdf);
+////  drawer_scan_normals.DrawPointcloud(
+////                range_data.returns,
+////                transform::Rigid2d({0.0,0.0}, Eigen::Rotation2Dd(0.0)),
+////                transform::Rigid2d({0.0,0.0}, Eigen::Rotation2Dd(0.0)));
+//  drawer_scan_normals.DrawWeightedNormals(scan_normals, sorted_range_data, transform::Rigid2d({0.0,0.0}, Eigen::Rotation2Dd(0.0)), 20);
+//
+//  evaluation::GridDrawer drawer_tsdf_normals(tsdf->limits());
+//  drawer_tsdf_normals.DrawTSD(*tsdf);
+//  drawer_tsdf_normals.DrawIsoSurface(*tsdf);
+////  drawer_tsdf_normals.DrawPointcloud(
+////      range_data.returns,
+////      transform::Rigid2d({0.0,0.0}, Eigen::Rotation2Dd(0.0)),
+////      transform::Rigid2d({0.0,0.0}, Eigen::Rotation2Dd(0.0)));
+//  drawer_tsdf_normals.DrawWeightedNormals(tsdf_normals, sorted_range_data, transform::Rigid2d({0.0,0.0}, Eigen::Rotation2Dd(0.0)), tsdf->value_converter_->getMaxWeight());
+//  auto start = std::chrono::high_resolution_clock::now();
+//  std::string timestamp=
+//              std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(
+//                  start.time_since_epoch())
+//                                 .count());
+//  drawer_scan_normals.ToFile("scan_normals_"+timestamp+".png");
+//  drawer_tsdf_normals.ToFile("tsdf_normals_"+timestamp+".png");
+
 }
 
 void TSDFRangeDataInserter2D::InsertHit(

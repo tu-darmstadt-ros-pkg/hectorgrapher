@@ -62,6 +62,7 @@ FastESDFScanMatcher2D::FastESDFScanMatcher2D(
   //                               .count()) +
   //            ".png";
   //    drawer.ToFile(filename);
+
 }
 
 FastESDFScanMatcher2D::~FastESDFScanMatcher2D() {}
@@ -126,26 +127,28 @@ bool FastESDFScanMatcher2D::MatchWithSearchParameters(
       max_depth_ - 1, max_score, bb_regions);
 
   if (best_candidate.score < max_score) {
-    //        evaluation::GridDrawer drawer(precomputation_grid_->limits());
-    //        drawer.DrawTSD(*precomputation_grid_);
-    //        drawer.DrawBBBounds(bb_regions, initial_pose_estimate);
-    //        drawer.DrawPointcloud(
-    //            point_cloud, initial_pose_estimate,
-    //            transform::Rigid2d(
-    //                {initial_pose_estimate.translation().x() +
-    //                best_candidate.x,
-    //                 initial_pose_estimate.translation().y() +
-    //                 best_candidate.y},
-    //                initial_rotation *
-    //                Eigen::Rotation2Dd(best_candidate.orientation)));
-    //        auto start = std::chrono::high_resolution_clock::now();
-    //        std::string filename =
-    //            "grid_with_inserted_cloud" +
-    //            std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(
-    //                               start.time_since_epoch())
-    //                               .count()) +
-    //            ".png";
-    //        drawer.ToFile(filename);
+//            evaluation::GridDrawer drawer(precomputation_grid_->limits());
+//            drawer.DrawTSD(*precomputation_grid_);
+//            drawer.DrawBBBounds(bb_regions, initial_pose_estimate);
+//            drawer.DrawPointcloud(
+//                point_cloud, initial_pose_estimate,
+//                transform::Rigid2d(
+//                    {initial_pose_estimate.translation().x() +
+//                    best_candidate.x,
+//                     initial_pose_estimate.translation().y() +
+//                     best_candidate.y},
+//                    initial_rotation *
+//                    Eigen::Rotation2Dd(best_candidate.orientation)));
+//            auto start = std::chrono::high_resolution_clock::now();
+//            std::string filename =
+//                "grid_with_inserted_cloud" +
+//                std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(
+//                                   start.time_since_epoch())
+//                                   .count()) +
+//                ".png";
+//            drawer.ToFile(filename);
+
+
 
     *score = best_candidate.score;
     *pose_estimate = transform::Rigid2d(

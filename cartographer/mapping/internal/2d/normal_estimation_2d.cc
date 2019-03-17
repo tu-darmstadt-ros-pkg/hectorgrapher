@@ -114,6 +114,8 @@ proto::NormalEstimationOptions2D CreateNormalEstimationOptions2D(
       parameter_dictionary->GetInt("num_normal_samples"));
   options.set_sample_radius(parameter_dictionary->GetDouble("sample_radius"));
   options.set_use_pca(parameter_dictionary->GetBool("use_pca"));
+  options.set_const_weight(parameter_dictionary->GetDouble("const_weight"));
+  options.set_tsdf_weight_scale(parameter_dictionary->GetDouble("tsdf_weight_scale"));
   CHECK_GT(options.num_normal_samples(), 0);
   CHECK_GT(options.sample_radius(), 0.0);
   return options;
@@ -204,7 +206,6 @@ std::vector<std::pair<float, float>> EstimateNormalsFromTSDF(
     float w_min = std::min(std::min(w00, w10), std::min(w01, w11));
     if (w_min == 0.f) {
       normals.push_back(std::make_pair<float, float>(0.f, 0.f));
-      ;
       continue;
     }
 
@@ -214,7 +215,15 @@ std::vector<std::pair<float, float>> EstimateNormalsFromTSDF(
     float dMdy =
         ((center[0] - x0) * (m11 - m10) + (x1 - center[0]) * (m01 - m00)) /
         (x1 - x0);
-    // TODO(kdaun) check for empty cells
+
+    Eigen::Vector3f sample_normal = {dMdx, dMdy, 0.f};
+
+    const Eigen::Vector3f& estimation_point_to_observation =
+        range_data.origin - hit;
+    if (sample_normal.dot(estimation_point_to_observation) < 0) {
+      //sample_normal = -sample_normal;
+      w_min = 0.f;
+    }
 
     normals.push_back(std::make_pair<float, float>(
         Normal2DTo2DAngle({dMdx, dMdy}), static_cast<float>(w_min)));
