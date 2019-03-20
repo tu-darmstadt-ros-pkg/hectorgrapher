@@ -24,6 +24,7 @@
 namespace cartographer {
 namespace mapping {
 namespace scan_matching {
+namespace {}
 
 // Interpolates between TSDF2D pixels with bilinear interpolation.
 //
@@ -50,19 +51,41 @@ class InterpolatedTSDF2D {
     const float w12 = tsdf_.GetWeight(index1 + Eigen::Array2i(-1, 0));
     const float w21 = tsdf_.GetWeight(index1 + Eigen::Array2i(0, -1));
     const float w22 = tsdf_.GetWeight(index1 + Eigen::Array2i(-1, -1));
+
+    int num_zeros = 0;
     if (w11 == 0.0 || w12 == 0.0 || w21 == 0.0 || w22 == 0.0) {
-      return T(tsdf_.GetMaxCorrespondenceCost());
+      if (w11 == 0.f) num_zeros++;
+      if (w12 == 0.f) num_zeros++;
+      if (w21 == 0.f) num_zeros++;
+      if (w22 == 0.f) num_zeros++;
+      // LOG(INFO)<<"num "<<num_zeros;
+      if (num_zeros > 1) return T(tsdf_.GetMaxCorrespondenceCost());
     }
 
-    const float q11 = tsdf_.GetCorrespondenceCost(index1);
-    const float q12 =
-        tsdf_.GetCorrespondenceCost(index1 + Eigen::Array2i(-1, 0));
-    const float q21 =
-        tsdf_.GetCorrespondenceCost(index1 + Eigen::Array2i(0, -1));
-    const float q22 =
-        tsdf_.GetCorrespondenceCost(index1 + Eigen::Array2i(-1, -1));
-
-    return InterpolateBilinear(x, y, x1, y1, x2, y2, q11, q12, q21, q22);
+    float q11 = tsdf_.GetCorrespondenceCost(index1);
+    float q12 = tsdf_.GetCorrespondenceCost(index1 + Eigen::Array2i(-1, 0));
+    float q21 = tsdf_.GetCorrespondenceCost(index1 + Eigen::Array2i(0, -1));
+    float q22 = tsdf_.GetCorrespondenceCost(index1 + Eigen::Array2i(-1, -1));
+    if (num_zeros == 1) {
+      if (w11 == 0.f)
+        return InterpolateBarycentric(x, y, x2, y1, x2, y2, x1, y2, q21, q22,
+                                      q12);
+      else if (w12 == 0.f)
+        return InterpolateBarycentric(x, y, x1, y1, x2, y1, x2, y2, q11, q21,
+                                      q22);
+      else if (w21 == 0.f)
+        return InterpolateBarycentric(x, y, x2, y2, x1, y2, x1, y1, q22, q12,
+                                      q11);
+      else if (w22 == 0.f)
+        return InterpolateBarycentric(x, y, x1, y2, x1, y1, x2, y1, q12, q11,
+                                      q21);
+      else {
+        CHECK(false);
+        return T(0);
+      }
+    } else {
+      return InterpolateBilinear(x, y, x1, y1, x2, y2, q11, q12, q21, q22);
+    }
   }
 
   // Returns the interpolated weight at (x,y).
@@ -101,6 +124,19 @@ class InterpolatedTSDF2D {
     const T q1 = T(q12 - q11) * normalized_y + T(q11);
     const T q2 = T(q22 - q21) * normalized_y + T(q21);
     return T(q2 - q1) * normalized_x + T(q1);
+  }
+
+  template <typename T>
+  T InterpolateBarycentric(const T& x, const T& y, float x1, float y1, float x2,
+                           float y2, float x3, float y3, float q1, float q2,
+                           float q3) const {
+    const T determinant = T((y2 - y3) * (x1 - x3) + (x3 - x2) * (y1 - y3));
+    const T w1 =
+        (T(y2 - y3) * (x - T(x3)) + T(x3 - x2) * (y - T(y3))) / determinant;
+    const T w2 =
+        (T(y3 - y1) * (x - T(x3)) + T(x1 - x3) * (y - T(y3))) / determinant;
+    const T w3 = T(1) - w1 - w2;
+    return T(q1) * w1 + T(q2) * w2 + T(q3) * w3;
   }
 
   // Center of the next lower pixel, i.e., not necessarily the pixel containing

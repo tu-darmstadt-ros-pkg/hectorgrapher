@@ -52,7 +52,18 @@ class CeresScanMatcher2D {
              transform::Rigid2d* pose_estimate,
              ceres::Solver::Summary* summary) const;
 
+  void Evaluate(const Eigen::Vector2d& target_translation,
+                const transform::Rigid2d& initial_pose_estimate,
+                const sensor::PointCloud& point_cloud, const Grid2D& grid,
+                double* cost, std::vector<double>* residuals,
+                std::vector<double>* jacobians) const;
+
  private:
+  void setupProblem(const Eigen::Vector2d& target_translation,
+                    const transform::Rigid2d& initial_pose_estimate,
+                    const sensor::PointCloud& point_cloud, const Grid2D& grid,
+                    double* ceres_pose_estimate, ceres::Problem* problem) const;
+
   const proto::CeresScanMatcherOptions2D options_;
   ceres::Solver::Options ceres_solver_options_;
 };

@@ -71,10 +71,37 @@ void CeresScanMatcher2D::Match(const Eigen::Vector2d& target_translation,
                                    initial_pose_estimate.translation().y(),
                                    initial_pose_estimate.rotation().angle()};
   ceres::Problem problem;
+  setupProblem(target_translation, initial_pose_estimate, point_cloud, grid,
+               &ceres_pose_estimate[0], &problem);
+  ceres::Solve(ceres_solver_options_, &problem, summary);
+  *pose_estimate = transform::Rigid2d(
+      {ceres_pose_estimate[0], ceres_pose_estimate[1]}, ceres_pose_estimate[2]);
+}
+
+void CeresScanMatcher2D::Evaluate(
+    const Eigen::Vector2d& target_translation,
+    const transform::Rigid2d& initial_pose_estimate,
+    const sensor::PointCloud& point_cloud, const Grid2D& grid, double* cost,
+    std::vector<double>* residuals, std::vector<double>* jacobians) const {
+  double ceres_pose_estimate[3] = {initial_pose_estimate.translation().x(),
+                                   initial_pose_estimate.translation().y(),
+                                   initial_pose_estimate.rotation().angle()};
+  ceres::Problem problem;
+  setupProblem(target_translation, initial_pose_estimate, point_cloud, grid,
+               &ceres_pose_estimate[0], &problem);
+  problem.Evaluate(ceres::Problem::EvaluateOptions(), cost, residuals,
+                   jacobians, NULL);
+}
+
+void CeresScanMatcher2D::setupProblem(
+    const Eigen::Vector2d& target_translation,
+    const transform::Rigid2d& initial_pose_estimate,
+    const sensor::PointCloud& point_cloud, const Grid2D& grid,
+    double* ceres_pose_estimate, ceres::Problem* problem) const {
   CHECK_GT(options_.occupied_space_weight(), 0.);
   switch (grid.GetGridType()) {
     case GridType::PROBABILITY_GRID:
-      problem.AddResidualBlock(
+      problem->AddResidualBlock(
           CreateOccupiedSpaceCostFunction2D(
               options_.occupied_space_weight() /
                   std::sqrt(static_cast<double>(point_cloud.size())),
@@ -82,34 +109,25 @@ void CeresScanMatcher2D::Match(const Eigen::Vector2d& target_translation,
           nullptr /* loss function */, ceres_pose_estimate);
       break;
     case GridType::TSDF:
-      problem.AddResidualBlock(
+      problem->AddResidualBlock(
           CreateTSDFMatchCostFunction2D(
-                  options_.empty_space_cost(),
+              options_.empty_space_cost(),
               options_.occupied_space_weight() /
                   std::sqrt(static_cast<double>(point_cloud.size())),
               point_cloud, static_cast<const TSDF2D&>(grid)),
           nullptr /* loss function */, ceres_pose_estimate);
       break;
   }
-  if (options_.translation_weight() != 0.) {
-    CHECK_GT(options_.translation_weight(), 0.);
-    problem.AddResidualBlock(
-        TranslationDeltaCostFunctor2D::CreateAutoDiffCostFunction(
-            options_.translation_weight(), target_translation),
-        nullptr /* loss function */, ceres_pose_estimate);
-  }
-  if (options_.rotation_weight() != 0.) {
-    CHECK_GT(options_.rotation_weight(), 0.);
-    problem.AddResidualBlock(
-        RotationDeltaCostFunctor2D::CreateAutoDiffCostFunction(
-            options_.rotation_weight(), ceres_pose_estimate[2]),
-        nullptr /* loss function */, ceres_pose_estimate);
-  }
-
-  ceres::Solve(ceres_solver_options_, &problem, summary);
-
-  *pose_estimate = transform::Rigid2d(
-      {ceres_pose_estimate[0], ceres_pose_estimate[1]}, ceres_pose_estimate[2]);
+  CHECK_GE(options_.translation_weight(), 0.);
+  problem->AddResidualBlock(
+      TranslationDeltaCostFunctor2D::CreateAutoDiffCostFunction(
+          options_.translation_weight(), target_translation),
+      nullptr /* loss function */, ceres_pose_estimate);
+  CHECK_GE(options_.rotation_weight(), 0.);
+  problem->AddResidualBlock(
+      RotationDeltaCostFunctor2D::CreateAutoDiffCostFunction(
+          options_.rotation_weight(), ceres_pose_estimate[2]),
+      nullptr /* loss function */, ceres_pose_estimate);
 }
 
 }  // namespace scan_matching

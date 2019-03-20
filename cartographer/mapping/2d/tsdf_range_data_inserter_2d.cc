@@ -190,7 +190,13 @@ void TSDFRangeDataInserter2D::Insert(const sensor::RangeData& range_data,
 
 
       float scan_weight = std::min(float(scan_normals[hit_index].second)/20.f, 1.f);
-      float tsdf_weight = options_.normal_estimation_options().tsdf_weight_scale() * std::min(float (tsdf_normals[hit_index].second)/tsdf->value_converter_->getMaxWeight(), 1.f);
+      float tsdf_weight = std::min(float(tsdf_normals[hit_index].second) /
+                                       tsdf->value_converter_->getMaxWeight(),
+                                   1.f);
+      float tsdf_min_offset = 0.0;
+      tsdf_weight = std::max(
+          0.f, options_.normal_estimation_options().tsdf_weight_scale() *
+                   (tsdf_weight - tsdf_min_offset) / (1.f - tsdf_min_offset));
       float const_weight = options_.normal_estimation_options().const_weight();
       float ratio = tsdf_weight / (scan_weight + tsdf_weight + const_weight);
       float normal =
@@ -209,25 +215,30 @@ void TSDFRangeDataInserter2D::Insert(const sensor::RangeData& range_data,
 //                transform::Rigid2d({0.0,0.0}, Eigen::Rotation2Dd(0.0)));
 //  drawer_scan_normals.DrawWeightedNormals(scan_normals, sorted_range_data, transform::Rigid2d({0.0,0.0}, Eigen::Rotation2Dd(0.0)), 20);
 
-
-  evaluation::GridDrawer drawer_tsdf_normals(tsdf->limits());
-//  drawer_tsdf_normals.DrawTSD(*tsdf);
-  drawer_tsdf_normals.DrawIsoSurface(*tsdf);
-  drawer_tsdf_normals.DrawPointcloud(
-      range_data.returns,
-      transform::Rigid2d({0.0,0.0}, Eigen::Rotation2Dd(0.0)),
-      transform::Rigid2d({0.0,0.0}, Eigen::Rotation2Dd(0.0)));
-  drawer_tsdf_normals.DrawWeightedNormals(tsdf_render_normals, sorted_range_data, transform::Rigid2d({0.0,0.0}, Eigen::Rotation2Dd(0.0)), 1.f);
-  drawer_tsdf_normals.DrawWeightedNormals(scan_render_normals, sorted_range_data, transform::Rigid2d({0.0,0.0}, Eigen::Rotation2Dd(0.0)), 1.f);
-  drawer_tsdf_normals.DrawWeightedNormals(combined_render_normals, sorted_range_data, transform::Rigid2d({0.0,0.0}, Eigen::Rotation2Dd(0.0)), 1.f);
-  auto start = std::chrono::high_resolution_clock::now();
-  std::string timestamp=
-      std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(
-          start.time_since_epoch())
-                         .count());
-//  drawer_scan_normals.ToFile("scan_normals_" + timestamp + ".png");
-  drawer_tsdf_normals.ToFile("tsdf_normals_" + timestamp + ".png");
-
+  //  evaluation::GridDrawer drawer_tsdf_normals(tsdf->limits());
+  ////  drawer_tsdf_normals.DrawTSD(*tsdf);
+  //  drawer_tsdf_normals.DrawIsoSurface(*tsdf);
+  //  drawer_tsdf_normals.DrawPointcloud(
+  //      range_data.returns,
+  //      transform::Rigid2d({0.0,0.0}, Eigen::Rotation2Dd(0.0)),
+  //      transform::Rigid2d({0.0,0.0}, Eigen::Rotation2Dd(0.0)));
+  //  drawer_tsdf_normals.DrawWeightedNormals(tsdf_render_normals,
+  //  sorted_range_data, transform::Rigid2d({0.0,0.0}, Eigen::Rotation2Dd(0.0)),
+  //  1.f);
+  //  drawer_tsdf_normals.DrawWeightedNormals(scan_render_normals,
+  //  sorted_range_data, transform::Rigid2d({0.0,0.0}, Eigen::Rotation2Dd(0.0)),
+  //  1.f);
+  //  drawer_tsdf_normals.DrawWeightedNormals(combined_render_normals,
+  //  sorted_range_data, transform::Rigid2d({0.0,0.0}, Eigen::Rotation2Dd(0.0)),
+  //  1.f);
+  //  auto start = std::chrono::high_resolution_clock::now();
+  //  std::string timestamp=
+  //      std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(
+  //          start.time_since_epoch())
+  //                         .count());
+  ////  drawer_scan_normals.ToFile("scan_normals_" + timestamp + ".png");
+  //  drawer_tsdf_normals.ToFile("tsdf_normals_" + timestamp + ".png");
+  //
 
   const Eigen::Vector2f origin = sorted_range_data.origin.head<2>();
   for (size_t hit_index = 0; hit_index < sorted_range_data.returns.size();

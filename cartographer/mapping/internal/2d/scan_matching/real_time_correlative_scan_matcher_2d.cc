@@ -51,11 +51,8 @@ float ComputeCandidateScore(const TSDF2D& tsdf,
         (tsdf.GetMaxCorrespondenceCost() - std::abs(tsd_and_weight.first)) /
         tsdf.GetMaxCorrespondenceCost();
     const float weight = tsd_and_weight.second;
-    candidate_score += normalized_tsd_score * weight;
+    candidate_score += normalized_tsd_score * (weight + empty_space_weight);
     summed_weight += weight;
-    if(weight == 0.f) {
-      empty_space_weight += empty_space_cost;
-    }
   }
   if (summed_weight == 0.f) return 0.f;
   candidate_score /= (summed_weight + empty_space_weight);

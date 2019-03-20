@@ -39,7 +39,7 @@ void ScanCloudGenerator::generateRectangle(
   double e_x;
   double e_y;
 
-  for (float x = x_min; x <= x_max + 1e-5; x += resolution_) {
+  for (float x = x_min + 0.25; x <= x_max - 0.25 + 1e-5; x += resolution_) {
     float y = y_min;
     e_orientation = normal_distribution(e1);
     e_x = x / sqrt(x * x + y * y) * e_orientation;
@@ -51,7 +51,7 @@ void ScanCloudGenerator::generateRectangle(
     e_y = y / sqrt(x * x + y * y) * e_orientation;
     cloud.push_back({Eigen::Vector3f(x + e_x, y + e_y, 0.)});
   }
-  for (float y = y_min; y <= y_max + 1e-5; y += resolution_) {
+  for (float y = y_min + 0.25; y <= y_max - 0.25 + 1e-5; y += resolution_) {
     float x = x_min;
     e_orientation = normal_distribution(e1);
     e_x = x / sqrt(x * x + y * y) * e_orientation;
