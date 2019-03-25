@@ -232,7 +232,7 @@ FastESDFScanMatcher2D::GenerateLowestResolutionCandidates(
       }
     }
   }
-  CHECK_EQ(candidates.size(), num_candidates);
+  // CHECK_EQ(candidates.size(), num_candidates);
   return candidates;
 }
 

@@ -34,6 +34,7 @@ class TSDFMatchCostFunction2D {
                           const sensor::PointCloud& point_cloud,
                           const TSDF2D& grid)
       : empty_space_cost_(empty_space_cost),
+        max_weight_(grid.value_converter_->getMaxWeight()),
         residual_scaling_factor_(residual_scaling_factor),
         point_cloud_(point_cloud),
         interpolated_grid_(grid) {}
@@ -53,8 +54,9 @@ class TSDFMatchCostFunction2D {
                                          (T(point_cloud_[i].position.y())),
                                          T(1.));
       const Eigen::Matrix<T, 3, 1> world = transform * point;
-      const T point_weight = interpolated_grid_.GetWeight(world[0], world[1]) +
-                             T(empty_space_cost_);
+      const T point_weight = interpolated_grid_.GetWeight(world[0], world[1]) *
+                                 T(1.0 - empty_space_cost_) +
+                             T(empty_space_cost_) * max_weight_;
       summed_weight += point_weight;
       residual[i] =
           T(point_cloud_.size()) * residual_scaling_factor_ *
@@ -73,6 +75,7 @@ class TSDFMatchCostFunction2D {
   TSDFMatchCostFunction2D& operator=(const TSDFMatchCostFunction2D&) = delete;
 
   const double empty_space_cost_;
+  const double max_weight_;
   const double residual_scaling_factor_;
   const sensor::PointCloud& point_cloud_;
   const InterpolatedTSDF2D interpolated_grid_;

@@ -328,8 +328,9 @@ void TSDFRangeDataInserter2D::InsertHit(
         common::Clamp(update_tsd, -truncation_distance, truncation_distance);
     float update_weight = weight_factor_range * weight_factor_angle_ray_normal;
     if (options_.update_weight_distance_cell_to_hit_kernel_bandwith() != 0.f) {
-      float d = update_tsd;  // for some reason this works better than range -
-                             // distance_cell_to_origin TODO(kdaun) Understand.
+      float d = update_tsd;  // update_tsd;  // for some reason this works
+                             // better than range -
+      // distance_cell_to_origin TODO(kdaun) Understand.
       // std::max(double(std::abs(range - distance_cell_to_origin)),
       // options.truncation_distance());//update_tsd;//range -
       // distance_cell_to_origin;

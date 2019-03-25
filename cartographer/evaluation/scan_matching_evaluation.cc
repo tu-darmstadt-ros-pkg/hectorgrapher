@@ -639,11 +639,11 @@ void EvaluateCostFunction(
     const cartographer::mapping::scan_matching::proto::
         CeresScanMatcherOptions2D& ceres_scan_matcher_options,
     std::vector<std::vector<double>>* gradients) {
-  float min_trans = -0.5;
-  float max_trans = 0.5;
-  float resolution_trans = 0.025;
-  float min_rot = 0.f;
-  float max_rot = 1E-7f;  // 2.f * M_PI;
+  float min_trans = -0.05;
+  float max_trans = 0.05;
+  float resolution_trans = 0.005;
+  float min_rot = -0.1f;
+  float max_rot = 0.1;  // 1E-7f;  // 2.f * M_PI;
   float resolution_rot =
       resolution_trans * (max_rot - min_rot) / (max_trans - min_trans);
   for (float x = min_trans; x <= max_trans; x += resolution_trans) {
@@ -686,36 +686,35 @@ void EvaluateCostFunctionSinglePoint(
   sample.range_data.returns.push_back({Eigen::Vector3f(0.f, 0.f, 0.f)});
   sample.range_data.origin = Eigen::Vector3f{0, 0, 0};
 
-  float min_trans = -1.3;
-  float max_trans = 1.3;
-  float resolution_trans = 0.025;
-  float min_rot = 0.f;
-  float max_rot = 1E-7f;  // 2.f * M_PI;
+  float min_trans = -1.0f;
+  float max_trans = 1.0f;
+  float resolution_trans = 0.01;
+  float min_rot = -01.f;
+  float max_rot = 0.1;  // 1E-7f;  // 2.f * M_PI;
   float resolution_rot =
       resolution_trans * (max_rot - min_rot) / (max_trans - min_trans);
   for (float x = min_trans; x <= max_trans; x += resolution_trans) {
     for (float y = min_trans; y <= max_trans; y += resolution_trans) {
-      // for (float theta = min_rot; theta <= max_rot; theta += resolution_rot)
-      // {
-      float theta = min_rot;
-      cartographer::mapping::scan_matching::CeresScanMatcher2D scan_matcher(
-          ceres_scan_matcher_options);
-      const Eigen::Vector2d target_translation = {0., 0.};
-      const cartographer::transform::Rigid2d initial_pose_estimate =
-          cartographer::transform::Rigid2d({x, y}, theta);
-      cartographer::transform::Rigid2d matched_pose_estimate;
-      ceres::Solver::Summary summary;
-      double cost;
-      std::vector<double> jacobians;
+      for (float theta = min_rot; theta <= max_rot; theta += resolution_rot) {
+        // float theta = min_rot;
+        cartographer::mapping::scan_matching::CeresScanMatcher2D scan_matcher(
+            ceres_scan_matcher_options);
+        const Eigen::Vector2d target_translation = {0., 0.};
+        const cartographer::transform::Rigid2d initial_pose_estimate =
+            cartographer::transform::Rigid2d({x, y}, theta);
+        cartographer::transform::Rigid2d matched_pose_estimate;
+        ceres::Solver::Summary summary;
+        double cost;
+        std::vector<double> jacobians;
 
-      scan_matcher.Evaluate(target_translation, initial_pose_estimate,
-                            sample.range_data.returns, grid, &cost, NULL,
-                            &jacobians);
+        scan_matcher.Evaluate(target_translation, initial_pose_estimate,
+                              sample.range_data.returns, grid, &cost, NULL,
+                              &jacobians);
 
-      std::vector<double> result = {x, y, theta, cost};
-      result.insert(result.end(), jacobians.begin(), jacobians.end());
-      gradients->push_back(result);
-      //}
+        std::vector<double> result = {x, y, theta, cost};
+        result.insert(result.end(), jacobians.begin(), jacobians.end());
+        gradients->push_back(result);
+      }
     }
     //    LOG(INFO) << 100.0 * (1.0 - (max_trans - x) / (max_trans - min_trans))
     //              << "%";
@@ -750,41 +749,45 @@ void MatchScan(
   sample_result->matching_iterations =
       summary.num_successful_steps + summary.num_unsuccessful_steps;
   sample_result->matching_time = summary.minimizer_time_in_seconds;
-  //    LOG(INFO) << "Matching error " << sample_result->matching_trans_error <<
-  //    " \t"
-  //              << sample_result->initial_trans_error << " \t"
-  //              << sample_result->matching_iterations << " \t"
-  //              << sample_result->matching_time;
+  //  LOG(INFO) << "Matching error " << sample_result->matching_trans_error << "
+  //  \t"
+  //            << sample_result->initial_trans_error << " \t"
+  //            << sample_result->matching_iterations << " \t"
+  //            << sample_result->matching_time;
 
-  renderGridwithScan(grid, sample, initial_pose_estimate, matched_pose_estimate,
-                     options);
-  std::vector<std::vector<double>> gradients;
-  //  EvaluateCostFunctionSinglePoint(grid,options, ceres_scan_matcher_options,
-  //                                  &gradients);
-  EvaluateCostFunction(sample, grid, options, ceres_scan_matcher_options,
-                       &gradients);
-  std::ofstream log_file;
-  time_t seconds;
-  time(&seconds);
-  std::string grid_type;
-  switch (grid.GetGridType()) {
-    case cartographer::mapping::GridType::PROBABILITY_GRID:
-      grid_type = "pg";
-      break;
-    case cartographer::mapping::GridType::TSDF:
-      grid_type = "tsdf";
-      break;
-  }
-  std::string log_file_path =
-      "gradient_" + grid_type + "_" + std::to_string(3) + ".csv";
-  log_file.open(log_file_path);
-  for (auto& row : gradients) {
-    for (auto& element : row) {
-      log_file << element << ",";
-    }
-    log_file << "\n";
-  }
-  log_file.close();
+  //  if (sample_result->matching_iterations > 50) {
+  //    LOG(INFO) << summary.FullReport();
+  //    renderGridwithScan(grid, sample, initial_pose_estimate,
+  //                       matched_pose_estimate, options);
+  //    std::vector<std::vector<double>> gradients;
+  //    //      EvaluateCostFunctionSinglePoint(grid,options,
+  //    //    ceres_scan_matcher_options, &gradients);
+  //    EvaluateCostFunction(sample, grid, options, ceres_scan_matcher_options,
+  //                         &gradients);
+  //    std::ofstream log_file;
+  //    time_t seconds;
+  //    time(&seconds);
+  //    std::string grid_type;
+  //    switch (grid.GetGridType()) {
+  //      case cartographer::mapping::GridType::PROBABILITY_GRID:
+  //        grid_type = "pg";
+  //        break;
+  //      case cartographer::mapping::GridType::TSDF:
+  //        grid_type = "tsdf";
+  //        break;
+  //    }
+  //    std::string log_file_path =
+  //        "gradient_" + grid_type + "_" +
+  //        std::to_string(sample_result->matching_iterations) + ".csv";
+  //    log_file.open(log_file_path);
+  //    for (auto& row : gradients) {
+  //      for (auto& element : row) {
+  //        log_file << element << ",";
+  //      }
+  //      log_file << "\n";
+  //    }
+  //    log_file.close();
+  //  }
 }
 
 void RunScanMatchingEvaluation() {
@@ -823,10 +826,10 @@ void RunScanMatchingEvaluation() {
           occupied_space_weight = 1.,
           translation_weight = 0.0,
           rotation_weight = 0.0,
-          empty_space_cost = 10.5,
+          empty_space_cost = 0.5,
           ceres_solver_options = {
-            use_nonmonotonic_steps = true,
-            max_num_iterations = 50,
+            use_nonmonotonic_steps = false,
+            max_num_iterations = 500,
             num_threads = 1,
           },
         })text");
@@ -834,8 +837,8 @@ void RunScanMatchingEvaluation() {
       ceres_scan_matcher_options =
           cartographer::mapping::scan_matching::CreateCeresScanMatcherOptions2D(
               parameter_dictionary.get());
-  int n_training = 20;
-  int n_test = 1;
+  int n_training = 100;
+  int n_test = 100;
 
   std::ofstream log_file;
   std::string log_file_path;
@@ -845,87 +848,120 @@ void RunScanMatchingEvaluation() {
   log_file.open(log_file_path);
   log_file << "grid_type,grid_resolution,initial_error_trans,initial_error_"
               "angle,matched_error_trans,matched_error_angle,solver_iterations,"
-              "matching_time\n";
+              "matching_time,size_x,size_y\n";
 
-  // std::vector<double> trans_errors = {0.05, 0.1, 0.25, 0.5};
-  std::vector<double> trans_errors = {0.03};
+  //  std::vector<double> trans_errors = {0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3,
+  //  0.35, 0.4, 0.45, 0.5};
+  //  std::vector<double> rot_errors = {0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7,
+  //  0.8};
+
+  //  std::vector<double> trans_errors = {0.0,  0.1, 0.2, 0.3, 0.4};
+  //  std::vector<double> rot_errors = {0.0, 0.2, 0.4, 0.6, 0.8};
+  std::vector<double> trans_errors = {0.1, 0.2, 0.35, 0.4, 0.45, 0.5};
+  //  std::vector<double> trans_errors = {0.0};
+
+  //  std::vector<double> trans_errors = {0.0};
   std::vector<double> rot_errors = {0.0};
-  // std::vector<double> rot_errors = {0.2 * M_PI_4, 0.4 * M_PI_4, 0.6 * M_PI_4,
-  //                                 0.8 * M_PI_4};
+  const double resolution = 0.025;
+  const float cloud_noise = 0.025;
+  float size_x = 1.025;
+  float size_y = 1.025;
+  float base_size = 1.0;
+  int num_shapes = 1;
+  int num_repetitions = 1;
+  for (int square_idx = 0; square_idx < num_shapes; ++square_idx) {
+    float offset =
+        float(square_idx) * float(0.05f) / float(num_shapes) - 0.5f * 0.05f;
+    if (num_shapes == 1) offset = 0.f;
+    size_x = base_size + offset;
+    size_y = base_size + offset;
 
-  for (double error_trans : trans_errors) {
-    for (double error_rot : rot_errors) {
-      const ScanCloudGenerator::ModelType model_type =
-          ScanCloudGenerator::ModelType::RECTANGLE;
-      const Eigen::Vector2d size = {1.11, 1.31};
-      const double resolution = 0.03;
-      const float cloud_noise = 0.03;
-      std::vector<Sample> training_set;
-      std::vector<Sample> test_set;
-      GenerateSampleSet(n_training, n_test, error_trans, error_rot, model_type,
-                        size, resolution, cloud_noise, training_set, test_set);
+    for (int i_rep = 0; i_rep < num_repetitions; ++i_rep) {
+      for (double error_trans : trans_errors) {
+        for (double error_rot : rot_errors) {
+          const ScanCloudGenerator::ModelType model_type =
+              ScanCloudGenerator::ModelType::RECTANGLE;
+          const Eigen::Vector2d size = {size_x, size_y};
+          const double resolution = 0.025;
+          const float cloud_noise = 0.025;
+          std::vector<Sample> training_set;
+          std::vector<Sample> test_set;
+          GenerateSampleSet(n_training, n_test, error_trans, error_rot,
+                            model_type, size, resolution, cloud_noise,
+                            training_set, test_set);
 
-      //      Sample sample;
-      //      sample.ground_truth_pose = cartographer::transform::Rigid2d({0,
-      //      0}, 0);
-      //      sensor::RangeData initial_pose_estimate_range_data;
-      //      cartographer::sensor::PointCloud returns;
-      //      returns.push_back({Eigen::Vector3f(-0.1, 0.5, 0)});
-      //      returns.push_back({Eigen::Vector3f(-0.05, 0.5, 0)});
-      //      returns.push_back({Eigen::Vector3f(0.0, 0.5, 0)});
-      //      returns.push_back({Eigen::Vector3f(0.05, 0.5, 0)});
-      //      returns.push_back({Eigen::Vector3f(0.1, 0.5, 0)});
-      //      initial_pose_estimate_range_data.origin = Eigen::Vector3f{0, 0,
-      //      0};
-      //      initial_pose_estimate_range_data.returns = returns;
-      //      sample.range_data = initial_pose_estimate_range_data;
-      //      training_set.push_back(sample);
-      //      test_set.push_back(sample);
+          //      Sample sample;
+          //      sample.ground_truth_pose =
+          //      cartographer::transform::Rigid2d({0,
+          //      0}, 0);
+          //      sensor::RangeData initial_pose_estimate_range_data;
+          //      cartographer::sensor::PointCloud returns;
+          //      returns.push_back({Eigen::Vector3f(-0.1, 0.5, 0)});
+          //      returns.push_back({Eigen::Vector3f(-0.05, 0.5, 0)});
+          //      returns.push_back({Eigen::Vector3f(0.0, 0.5, 0)});
+          //      returns.push_back({Eigen::Vector3f(0.05, 0.5, 0)});
+          //      returns.push_back({Eigen::Vector3f(0.1, 0.5, 0)});
+          //      initial_pose_estimate_range_data.origin = Eigen::Vector3f{0,
+          //      0,
+          //      0};
+          //      initial_pose_estimate_range_data.returns = returns;
+          //      sample.range_data = initial_pose_estimate_range_data;
+          //      training_set.push_back(sample);
+          //      test_set.push_back(sample);
 
-      std::vector<SampleResult> probability_grid_results;
-      LOG(INFO) << "Evaluating probability grid:";
-      EvaluateScanMatcher<
-          cartographer::mapping::ProbabilityGrid,
-          cartographer::mapping::ProbabilityGridRangeDataInserter2D>(
-          training_set, test_set, range_data_inserter_options,
-          ceres_scan_matcher_options, &probability_grid_results);
-      double avg_matching_trans_error = 0.0;
-      double avg_matching_rot_error = 0.0;
-      for (const auto& res : probability_grid_results) {
-        log_file << "PROBABILITY_GRID"
-                 << "," << resolution << "," << res.initial_trans_error << ","
-                 << res.initial_rot_error << "," << res.matching_trans_error
-                 << "," << res.matching_rot_error << ","
-                 << res.matching_iterations << "," << res.matching_time << "\n";
-        avg_matching_trans_error +=
-            res.matching_trans_error / probability_grid_results.size();
-        avg_matching_rot_error +=
-            std::abs(res.matching_rot_error / probability_grid_results.size());
+          std::vector<SampleResult> probability_grid_results;
+          LOG(INFO) << "Evaluating probability grid:";
+          EvaluateScanMatcher<
+              cartographer::mapping::ProbabilityGrid,
+              cartographer::mapping::ProbabilityGridRangeDataInserter2D>(
+              training_set, test_set, range_data_inserter_options,
+              ceres_scan_matcher_options, &probability_grid_results);
+          double avg_matching_trans_error = 0.0;
+          double avg_matching_rot_error = 0.0;
+          for (const auto& res : probability_grid_results) {
+            log_file << "PROBABILITY_GRID"
+                     << "," << resolution << "," << res.initial_trans_error
+                     << "," << res.initial_rot_error << ","
+                     << res.matching_trans_error << ","
+                     << res.matching_rot_error << "," << res.matching_iterations
+                     << "," << res.matching_time << "," << size[0] << ","
+                     << size[1] << "\n";
+            avg_matching_trans_error +=
+                res.matching_trans_error / probability_grid_results.size();
+            avg_matching_rot_error += std::abs(res.matching_rot_error /
+                                               probability_grid_results.size());
+          }
+          LOG(INFO) << "PG avg_matching_trans_error \t"
+                    << avg_matching_trans_error;
+          LOG(INFO) << "PG avg_matching_rot_error \t" << avg_matching_rot_error;
+          std::vector<SampleResult> tsdf_results;
+          LOG(INFO) << "Evaluating TSDF:";
+          EvaluateScanMatcher<cartographer::mapping::TSDF2D,
+                              cartographer::mapping::TSDFRangeDataInserter2D>(
+              training_set, test_set, range_data_inserter_options,
+              ceres_scan_matcher_options, &tsdf_results);
+          avg_matching_trans_error = 0.0;
+          avg_matching_rot_error = 0.0;
+          for (const auto& res : tsdf_results) {
+            log_file << "TSDF"
+                     << "," << resolution << "," << res.initial_trans_error
+                     << "," << res.initial_rot_error << ","
+                     << res.matching_trans_error << ","
+                     << res.matching_rot_error << "," << res.matching_iterations
+                     << "," << res.matching_time << "," << size[0] << ","
+                     << size[1] << "\n";
+            avg_matching_trans_error +=
+                res.matching_trans_error / tsdf_results.size();
+            avg_matching_rot_error +=
+                std::abs(res.matching_rot_error / tsdf_results.size());
+          }
+          LOG(INFO) << "TSDF avg_matching_trans_error \t"
+                    << avg_matching_trans_error;
+          LOG(INFO) << "TSDF avg_matching_rot_error \t"
+                    << avg_matching_rot_error;
+          LOG(INFO) << "\n";
+        }
       }
-      LOG(INFO) << "PG avg_matching_trans_error \t" << avg_matching_trans_error;
-      LOG(INFO) << "PG avg_matching_rot_error \t" << avg_matching_rot_error;
-      std::vector<SampleResult> tsdf_results;
-      LOG(INFO) << "Evaluating TSDF:";
-      EvaluateScanMatcher<cartographer::mapping::TSDF2D,
-                          cartographer::mapping::TSDFRangeDataInserter2D>(
-          training_set, test_set, range_data_inserter_options,
-          ceres_scan_matcher_options, &tsdf_results);
-      avg_matching_trans_error = 0.0;
-      avg_matching_rot_error = 0.0;
-      for (const auto& res : tsdf_results) {
-        log_file << "TSDF"
-                 << "," << resolution << "," << res.initial_trans_error << ","
-                 << res.initial_rot_error << "," << res.matching_trans_error
-                 << "," << res.matching_rot_error << ","
-                 << res.matching_iterations << "," << res.matching_time << "\n";
-        avg_matching_trans_error +=
-            res.matching_trans_error / tsdf_results.size();
-        avg_matching_rot_error +=
-            std::abs(res.matching_rot_error / tsdf_results.size());
-      }
-      LOG(INFO) << "TSDF avg_matching_trans_error \t"
-                << avg_matching_trans_error;
-      LOG(INFO) << "TSDF avg_matching_rot_error \t" << avg_matching_rot_error;
     }
   }
   log_file.close();

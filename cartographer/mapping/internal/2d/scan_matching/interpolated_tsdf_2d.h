@@ -59,7 +59,7 @@ class InterpolatedTSDF2D {
       if (w21 == 0.f) num_zeros++;
       if (w22 == 0.f) num_zeros++;
       // LOG(INFO)<<"num "<<num_zeros;
-      if (num_zeros > 1) return T(tsdf_.GetMaxCorrespondenceCost());
+      if (num_zeros > 0) return T(tsdf_.GetMaxCorrespondenceCost());
     }
 
     float q11 = tsdf_.GetCorrespondenceCost(index1);
@@ -83,6 +83,29 @@ class InterpolatedTSDF2D {
         CHECK(false);
         return T(0);
       }
+      //    } else if (num_zeros == 2) {
+      //      if (w11 == 0.f && w12 == 0.f)
+      //        return InterpolateBilinear(x, y, x1, y1, x2, y2, q21, q22, q21,
+      //        q22);
+      //      else if (w11 == 0.f && w21 == 0.f)
+      //        return InterpolateBilinear(x, y, x1, y1, x2, y2, q12, q12, q22,
+      //        q22);
+      //      else if (w11 == 0.f && w22 == 0.f)
+      //        return InterpolateBilinear(x, y, x1, y1, x2, y2, 0.5f * (q21 +
+      //        q12), q12, q21, 0.5f * (q21 + q12));
+      //      else if (w12 == 0.f && w21 == 0.f)
+      //        return InterpolateBilinear(x, y, x1, y1, x2, y2, q11, 0.5f *
+      //        (q11 + q22), 0.5f * (q11 + q22), q22);
+      //      else if (w12 == 0.f && w22 == 0.f)
+      //        return InterpolateBilinear(x, y, x1, y1, x2, y2, q11, q11, q21,
+      //        q21);
+      //      else if (w21 == 0.f && w22 == 0.f)
+      //        return InterpolateBilinear(x, y, x1, y1, x2, y2, q11, q12, q11,
+      //        q12);
+      //      else {
+      //        CHECK(false);
+      //        return T(0);
+      //      }
     } else {
       return InterpolateBilinear(x, y, x1, y1, x2, y2, q11, q12, q21, q22);
     }
