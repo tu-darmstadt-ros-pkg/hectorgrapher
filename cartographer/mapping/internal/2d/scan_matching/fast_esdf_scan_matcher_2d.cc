@@ -46,8 +46,8 @@ FastESDFScanMatcher2D::FastESDFScanMatcher2D(
     : options_(options), limits_(grid.limits()) {
   const TSDF2D& tsdf = static_cast<const TSDF2D&>(grid);
   max_depth_ = options.branch_and_bound_depth();
-  precomputation_grid_ = absl::make_unique<TSDF2D>(
-      CreateESDFFromTSDF((std::pow(3, max_depth_ - 1) - 1) * std::sqrt(2) *
+  precomputation_grid_ = absl::make_unique<EDF2D>(
+      CreateEDFFromTSDF((std::pow(3, max_depth_ - 1) - 1) * std::sqrt(2) *
                              0.5 * grid.limits().resolution(),
                          tsdf.conversion_tables_, tsdf));
   //    evaluation::GridDrawer drawer(tsdf.limits());
@@ -237,7 +237,7 @@ FastESDFScanMatcher2D::GenerateLowestResolutionCandidates(
 }
 
 void FastESDFScanMatcher2D::ScoreCandidates(
-    const TSDF2D& precomputation_grid,
+    const EDF2D& precomputation_grid,
     const std::vector<DiscreteScan2D>& discrete_scans,
     const SearchParameters& search_parameters,
     std::vector<Candidate2D>* const candidates, float search_bound,

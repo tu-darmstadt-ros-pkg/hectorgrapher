@@ -32,6 +32,7 @@
 #include "cartographer/common/port.h"
 #include "cartographer/mapping/2d/grid_2d.h"
 #include "cartographer/mapping/2d/tsdf_2d.h"
+#include "cartographer/mapping/2d/edf_2d.h"
 #include "cartographer/mapping/internal/2d/scan_matching/correlative_scan_matcher_2d.h"
 #include "cartographer/mapping/internal/2d/scan_matching/fast_scan_matcher_interface_2d.h"
 #include "cartographer/mapping/proto/scan_matching/fast_correlative_scan_matcher_options_2d.pb.h"
@@ -90,7 +91,7 @@ class FastESDFScanMatcher2D : public FastScanMatcherInterface2D {
       std::vector<BBEvaluatedCandidates>& bb_regions) const;
   std::vector<Candidate2D> GenerateLowestResolutionCandidates(
       const SearchParameters& search_parameters) const;
-  void ScoreCandidates(const TSDF2D& precomputation_grid,
+  void ScoreCandidates(const EDF2D& precomputation_grid,
                        const std::vector<DiscreteScan2D>& discrete_scans,
                        const SearchParameters& search_parameters,
                        std::vector<Candidate2D>* const candidates,
@@ -104,7 +105,7 @@ class FastESDFScanMatcher2D : public FastScanMatcherInterface2D {
 
   const proto::FastCorrelativeScanMatcherOptions2D options_;
   MapLimits limits_;
-  std::unique_ptr<TSDF2D> precomputation_grid_;
+  std::unique_ptr<EDF2D> precomputation_grid_;
   int max_depth_;
 };
 
