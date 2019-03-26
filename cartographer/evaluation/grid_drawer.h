@@ -3,6 +3,7 @@
 
 #include <cartographer/mapping/2d/map_limits.h>
 #include <cartographer/sensor/point_cloud.h>
+#include "cartographer/mapping/2d/edf_2d.h"
 #include "cartographer/mapping/2d/tsdf_2d.h"
 #include "cartographer/mapping/internal/2d/scan_matching/fast_esdf_scan_matcher_2d.h"
 
@@ -15,6 +16,7 @@ class GridDrawer {
  public:
   GridDrawer(const cartographer::mapping::MapLimits& limits);
   void DrawTSD(const cartographer::mapping::TSDF2D& grid);
+  void DrawED(const cartographer::mapping::EDF2D& grid);
   void DrawWeights(const cartographer::mapping::TSDF2D& grid);
 
   void DrawScan(const sensor::RangeData& range_data,

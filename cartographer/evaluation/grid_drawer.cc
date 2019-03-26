@@ -71,6 +71,34 @@ void GridDrawer::DrawTSD(const cartographer::mapping::TSDF2D& grid) {
   }
 }
 
+void GridDrawer::DrawED(const cartographer::mapping::EDF2D& grid) {
+  double scale = 1. / limits_.resolution();
+  int scaled_num_x_cells = limits_.cell_limits().num_y_cells * scale;
+  int scaled_num_y_cells = limits_.cell_limits().num_x_cells * scale;
+  for (int ix = 0; ix < scaled_num_x_cells; ++ix) {
+    for (int iy = 0; iy < scaled_num_y_cells; ++iy) {
+      float r = 1.f;
+      float g = 1.f;
+      float b = 1.f;
+      float val = grid.GetTSD({iy, ix}) / grid.GetMaxCorrespondenceCost();
+      if (val > 0.f) {
+        g = 1. - std::pow(std::abs(val), 0.5);
+        b = g;
+      } else {
+        r = 1. - std::pow(std::abs(val), 0.5);
+        g = r;
+      }
+      r = 0.2 + 0.6 * std::abs(val);
+      g = 0.2 + 0.6 * std::abs(val);
+      b = 0.2 + 0.6 * std::abs(val);
+      cairo_set_source_rgb(grid_surface_context_, r, g, b);
+      cairo_rectangle(grid_surface_context_, scale * (float(ix)),
+                      scale * ((float)iy), scale, scale);
+      cairo_fill(grid_surface_context_);
+    }
+  }
+}
+
 void GridDrawer::DrawWeights(const cartographer::mapping::TSDF2D& grid) {
   double scale = 1. / limits_.resolution();
   int scaled_num_x_cells = limits_.cell_limits().num_y_cells * scale;
@@ -318,7 +346,7 @@ void GridDrawer::DrawBBBounds(
     const transform::Rigid2d& initial_pose_estimate) {
   double scale = 1. / limits_.resolution();
 
-  cairo_set_source_rgb(grid_surface_context_, 0, 1, 0);
+  cairo_set_source_rgb(grid_surface_context_, 1, 0, 0);
   float x =
       scale * (limits_.max().x() - initial_pose_estimate.translation().x());
   float y =
@@ -327,13 +355,15 @@ void GridDrawer::DrawBBBounds(
             0, 2.0 * M_PI);
   cairo_fill(grid_surface_context_);
 
+  cairo_set_source_rgb(grid_surface_context_, 0, 1, 0);
   cairo_set_line_width(grid_surface_context_, 0.5);
   for (const auto& c : candidates) {
-    if (c.score < 0.13) {
-      cairo_set_source_rgb(grid_surface_context_, 1, 1. - c.score / 0.13, 1);
-    } else {
-      cairo_set_source_rgb(grid_surface_context_, 0, 0, 0);
-    }
+    //    if (c.score < 0.13) {
+    //      cairo_set_source_rgb(grid_surface_context_, 1, 1. - c.score / 0.13,
+    //      1);
+    //    } else {
+    //      cairo_set_source_rgb(grid_surface_context_, 0, 0, 0);
+    //    }
     float x = scale * (limits_.max().x() - c.x -
                        initial_pose_estimate.translation().x());
     float y = scale * (limits_.max().y() - c.y -
