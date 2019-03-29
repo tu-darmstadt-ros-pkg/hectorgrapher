@@ -16,9 +16,41 @@
 
 #include <cartographer/sensor/proto/scan_matching_filter_options.pb.h>
 #include "cartographer/sensor/internal/scan_matching_filter_factory.h"
+#include "cartographer/sensor/internal/voxel_filter.h"
+#include "cartographer/sensor/internal/random_filter.h"
+
+#include <memory>
 
 namespace cartographer {
 namespace sensor {
+
+namespace scan_matching_Filter_factory {
+
+std::unique_ptr<ScanMatchingFilter> createFastFilter(proto::ScanMatchingFilterOptions options) {
+
+  if(options.type() == proto::ScanMatchingFilterOptions::RANDOM_FILTER) {
+    auto filter = std::unique_ptr<ScanMatchingFilter>(new RandomFilter(options.min_num_points()));
+    return filter;
+  } else {
+    auto filter = std::unique_ptr<ScanMatchingFilter>(new VoxelFilter(options.voxel_filter_size()));
+    return filter;
+  }
+
+}
+std::unique_ptr<ScanMatchingFilter> createFilter(proto::ScanMatchingFilterOptions options){
+  if(options.type() == proto::ScanMatchingFilterOptions::RANDOM_FILTER) {
+    auto filter = std::unique_ptr<ScanMatchingFilter>(new RandomFilter(options.min_num_points()));
+    return filter;
+  } else {
+
+    const proto::AdaptiveVoxelFilterOptions adaptive_voxel_filter_options = CreateAdaptiveVoxelFilterOptions(
+      options.max_length(), options.min_num_points(), options.max_range());
+    auto filter = std::unique_ptr<ScanMatchingFilter>(new AdaptiveVoxelFilter(adaptive_voxel_filter_options));
+    return filter;
+  }
+}
+
+} // namespace scan_matching_Filter_factory
 
 
 proto::ScanMatchingFilterOptions CreateScanMatchingFilterOptions(

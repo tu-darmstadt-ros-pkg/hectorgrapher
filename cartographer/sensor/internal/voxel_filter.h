@@ -17,6 +17,7 @@
 #ifndef CARTOGRAPHER_SENSOR_INTERNAL_VOXEL_FILTER_H_
 #define CARTOGRAPHER_SENSOR_INTERNAL_VOXEL_FILTER_H_
 
+#include "cartographer/sensor/internal/scan_matching_filter.h"
 #include <bitset>
 
 #include "absl/container/flat_hash_set.h"
@@ -31,7 +32,7 @@ namespace sensor {
 // Voxel filter for point clouds. For each voxel, the assembled point cloud
 // contains the first point that fell into it from any of the inserted point
 // clouds.
-class VoxelFilter {
+class VoxelFilter : public ScanMatchingFilter {
  public:
   // 'size' is the length of a voxel edge.
   explicit VoxelFilter(float size) : resolution_(size) {}
@@ -64,7 +65,9 @@ class VoxelFilter {
 proto::AdaptiveVoxelFilterOptions CreateAdaptiveVoxelFilterOptions(
     common::LuaParameterDictionary* const parameter_dictionary);
 
-class AdaptiveVoxelFilter {
+proto::AdaptiveVoxelFilterOptions CreateAdaptiveVoxelFilterOptions(float max_length, float min_num_points, float max_range);
+
+class AdaptiveVoxelFilter : public ScanMatchingFilter{
  public:
   explicit AdaptiveVoxelFilter(
       const proto::AdaptiveVoxelFilterOptions& options);
@@ -72,7 +75,7 @@ class AdaptiveVoxelFilter {
   AdaptiveVoxelFilter(const AdaptiveVoxelFilter&) = delete;
   AdaptiveVoxelFilter& operator=(const AdaptiveVoxelFilter&) = delete;
 
-  PointCloud Filter(const PointCloud& point_cloud) const;
+  PointCloud Filter(const PointCloud& point_cloud);
 
  private:
   const proto::AdaptiveVoxelFilterOptions options_;

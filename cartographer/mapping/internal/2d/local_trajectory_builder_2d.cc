@@ -62,11 +62,18 @@ LocalTrajectoryBuilder2D::TransformToGravityAlignedFrameAndFilter(
       sensor::RandomFilter(options_.voxel_filter_size()).Filter(cropped.returns),
       sensor::RandomFilter(options_.voxel_filter_size()).Filter(cropped.misses)};
   */
-
+  /*
   return sensor::RangeData{
     cropped.origin,
     sensor::RandomFilter(options_.adaptive_voxel_filter_options()).Filter(cropped.returns),
     sensor::RandomFilter(options_.adaptive_voxel_filter_options()).Filter(cropped.misses)};
+  */
+  return sensor::RangeData{
+    cropped.origin,
+    cartographer::sensor::scan_matching_Filter_factory::createFastFilter(
+      options_.scan_matching_filter_options())->Filter(cropped.returns) ,
+    cartographer::sensor::scan_matching_Filter_factory::createFastFilter(
+      options_.scan_matching_filter_options())->Filter(cropped.misses) };
 
  }
 
@@ -234,14 +241,16 @@ LocalTrajectoryBuilder2D::AddAccumulatedRangeData(
       non_gravity_aligned_pose_prediction * gravity_alignment.inverse());
   
   const sensor::PointCloud& filtered_gravity_aligned_point_cloud =
-      sensor::RandomFilter(options_.adaptive_voxel_filter_options())
-          .Filter(gravity_aligned_range_data.returns);
+    cartographer::sensor::scan_matching_Filter_factory::createFastFilter(
+      options_.scan_matching_filter_options())->Filter(gravity_aligned_range_data.returns);
 
   /*
   const sensor::PointCloud& filtered_gravity_aligned_point_cloud =
     sensor::RandomFilter(options_.adaptive_voxel_filter_options())
       .Filter(gravity_aligned_range_data.returns);
   */
+
+
   if (filtered_gravity_aligned_point_cloud.empty()) {
     return nullptr;
   }

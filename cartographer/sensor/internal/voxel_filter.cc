@@ -140,11 +140,20 @@ proto::AdaptiveVoxelFilterOptions CreateAdaptiveVoxelFilterOptions(
   return options;
 }
 
+proto::AdaptiveVoxelFilterOptions CreateAdaptiveVoxelFilterOptions(
+  float max_length, float min_num_points, float max_range) {
+  proto::AdaptiveVoxelFilterOptions options;
+  options.set_max_length(max_length);
+  options.set_min_num_points(min_num_points);
+  options.set_max_range(max_range);
+  return options;
+}
+
 AdaptiveVoxelFilter::AdaptiveVoxelFilter(
     const proto::AdaptiveVoxelFilterOptions& options)
     : options_(options) {}
 
-PointCloud AdaptiveVoxelFilter::Filter(const PointCloud& point_cloud) const {
+PointCloud AdaptiveVoxelFilter::Filter(const PointCloud& point_cloud) {
   return AdaptivelyVoxelFiltered(
       options_, FilterByMaxRange(point_cloud, options_.max_range()));
 }

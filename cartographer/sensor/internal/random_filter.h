@@ -24,7 +24,7 @@
 #include "cartographer/sensor/point_cloud.h"
 #include "cartographer/sensor/proto/adaptive_voxel_filter_options.pb.h"
 #include "cartographer/sensor/timed_point_cloud_data.h"
-
+#include "cartographer/sensor/internal/scan_matching_filter.h"
 #include <iostream>
 
 namespace cartographer {
@@ -33,12 +33,12 @@ namespace sensor {
 // Voxel filter for point clouds. For each voxel, the assembled point cloud
 // contains the first point that fell into it from any of the inserted point
 // clouds.
-class RandomFilter {
+class RandomFilter : public ScanMatchingFilter{
  public:
   // 'size' is the length of a voxel edge.
-  explicit RandomFilter(const proto::AdaptiveVoxelFilterOptions& options) {
+  explicit RandomFilter(float min_num_points) {
 
-    number_of_points_ = options.min_num_points();
+    number_of_points_ = min_num_points;
   }
 
   RandomFilter(const RandomFilter&) = delete;
