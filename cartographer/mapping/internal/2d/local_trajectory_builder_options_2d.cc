@@ -21,6 +21,7 @@
 #include "cartographer/mapping/internal/motion_filter.h"
 #include "cartographer/mapping/internal/scan_matching/real_time_correlative_scan_matcher.h"
 #include "cartographer/sensor/internal/voxel_filter.h"
+#include "cartographer/sensor/internal/scan_matching_filter_factory.h"
 
 namespace cartographer {
 namespace mapping {
@@ -43,6 +44,9 @@ proto::LocalTrajectoryBuilderOptions2D CreateLocalTrajectoryBuilderOptions2D(
   *options.mutable_adaptive_voxel_filter_options() =
       sensor::CreateAdaptiveVoxelFilterOptions(
           parameter_dictionary->GetDictionary("adaptive_voxel_filter").get());
+  *options.mutable_scan_matching_filter_options() =
+    sensor::CreateScanMatchingFilterOptions(
+      parameter_dictionary->GetDictionary("scan_matching_filter").get());
   *options.mutable_loop_closure_adaptive_voxel_filter_options() =
       sensor::CreateAdaptiveVoxelFilterOptions(
           parameter_dictionary

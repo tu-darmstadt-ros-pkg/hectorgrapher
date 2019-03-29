@@ -18,6 +18,7 @@ package cartographer.mapping.proto;
 
 import "cartographer/mapping/proto/motion_filter_options.proto";
 import "cartographer/sensor/proto/adaptive_voxel_filter_options.proto";
+import "cartographer/sensor/proto/scan_matching_filter_options.proto";
 import "cartographer/mapping/proto/2d/submaps_options_2d.proto";
 import "cartographer/mapping/proto/scan_matching/ceres_scan_matcher_options_2d.proto";
 import "cartographer/mapping/proto/scan_matching/real_time_correlative_scan_matcher_options.proto";
@@ -42,6 +43,9 @@ message LocalTrajectoryBuilderOptions2D {
 
   // Voxel filter used to compute a sparser point cloud for matching.
   sensor.proto.AdaptiveVoxelFilterOptions adaptive_voxel_filter_options = 6;
+
+  // container of scan match filter options
+  sensor.proto.ScanMatchingFilterOptions scan_matching_filter_options = 21;
 
   // Voxel filter used to compute a sparser point cloud for finding loop
   // closures.
