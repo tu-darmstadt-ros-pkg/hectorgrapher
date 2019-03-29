@@ -65,12 +65,13 @@ struct Error {
 Error ComputeError(const transform::Rigid3d& pose1,
                    const transform::Rigid3d& pose2,
                    const transform::Rigid3d& expected) {
+  transform::Rigid3d expected_corrected =
+    transform::Rigid3d(-expected.translation(), expected.rotation());
   const transform::Rigid3d error =
-      (pose1.inverse() * pose2) * expected.inverse();
+    (pose1.inverse() * pose2) * expected_corrected.inverse();
   return Error{error.translation().squaredNorm(),
                common::Pow2(transform::GetAngle(error))};
 }
-
 std::string MeanAndStdDevString(const std::vector<double>& values) {
   CHECK_GE(values.size(), 2);
   const double mean =
