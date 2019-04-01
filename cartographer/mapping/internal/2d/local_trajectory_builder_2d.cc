@@ -241,7 +241,7 @@ LocalTrajectoryBuilder2D::AddAccumulatedRangeData(
       non_gravity_aligned_pose_prediction * gravity_alignment.inverse());
   
   const sensor::PointCloud& filtered_gravity_aligned_point_cloud =
-    cartographer::sensor::scan_matching_Filter_factory::createFastFilter(
+    cartographer::sensor::scan_matching_Filter_factory::createFilter(
       options_.scan_matching_filter_options())->Filter(gravity_aligned_range_data.returns);
 
   /*
