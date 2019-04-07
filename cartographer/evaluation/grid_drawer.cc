@@ -60,9 +60,9 @@ void GridDrawer::DrawTSD(const cartographer::mapping::TSDF2D& grid) {
         r = 1. - std::pow(std::abs(val), 0.5);
         g = r;
       }
-      r = 0.2 + 0.6* std::abs(val);
-      g = 0.2 + 0.6* std::abs(val);
-      b = 0.2 + 0.6* std::abs(val);
+      //      r = 0.2 + 0.6* std::abs(val);
+      //      g = 0.2 + 0.6* std::abs(val);
+      //      b = 0.2 + 0.6* std::abs(val);
       cairo_set_source_rgb(grid_surface_context_, r, g, b);
       cairo_rectangle(grid_surface_context_, scale * (float(ix)),
                       scale * ((float)iy), scale, scale);

@@ -48,7 +48,7 @@ class TSDFRangeDataInserter2D : public RangeDataInserterInterface {
  private:
   void InsertHit(const proto::TSDFRangeDataInserterOptions2D& options,
                  const Eigen::Vector2f& hit, const Eigen::Vector2f& origin,
-                 float normal, TSDF2D* tsdf) const;
+                 float normal, TSDF2D* tsdf, float normal_weight) const;
   void UpdateCell(const Eigen::Array2i& cell, float update_sdf,
                   float update_weight, TSDF2D* tsdf) const;
   const proto::TSDFRangeDataInserterOptions2D options_;

@@ -127,23 +127,24 @@ bool FastESDFScanMatcher2D::MatchWithSearchParameters(
       max_depth_ - 1, max_score, bb_regions);
 
   if (best_candidate.score < max_score) {
-    evaluation::GridDrawer drawer(precomputation_grid_->limits());
-    drawer.DrawED(*precomputation_grid_);
-    drawer.DrawBBBounds(bb_regions, initial_pose_estimate);
-    drawer.DrawPointcloud(
-        point_cloud, initial_pose_estimate,
-        transform::Rigid2d(
-            {initial_pose_estimate.translation().x() + best_candidate.x,
-             initial_pose_estimate.translation().y() + best_candidate.y},
-            initial_rotation * Eigen::Rotation2Dd(best_candidate.orientation)));
-    auto start = std::chrono::high_resolution_clock::now();
-    std::string filename =
-        "grid_with_inserted_cloud" +
-        std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                           start.time_since_epoch())
-                           .count()) +
-        ".png";
-    drawer.ToFile(filename);
+    //    evaluation::GridDrawer drawer(precomputation_grid_->limits());
+    //    drawer.DrawED(*precomputation_grid_);
+    //    drawer.DrawBBBounds(bb_regions, initial_pose_estimate);
+    //    drawer.DrawPointcloud(
+    //        point_cloud, initial_pose_estimate,
+    //        transform::Rigid2d(
+    //            {initial_pose_estimate.translation().x() + best_candidate.x,
+    //             initial_pose_estimate.translation().y() + best_candidate.y},
+    //            initial_rotation *
+    //            Eigen::Rotation2Dd(best_candidate.orientation)));
+    //    auto start = std::chrono::high_resolution_clock::now();
+    //    std::string filename =
+    //        "grid_with_inserted_cloud" +
+    //        std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(
+    //                           start.time_since_epoch())
+    //                           .count()) +
+    //        ".png";
+    //    drawer.ToFile(filename);
 
     *score = best_candidate.score;
     *pose_estimate = transform::Rigid2d(
@@ -152,6 +153,7 @@ bool FastESDFScanMatcher2D::MatchWithSearchParameters(
         initial_rotation * Eigen::Rotation2Dd(best_candidate.orientation));
     return true;
   }
+
   return false;
 }
 
@@ -246,14 +248,21 @@ void FastESDFScanMatcher2D::ScoreCandidates(
           xy_index.y() + candidate.y_index_offset);
       float update = std::max(
           std::abs(precomputation_grid.GetTSD(proposed_xy_index)) -
-              search_bound * 1.0825f,  // Correction for ESDF approximation
+              (search_bound * 1.0825f),  // Correction for ESDF approximation
           0.f);
       sum += update;
     }
     candidate.score =
         sum / static_cast<float>(discrete_scans[candidate.scan_index].size());
-    bb_regions.push_back(
-        {candidate.x, candidate.y, candidate.score, search_bound});
+    //    if (candidate.parent_score > candidate.score)
+    //      LOG(WARNING) << candidate.parent_score << "\t " << candidate.score
+    //                                                      << "\t " <<
+    //                                                      candidate.parent_score
+    //                                                      / candidate.score
+    //                                                               << "\t " <<
+    //                                                               search_bound;
+    //    bb_regions.push_back(
+    //        {candidate.x, candidate.y, candidate.score, search_bound});
   }
   std::sort(candidates->begin(), candidates->end(), std::less<Candidate2D>());
 }

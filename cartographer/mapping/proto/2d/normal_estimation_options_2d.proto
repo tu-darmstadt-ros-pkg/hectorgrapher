@@ -22,4 +22,5 @@ message NormalEstimationOptions2D {
   bool use_pca = 3;
   float const_weight = 4;
   float tsdf_weight_scale = 5;
+  bool sort_range_data = 6;
 }

@@ -44,7 +44,8 @@ void GrowAsNeeded(const sensor::RangeData& range_data,
     bounding_box.extend(end_position.head<2>());
   }
   // Padding around bounding box to avoid numerical issues at cell boundaries.
-  constexpr float kPadding = 1e-6f;
+  //  constexpr float kPadding = 1e-6f;
+  constexpr float kPadding = 5;
   tsdf->GrowLimits(bounding_box.min() - kPadding * Eigen::Vector2f::Ones());
   tsdf->GrowLimits(bounding_box.max() + kPadding * Eigen::Vector2f::Ones());
 }
@@ -124,6 +125,10 @@ proto::TSDFRangeDataInserterOptions2D CreateTSDFRangeDataInserterOptions2D(
   options.set_update_weight_distance_cell_to_hit_kernel_bandwith(
       parameter_dictionary->GetDouble(
           "update_weight_distance_cell_to_hit_kernel_bandwith"));
+  options.set_free_space_weight(
+      parameter_dictionary->GetDouble("free_space_weight"));
+  options.set_min_normal_weight(
+      parameter_dictionary->GetDouble("min_normal_weight"));
   return options;
 }
 
@@ -147,17 +152,22 @@ void TSDFRangeDataInserter2D::Insert(const sensor::RangeData& range_data,
       options_.update_weight_angle_scan_normal_to_ray_kernel_bandwith() != 0.f;
   sensor::RangeData sorted_range_data = range_data;
   std::vector<float> normals;
+  std::vector<float> weights;
 
   std::vector<std::pair<float, float>> scan_normals;
   std::vector<std::pair<float, float>> tsdf_normals;
   std::vector<std::pair<float, float>> scan_render_normals;
   std::vector<std::pair<float, float>> tsdf_render_normals;
   std::vector<std::pair<float, float>> combined_render_normals;
+
+  float max_scans = options_.normal_estimation_options().num_normal_samples();
   if (options_.project_sdf_distance_to_scan_normal() ||
       scale_update_weight_angle_scan_normal_to_ray) {
-    std::sort(sorted_range_data.returns.begin(),
-              sorted_range_data.returns.end(),
-              RangeDataSorter(sorted_range_data.origin));
+    if (options_.normal_estimation_options().sort_range_data()) {
+      std::sort(sorted_range_data.returns.begin(),
+                sorted_range_data.returns.end(),
+                RangeDataSorter(sorted_range_data.origin));
+    }
     scan_normals = EstimateNormals(
         sorted_range_data, options_.normal_estimation_options());
     tsdf_normals =
@@ -173,8 +183,16 @@ void TSDFRangeDataInserter2D::Insert(const sensor::RangeData& range_data,
               0.f ||  !use_tsdf_normals) {
         normals.push_back(scan_normals[hit_index].first);
         //        if (hit_index % 2000 == 0) LOG(INFO) << "pass";
+        float scan_weight = std::max(
+            std::min(float(scan_normals[hit_index].second), max_scans) /
+                max_scans,
+            float(options_.min_normal_weight()));
+        weights.push_back(scan_weight);
       } else {
-        float scan_weight = std::min(float(scan_normals[hit_index].second)/20.f, 1.f);
+        float scan_weight = std::max(
+            std::min(float(scan_normals[hit_index].second), max_scans) /
+                max_scans,
+            float(options_.min_normal_weight()));
         float tsdf_weight = options_.normal_estimation_options().tsdf_weight_scale() * std::min(float (tsdf_normals[hit_index].second)/tsdf->value_converter_->getMaxWeight(), 1.f);
         float const_weight = options_.normal_estimation_options().const_weight();
         float ratio = tsdf_weight / (scan_weight + tsdf_weight + const_weight);
@@ -182,29 +200,34 @@ void TSDFRangeDataInserter2D::Insert(const sensor::RangeData& range_data,
             WeightedMeanOfTwoAngles(scan_normals[hit_index].first, 1.f - ratio,
                                     tsdf_normals[hit_index].first, ratio);
         normals.push_back(normal);
-        //        if (hit_index % 2000 == 0)
-        //          LOG(INFO) << ratio << "\t" << scan_normals[hit_index] <<
-        //          "\t"
-        //                    << tsdf_normals[hit_index] << "\t" << normal;
+        weights.push_back(scan_weight * (1.f - ratio) + tsdf_weight * ratio);
       }
 
-
-      float scan_weight = std::min(float(scan_normals[hit_index].second)/20.f, 1.f);
-      float tsdf_weight = std::min(float(tsdf_normals[hit_index].second) /
-                                       tsdf->value_converter_->getMaxWeight(),
-                                   1.f);
-      float tsdf_min_offset = 0.0;
-      tsdf_weight = std::max(
-          0.f, options_.normal_estimation_options().tsdf_weight_scale() *
-                   (tsdf_weight - tsdf_min_offset) / (1.f - tsdf_min_offset));
-      float const_weight = options_.normal_estimation_options().const_weight();
-      float ratio = tsdf_weight / (scan_weight + tsdf_weight + const_weight);
-      float normal =
-          WeightedMeanOfTwoAngles(scan_normals[hit_index].first, 1.f - ratio,
-                                  tsdf_normals[hit_index].first, ratio);
-      tsdf_render_normals.emplace_back(tsdf_normals[hit_index].first, 0.f);
-      scan_render_normals.emplace_back(scan_normals[hit_index].first, 1.0f);
-      combined_render_normals.emplace_back(normal, 0.5f);
+      //      float scan_weight =
+      //      std::min(float(scan_normals[hit_index].second)/20.f, 1.f);
+      //      float tsdf_weight = std::min(float(tsdf_normals[hit_index].second)
+      //      /
+      //                                       tsdf->value_converter_->getMaxWeight(),
+      //                                   1.f);
+      //      float tsdf_min_offset = 0.0;
+      //      tsdf_weight = std::max(
+      //          0.f, options_.normal_estimation_options().tsdf_weight_scale()
+      //          *
+      //                   (tsdf_weight - tsdf_min_offset) / (1.f -
+      //                   tsdf_min_offset));
+      //      float const_weight =
+      //      options_.normal_estimation_options().const_weight();
+      //      float ratio = tsdf_weight / (scan_weight + tsdf_weight +
+      //      const_weight);
+      //      float normal =
+      //          WeightedMeanOfTwoAngles(scan_normals[hit_index].first, 1.f -
+      //          ratio,
+      //                                  tsdf_normals[hit_index].first, ratio);
+      //      tsdf_render_normals.emplace_back(tsdf_normals[hit_index].first,
+      //      0.f);
+      //      scan_render_normals.emplace_back(scan_normals[hit_index].first,
+      //      1.0f);
+      //      combined_render_normals.emplace_back(normal, 0.5f);
     }
   }
 //  evaluation::GridDrawer drawer_scan_normals(tsdf->limits());
@@ -240,6 +263,26 @@ void TSDFRangeDataInserter2D::Insert(const sensor::RangeData& range_data,
   //  drawer_tsdf_normals.ToFile("tsdf_normals_" + timestamp + ".png");
   //
 
+  //   static int update_index = 0;
+  //    update_index++;
+  //    if (update_index % 2990 == 0 && update_index > 1) {
+  //
+  //          LOG(INFO)<<"DRAWING";
+  //      evaluation::GridDrawer drawer(tsdf->limits());
+  //    drawer.DrawTSD(*tsdf);
+  //    drawer.DrawIsoSurface(*tsdf);
+  //
+  //      auto start = std::chrono::high_resolution_clock::now();
+  //      std::string timestamp=
+  //          std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(
+  //              start.time_since_epoch())
+  //                             .count());
+  //    //  drawer_scan_normals.ToFile("scan_normals_" + timestamp + ".png");
+  //    drawer.ToFile("tsdf_" + timestamp + ".png");
+  //
+  //      LOG(INFO)<<"DONE";
+  //    }
+
   const Eigen::Vector2f origin = sorted_range_data.origin.head<2>();
   for (size_t hit_index = 0; hit_index < sorted_range_data.returns.size();
        ++hit_index) {
@@ -248,7 +291,10 @@ void TSDFRangeDataInserter2D::Insert(const sensor::RangeData& range_data,
     const float normal = normals.empty()
                              ? std::numeric_limits<float>::quiet_NaN()
                              : normals[hit_index];
-    InsertHit(options_, hit, origin, normal, tsdf);
+    float normal_weight = weights.empty()
+                              ? std::numeric_limits<float>::quiet_NaN()
+                              : weights[hit_index];
+    InsertHit(options_, hit, origin, normal, tsdf, normal_weight);
   }
   tsdf->FinishUpdate();
 
@@ -281,17 +327,32 @@ void TSDFRangeDataInserter2D::Insert(const sensor::RangeData& range_data,
 void TSDFRangeDataInserter2D::InsertHit(
     const proto::TSDFRangeDataInserterOptions2D& options,
     const Eigen::Vector2f& hit, const Eigen::Vector2f& origin, float normal,
-    TSDF2D* tsdf) const {
+    TSDF2D* tsdf, float normal_weight = 1.f) const {
+  if (normal_weight == 0.f) return;
   const Eigen::Vector2f ray = hit - origin;
   const float range = ray.norm();
   const float truncation_distance =
       static_cast<float>(options_.truncation_distance());
   const float truncation_ratio = truncation_distance / range;
-  const Eigen::Vector2f ray_begin =
-      options_.update_free_space() || range < truncation_distance
-          ? origin
-          : origin + (1.0f - truncation_ratio) * ray;
-  const Eigen::Vector2f ray_end = origin + (1.0f + truncation_ratio) * ray;
+  Eigen::Vector2f ray_begin = range < truncation_distance
+                                  ? origin
+                                  : origin + (1.0f - truncation_ratio) * ray;
+
+  Eigen::Vector2f ray_end = origin + (1.0f + truncation_ratio) * ray;
+
+  std::pair<Eigen::Array2i, Eigen::Array2i> superscaled_freespace_ray =
+      SuperscaleRay(origin, origin + (1.0f - truncation_ratio) * ray, tsdf);
+  std::vector<Eigen::Array2i> ray_freespace_mask =
+      RayToPixelMask(superscaled_freespace_ray.first,
+                     superscaled_freespace_ray.second, kSubpixelScale);
+
+  Eigen::Vector2f normal_vector;
+  if (options_.project_sdf_distance_to_scan_normal()) {
+    normal_vector = Eigen::Vector2f({cos(normal), sin(normal)});
+    ray_begin = hit - truncation_distance * normal_vector;
+    ray_end = hit + truncation_distance * normal_vector;
+  }
+
   std::pair<Eigen::Array2i, Eigen::Array2i> superscaled_ray =
       SuperscaleRay(ray_begin, ray_end, tsdf);
   std::vector<Eigen::Array2i> ray_mask = RayToPixelMask(
@@ -318,27 +379,44 @@ void TSDFRangeDataInserter2D::InsertHit(
     Eigen::Vector2f cell_center = tsdf->limits().GetCellCenter(cell_index);
     float distance_cell_to_origin = (cell_center - origin).norm();
     float update_tsd = range - distance_cell_to_origin;
-    if (options_.project_sdf_distance_to_scan_normal()) {
-      float normal_orientation = normal;
-      update_tsd = (cell_center - hit)
-                       .dot(Eigen::Vector2f{std::cos(normal_orientation),
-                                            std::sin(normal_orientation)});
+    if (options.project_sdf_distance_to_scan_normal()) {
+      update_tsd = (cell_center - hit).dot(normal_vector);
     }
+
     update_tsd =
         common::Clamp(update_tsd, -truncation_distance, truncation_distance);
     float update_weight = weight_factor_range * weight_factor_angle_ray_normal;
+
+    update_weight *= normal_weight;
     if (options_.update_weight_distance_cell_to_hit_kernel_bandwith() != 0.f) {
       float d = update_tsd;  // update_tsd;  // for some reason this works
                              // better than range -
+      d = range - distance_cell_to_origin;
       // distance_cell_to_origin TODO(kdaun) Understand.
       // std::max(double(std::abs(range - distance_cell_to_origin)),
       // options.truncation_distance());//update_tsd;//range -
       // distance_cell_to_origin;
       float exp_update = std::exp(
-          -std::abs(d) *
+          -d * d *
           options_.update_weight_distance_cell_to_hit_kernel_bandwith());
       update_weight *= exp_update;
     }
+    UpdateCell(cell_index, update_tsd, update_weight, tsdf);
+  }
+
+  for (const Eigen::Array2i& cell_index : ray_freespace_mask) {
+    // if (tsdf->CellIsUpdated(cell_index)) continue;
+    Eigen::Vector2f cell_center = tsdf->limits().GetCellCenter(cell_index);
+    float distance_cell_to_origin = (cell_center - origin).norm();
+    float update_tsd = range - distance_cell_to_origin;
+    if (options.project_sdf_distance_to_scan_normal()) {
+      update_tsd = (cell_center - hit).dot(normal_vector);
+    }
+    if (update_tsd < truncation_distance) continue;
+    update_tsd = truncation_distance;
+    float update_weight = options_.free_space_weight() * weight_factor_range *
+                          weight_factor_angle_ray_normal;
+    update_weight *= normal_weight;
     UpdateCell(cell_index, update_tsd, update_weight, tsdf);
   }
 }

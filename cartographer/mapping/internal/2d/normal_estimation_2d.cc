@@ -116,6 +116,7 @@ proto::NormalEstimationOptions2D CreateNormalEstimationOptions2D(
   options.set_use_pca(parameter_dictionary->GetBool("use_pca"));
   options.set_const_weight(parameter_dictionary->GetDouble("const_weight"));
   options.set_tsdf_weight_scale(parameter_dictionary->GetDouble("tsdf_weight_scale"));
+  options.set_sort_range_data(parameter_dictionary->GetBool("sort_range_data"));
   CHECK_GT(options.num_normal_samples(), 0);
   CHECK_GT(options.sample_radius(), 0.0);
   return options;
@@ -139,14 +140,13 @@ std::vector<std::pair<float, float>> EstimateNormals(
     int sample_window_begin_offset = 0;
     for (; (hit -
             sorted_range_data
-                .returns[(current_point + sample_window_begin_offset +
+                .returns[(current_point + sample_window_begin_offset - 1 +
                           num_returns) %
                          num_returns]
                 .position)
                .norm() < sample_radius;
          --sample_window_begin_offset) {
     }
-    sample_window_begin_offset++;
 
     int sample_window_end_offset = 0;
     for (;
@@ -157,6 +157,7 @@ std::vector<std::pair<float, float>> EstimateNormals(
              .norm() < sample_radius;
          ++sample_window_end_offset) {
     }
+
     int sample_window_begin =
         (current_point + sample_window_begin_offset + num_returns) %
         num_returns;

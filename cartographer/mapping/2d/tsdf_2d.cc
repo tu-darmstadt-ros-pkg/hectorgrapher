@@ -146,8 +146,8 @@ bool TSDF2D::DrawToSubmapTexture(
 
   std::string cells;
   for (const Eigen::Array2i& xy_index : XYIndexRangeIterator(cell_limits)) {
-    if (!IsKnown(xy_index + offset) || GetTSD(xy_index + offset) < -0.00) {
-      cells.push_back(0);  // value
+    if (!IsKnown(xy_index + offset) /*|| GetTSD(xy_index + offset) < -0.00*/) {
+      cells.push_back(0);  // alpha
       cells.push_back(0);  // alpha
       continue;
     }
@@ -157,11 +157,16 @@ bool TSDF2D::DrawToSubmapTexture(
     // zero, and use 'alpha' to subtract. This is only correct when the pixel
     // is currently white, so walls will look too gray. This should be hard to
     // detect visually for the user, though.
-    float normalized_tsdf = std::abs(GetTSD(xy_index + offset));
-    normalized_tsdf =
-        std::pow(normalized_tsdf / value_converter_->getMaxTSD(), 3.7f);
+    //    float normalized_tsdf = std::max(std::abs(GetTSD(xy_index + offset))/
+    //    value_converter_->getMaxTSD() - 0.75, 0.0) * 4.f;
+    float normalized_tsdf =
+        std::abs(GetTSD(xy_index + offset)) / value_converter_->getMaxTSD();
+    normalized_tsdf = std::pow(normalized_tsdf, 1.5f);
+    //    if (normalized_tsdf > 0.7) {normalized_tsdf = 1;}
+    //    else {normalized_tsdf = 0;}
     float normalized_weight =
         GetWeight(xy_index + offset) / value_converter_->getMaxWeight();
+    // normalized_weight = 1.f;
     const int delta = static_cast<int>(
         std::round(normalized_weight * (normalized_tsdf * 255. - 128.)));
     const uint8 alpha = delta > 0 ? 0 : -delta;
@@ -184,47 +189,6 @@ bool TSDF2D::DrawToSubmapTexture(
   return true;
 }
 
-TSDF2D CreateESDFFromTSDF(float truncation_distance,
-                          ValueConversionTables* conversion_tables,
-                          const TSDF2D& tsdf) {
-  TSDF2D esdf(tsdf.limits(), truncation_distance,
-              tsdf.value_converter_->getMaxWeight(), conversion_tables);
-  std::queue<Eigen::Array2i> update_queue;
-
-  // Find seeds
-  const cartographer::mapping::MapLimits& limits = tsdf.limits();
-  int num_x_cells = limits.cell_limits().num_y_cells;
-  int num_y_cells = limits.cell_limits().num_x_cells;
-  for (int ix = 0; ix < num_x_cells; ++ix) {
-    for (int iy = 0; iy < num_y_cells; ++iy) {
-      if (std::abs(tsdf.GetTSD({iy, ix})) <= tsdf.limits().resolution()) {
-        update_queue.push({iy, ix});
-        esdf.SetCell({iy, ix}, std::abs(tsdf.GetTSD({iy, ix})), 1.);
-      }
-    }
-  }
-
-  while (!update_queue.empty()) {
-    Eigen::Array2i cell_idx = update_queue.front();
-    update_queue.pop();
-    float center_tsd = esdf.GetTSD(cell_idx);
-    for (int ix = -1; ix < 2; ix++) {
-      for (int iy = -1; iy < 2; iy++) {
-        if (ix == 0 && iy == 0) continue;
-        Eigen::Array2i candidate = {cell_idx[0] + iy, cell_idx[1] + ix};
-        if (!esdf.limits().Contains(candidate)) continue;
-        float candidate_tsd = esdf.GetTSD(candidate);
-        float d =
-            std::sqrt(std::abs(ix) + std::abs(iy)) * esdf.limits().resolution();
-        if (std::abs(candidate_tsd) > center_tsd + d) {
-          esdf.SetCell(candidate, center_tsd + d, tsdf.GetWeight(candidate));
-          update_queue.push(candidate);
-        }
-      }
-    }
-  }
-  return esdf;
-}
 
 }  // namespace mapping
 }  // namespace cartographer

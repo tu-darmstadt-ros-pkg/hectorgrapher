@@ -172,6 +172,7 @@ EDF2D CreateEDFFromTSDF(float truncation_distance,
     }
   }
 
+  const float discretization_threshold = 0.01 * edf.limits().resolution();
   while (!update_queue.empty()) {
     Eigen::Array2i cell_idx = update_queue.front();
     update_queue.pop();
@@ -184,7 +185,9 @@ EDF2D CreateEDFFromTSDF(float truncation_distance,
         float candidate_tsd = edf.GetTSD(candidate);
         float d =
             std::sqrt(std::abs(ix) + std::abs(iy)) * edf.limits().resolution();
-        if (std::abs(candidate_tsd) > center_tsd + d) {
+
+        if (center_tsd + d <
+            std::abs(candidate_tsd) - discretization_threshold) {
           edf.SetCell(candidate, center_tsd + d);
           update_queue.push(candidate);
         }

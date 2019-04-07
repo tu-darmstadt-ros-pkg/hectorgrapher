@@ -83,6 +83,20 @@ struct Candidate2D {
         orientation((scan_index - search_parameters.num_angular_perturbations) *
                     search_parameters.angular_perturbation_step_size) {}
 
+  //  Candidate2D(const int init_scan_index, const int init_x_index_offset,
+  //              const int init_y_index_offset,
+  //              const SearchParameters& search_parameters,
+  //              const float init_parent_score)
+  //      : scan_index(init_scan_index),
+  //        x_index_offset(init_x_index_offset),
+  //        y_index_offset(init_y_index_offset),
+  //        x(-y_index_offset * search_parameters.resolution),
+  //        y(-x_index_offset * search_parameters.resolution),
+  //        orientation((scan_index -
+  //        search_parameters.num_angular_perturbations) *
+  //                    search_parameters.angular_perturbation_step_size),
+  //        parent_score(init_parent_score) {}
+
   // Index into the rotated scans vector.
   int scan_index = 0;
 
@@ -97,6 +111,7 @@ struct Candidate2D {
 
   // Score, higher is better.
   float score = 0.f;
+  //  float parent_score = 0.f;
 
   bool operator<(const Candidate2D& other) const { return score < other.score; }
   bool operator>(const Candidate2D& other) const { return score > other.score; }

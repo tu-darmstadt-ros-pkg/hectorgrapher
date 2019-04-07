@@ -44,4 +44,12 @@ message TSDFRangeDataInserterOptions2D {
   // Kernel bandwith of the weight factor based on the distance between
   // cell and scan observation.
   double update_weight_distance_cell_to_hit_kernel_bandwith = 8;
+
+  // Kernel bandwith of the weight factor based on the distance between
+  // cell and scan observation.
+  double free_space_weight = 9;
+
+  // Kernel bandwith of the weight factor based on the distance between
+  // cell and scan observation.
+  double min_normal_weight = 10;
 }
