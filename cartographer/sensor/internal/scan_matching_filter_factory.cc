@@ -18,6 +18,7 @@
 #include "cartographer/sensor/internal/scan_matching_filter_factory.h"
 #include "cartographer/sensor/internal/voxel_filter.h"
 #include "cartographer/sensor/internal/random_filter.h"
+#include "cartographer/sensor/internal/max_entropy_normal_angle_filter.h"
 
 #include <memory>
 
