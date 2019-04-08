@@ -27,10 +27,26 @@ namespace cartographer {
 namespace sensor {
 
 Eigen::Vector2f pca(const std::set<size_t>& neighbors, const PointCloud& point_cloud) {
+  // Construct mean
+  Eigen::Vector2f mean(0,0);
+  for(auto index : neighbors){
+    mean += point_cloud[index].position.head<2>();
+  }
+  mean = 1.0/neighbors.size() * mean;
 
+  // Construct cov matrix
+  Eigen::Matrix2f cov = Eigen::Matrix2f::Zero();
+  for(auto index : neighbors){
+    Eigen::Vector2f mean_div = point_cloud[index].position.head<2>() - mean;
+    cov += mean_div * mean_div.transpose();
+  }
+  cov = 1.0/(neighbors.size() - 1) * cov;
 
-  Eigen::Vector2f normal(1, 0);
-  return normal;
+  // compute eigenvectors
+  Eigen::SelfAdjointEigenSolver<Eigen::Matrix2f> eigen_solver(cov);
+  Eigen::Vector2f eigen_vector = eigen_solver.eigenvectors().col(0);
+
+  return eigen_vector;
 }
 
 std::set<size_t> selectNeighborhood(const RangefinderPoint& point, const PointCloud& point_cloud){
