@@ -263,25 +263,25 @@ void TSDFRangeDataInserter2D::Insert(const sensor::RangeData& range_data,
   //  drawer_tsdf_normals.ToFile("tsdf_normals_" + timestamp + ".png");
   //
 
-  //   static int update_index = 0;
-  //    update_index++;
-  //    if (update_index % 2990 == 0 && update_index > 1) {
-  //
-  //          LOG(INFO)<<"DRAWING";
-  //      evaluation::GridDrawer drawer(tsdf->limits());
-  //    drawer.DrawTSD(*tsdf);
-  //    drawer.DrawIsoSurface(*tsdf);
-  //
-  //      auto start = std::chrono::high_resolution_clock::now();
-  //      std::string timestamp=
-  //          std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(
-  //              start.time_since_epoch())
-  //                             .count());
-  //    //  drawer_scan_normals.ToFile("scan_normals_" + timestamp + ".png");
-  //    drawer.ToFile("tsdf_" + timestamp + ".png");
-  //
-  //      LOG(INFO)<<"DONE";
-  //    }
+     static int update_index = 0;
+      update_index++;
+      if (update_index % 150 == 0 && update_index > 1) {
+
+            LOG(INFO)<<"DRAWING";
+        evaluation::GridDrawer drawer(tsdf->limits());
+      drawer.DrawTSD(*tsdf);
+      drawer.DrawIsoSurface(*tsdf);
+
+        auto start = std::chrono::high_resolution_clock::now();
+        std::string timestamp=
+            std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                start.time_since_epoch())
+                               .count());
+      //  drawer_scan_normals.ToFile("scan_normals_" + timestamp + ".png");
+      drawer.ToFile("tsdf_" + timestamp + ".png");
+
+        LOG(INFO)<<"DONE";
+      }
 
   const Eigen::Vector2f origin = sorted_range_data.origin.head<2>();
   for (size_t hit_index = 0; hit_index < sorted_range_data.returns.size();
@@ -328,6 +328,12 @@ void TSDFRangeDataInserter2D::InsertHit(
     const proto::TSDFRangeDataInserterOptions2D& options,
     const Eigen::Vector2f& hit, const Eigen::Vector2f& origin, float normal,
     TSDF2D* tsdf, float normal_weight = 1.f) const {
+
+  if(!options_.project_sdf_distance_to_scan_normal())
+  {
+    normal_weight = 1.f;
+  }
+
   if (normal_weight == 0.f) return;
   const Eigen::Vector2f ray = hit - origin;
   const float range = ray.norm();
@@ -404,6 +410,7 @@ void TSDFRangeDataInserter2D::InsertHit(
     UpdateCell(cell_index, update_tsd, update_weight, tsdf);
   }
 
+  if(options_.update_free_space()){
   for (const Eigen::Array2i& cell_index : ray_freespace_mask) {
     // if (tsdf->CellIsUpdated(cell_index)) continue;
     Eigen::Vector2f cell_center = tsdf->limits().GetCellCenter(cell_index);
@@ -418,6 +425,7 @@ void TSDFRangeDataInserter2D::InsertHit(
                           weight_factor_angle_ray_normal;
     update_weight *= normal_weight;
     UpdateCell(cell_index, update_tsd, update_weight, tsdf);
+  }
   }
 }
 

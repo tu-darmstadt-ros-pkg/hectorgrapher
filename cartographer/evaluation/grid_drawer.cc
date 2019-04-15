@@ -45,8 +45,8 @@ GridDrawer::GridDrawer(const cartographer::mapping::MapLimits& limits)
 
 void GridDrawer::DrawTSD(const cartographer::mapping::TSDF2D& grid) {
   double scale = 1. / limits_.resolution();
-  int scaled_num_x_cells = limits_.cell_limits().num_y_cells * scale;
-  int scaled_num_y_cells = limits_.cell_limits().num_x_cells * scale;
+  int scaled_num_x_cells = limits_.cell_limits().num_y_cells;
+  int scaled_num_y_cells = limits_.cell_limits().num_x_cells;
   for (int ix = 0; ix < scaled_num_x_cells; ++ix) {
     for (int iy = 0; iy < scaled_num_y_cells; ++iy) {
       float r = 1.f;
@@ -335,8 +335,8 @@ void GridDrawer::DrawIsoSurface(const cartographer::mapping::TSDF2D& grid) {
     float y2 = scale * (limits_.max().y() - segment[1][1]);
     cairo_move_to(grid_surface_context_, x * scale, y * scale);
     cairo_line_to(grid_surface_context_, x2 * scale, y2 * scale);
-    cairo_stroke(grid_surface_context_);
   }
+  cairo_stroke(grid_surface_context_);
 }
 
 void GridDrawer::DrawBBBounds(
@@ -370,8 +370,8 @@ void GridDrawer::DrawBBBounds(
                        initial_pose_estimate.translation().y());
     cairo_arc(grid_surface_context_, x * scale, y * scale,
               (c.search_bound + 0.01) * scale * scale, 0, 2.0 * M_PI);
-    cairo_stroke(grid_surface_context_);
   }
+  cairo_stroke(grid_surface_context_);
 }
 
 void GridDrawer::ToFile(std::string filename) {

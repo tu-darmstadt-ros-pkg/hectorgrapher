@@ -18,6 +18,7 @@ std::vector<std::vector<Eigen::Vector2f>> computeSurfaces(
   int scaled_num_y_cells = limits.cell_limits().num_x_cells;
 
   for (int ix = 0; ix < scaled_num_x_cells; ++ix) {
+    LOG(INFO)<<"computeSurface "<<float(ix)/scaled_num_x_cells;
     for (int iy = 0; iy < scaled_num_y_cells; ++iy) {
       if ((grid.GetWeight({iy + 1, ix}) == 0.f) ||
           (grid.GetWeight({iy + 1, ix + 1}) == 0.f) ||
