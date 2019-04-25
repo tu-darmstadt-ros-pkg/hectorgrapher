@@ -40,24 +40,15 @@ float ComputeCandidateScore(const TSDF2D& tsdf,
                             int x_index_offset, int y_index_offset,
                             double empty_space_cost) {
   float candidate_score = 0.f;
-  float summed_weight = 0.f;
   for (const Eigen::Array2i& xy_index : discrete_scan) {
     const Eigen::Array2i proposed_xy_index(xy_index.x() + x_index_offset,
                                            xy_index.y() + y_index_offset);
-    const std::pair<float, float> tsd_and_weight =
-        tsdf.GetTSDAndWeight(proposed_xy_index);
     const float normalized_tsd_score =
-        (tsdf.GetMaxCorrespondenceCost() - std::abs(tsd_and_weight.first)) /
+        (tsdf.GetMaxCorrespondenceCost() -
+         std::abs(tsdf.GetTSD(proposed_xy_index))) /
         tsdf.GetMaxCorrespondenceCost();
-    const float weight =
-        tsd_and_weight.second * (1.0 - empty_space_cost) +
-        (empty_space_cost)*tsdf.value_converter_->getMaxWeight();
-    candidate_score += normalized_tsd_score * weight;
-    summed_weight += weight;
+    candidate_score += normalized_tsd_score;
   }
-  if (summed_weight == 0.f) return 0.f;
-  candidate_score /= summed_weight;
-  CHECK_GE(candidate_score, 0.f);
   return candidate_score;
 }
 
