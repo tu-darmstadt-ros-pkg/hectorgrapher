@@ -58,6 +58,13 @@ common::Time PoseExtrapolator::GetLastPoseTime() const {
   return timed_pose_queue_.back().time;
 }
 
+transform::Rigid3d PoseExtrapolator::GetLastPose() const {
+  if (timed_pose_queue_.empty()) {
+    return transform::Rigid3d::Identity();
+  }
+  return timed_pose_queue_.back().pose;
+}
+
 common::Time PoseExtrapolator::GetLastExtrapolatedTime() const {
   if (!extrapolation_imu_tracker_) {
     return common::Time::min();

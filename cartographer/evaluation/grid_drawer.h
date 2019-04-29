@@ -7,6 +7,7 @@
 #include "cartographer/mapping/2d/tsdf_2d.h"
 #include "cartographer/mapping/internal/2d/scan_matching/fast_esdf_scan_matcher_2d.h"
 
+#include "cairo-svg.h"
 #include "cairo.h"
 
 namespace cartographer {
@@ -65,6 +66,7 @@ class GridDrawer {
   const cartographer::mapping::MapLimits& limits_;
   cairo_surface_t* grid_surface_;
   cairo_t* grid_surface_context_;
+  double scale_;
 };
 
 }  // namespace evaluation

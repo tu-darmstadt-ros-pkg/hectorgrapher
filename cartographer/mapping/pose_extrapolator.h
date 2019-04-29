@@ -48,6 +48,7 @@ class PoseExtrapolator {
   // yet.
   common::Time GetLastPoseTime() const;
   common::Time GetLastExtrapolatedTime() const;
+  transform::Rigid3d GetLastPose() const;
 
   void AddPose(common::Time time, const transform::Rigid3d& pose);
   void AddImuData(const sensor::ImuData& imu_data);

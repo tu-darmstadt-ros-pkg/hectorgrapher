@@ -45,14 +45,11 @@ void GrowAsNeeded(const sensor::RangeData& range_data,
   }
   // Padding around bounding box to avoid numerical issues at cell boundaries.
   //  constexpr float kPadding = 1e-6f;
-  constexpr float kPadding = 5;
+  const float kPadding = truncation_distance * 1.01;
   tsdf->GrowLimits(bounding_box.min() - kPadding * Eigen::Vector2f::Ones());
   tsdf->GrowLimits(bounding_box.max() + kPadding * Eigen::Vector2f::Ones());
 }
 
-float GaussianKernel(const float x, const float sigma) {
-  return 1.0 / (kSqrtTwoPi * sigma) * std::exp(-0.5 * x * x / (sigma * sigma));
-}
 
 std::pair<Eigen::Array2i, Eigen::Array2i> SuperscaleRay(
     const Eigen::Vector2f& begin, const Eigen::Vector2f& end,
@@ -97,6 +94,14 @@ float ComputeRangeWeightFactor(float range, int exponent) {
     weight = 1.f / (std::pow(range, exponent));
   }
   return weight;
+}
+
+float ExponentialWeightFactor(float range, float sigma, float epsilon) {
+  if (std::abs(range) < epsilon) {
+    return 1.0;
+  } else {
+    return std::exp(-sigma * (range - epsilon) * (range - epsilon));
+  }
 }
 
 float WeightedMeanOfTwoAngles(float a, float wa, float b, float wb) {
@@ -265,36 +270,36 @@ void TSDFRangeDataInserter2D::Insert(const sensor::RangeData& range_data,
 
      static int update_index = 0;
       update_index++;
-      if (update_index % 150 == 0 && update_index > 1) {
+      //      if (update_index  == 200 && update_index > 1) {
+      //        LOG(INFO) << "DRAWING";
+      //        evaluation::GridDrawer drawer(tsdf->limits());
+      //      drawer.DrawTSD(*tsdf);
+      //      drawer.DrawIsoSurface(*tsdf);
+      //
+      //        auto start = std::chrono::high_resolution_clock::now();
+      //        std::string timestamp=
+      //            std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(
+      //                start.time_since_epoch())
+      //                               .count());
+      //      //  drawer_scan_normals.ToFile("scan_normals_" + timestamp +
+      //      ".png");
+      //      drawer.ToFile("tsdf_" + timestamp + ".png");
+      //
+      //        LOG(INFO)<<"DONE";
+      //      }
 
-            LOG(INFO)<<"DRAWING";
-        evaluation::GridDrawer drawer(tsdf->limits());
-      drawer.DrawTSD(*tsdf);
-      drawer.DrawIsoSurface(*tsdf);
-
-        auto start = std::chrono::high_resolution_clock::now();
-        std::string timestamp=
-            std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(
-                start.time_since_epoch())
-                               .count());
-      //  drawer_scan_normals.ToFile("scan_normals_" + timestamp + ".png");
-      drawer.ToFile("tsdf_" + timestamp + ".png");
-
-        LOG(INFO)<<"DONE";
-      }
-
-  const Eigen::Vector2f origin = sorted_range_data.origin.head<2>();
-  for (size_t hit_index = 0; hit_index < sorted_range_data.returns.size();
-       ++hit_index) {
-    const Eigen::Vector2f hit =
-        sorted_range_data.returns[hit_index].position.head<2>();
-    const float normal = normals.empty()
-                             ? std::numeric_limits<float>::quiet_NaN()
-                             : normals[hit_index];
-    float normal_weight = weights.empty()
-                              ? std::numeric_limits<float>::quiet_NaN()
-                              : weights[hit_index];
-    InsertHit(options_, hit, origin, normal, tsdf, normal_weight);
+      const Eigen::Vector2f origin = sorted_range_data.origin.head<2>();
+      for (size_t hit_index = 0; hit_index < sorted_range_data.returns.size();
+           ++hit_index) {
+        const Eigen::Vector2f hit =
+            sorted_range_data.returns[hit_index].position.head<2>();
+        const float normal = normals.empty()
+                                 ? std::numeric_limits<float>::quiet_NaN()
+                                 : normals[hit_index];
+        float normal_weight = weights.empty()
+                                  ? std::numeric_limits<float>::quiet_NaN()
+                                  : weights[hit_index];
+        InsertHit(options_, hit, origin, normal, tsdf, normal_weight);
   }
   tsdf->FinishUpdate();
 
@@ -397,17 +402,28 @@ void TSDFRangeDataInserter2D::InsertHit(
     if (options_.update_weight_distance_cell_to_hit_kernel_bandwith() != 0.f) {
       float d = update_tsd;  // update_tsd;  // for some reason this works
                              // better than range -
-      d = range - distance_cell_to_origin;
-      // distance_cell_to_origin TODO(kdaun) Understand.
+                             //      d = range - distance_cell_to_origin;
+                             // distance_cell_to_origin TODO(kdaun) Understand.
       // std::max(double(std::abs(range - distance_cell_to_origin)),
       // options.truncation_distance());//update_tsd;//range -
       // distance_cell_to_origin;
-      float exp_update = std::exp(
-          -d * d *
-          options_.update_weight_distance_cell_to_hit_kernel_bandwith());
-      update_weight *= exp_update;
+      //      float exp_update = std::exp(
+      //          -d * d *
+      //          options_.update_weight_distance_cell_to_hit_kernel_bandwith());
+      update_weight *= ExponentialWeightFactor(
+          d, options_.update_weight_distance_cell_to_hit_kernel_bandwith(),
+          options.truncation_distance() * 0.2);
     }
     UpdateCell(cell_index, update_tsd, update_weight, tsdf);
+  }
+
+  float update_weight_distance_cell_to_hit_kernel_bandwith_factor = 1.f;
+  if (options_.update_weight_distance_cell_to_hit_kernel_bandwith() != 0.f) {
+    update_weight_distance_cell_to_hit_kernel_bandwith_factor =
+        ExponentialWeightFactor(
+            options.truncation_distance(),
+            options_.update_weight_distance_cell_to_hit_kernel_bandwith(),
+            options.truncation_distance() * 0.2);
   }
 
   if(options_.update_free_space()){
@@ -423,7 +439,8 @@ void TSDFRangeDataInserter2D::InsertHit(
     update_tsd = truncation_distance;
     float update_weight = options_.free_space_weight() * weight_factor_range *
                           weight_factor_angle_ray_normal;
-    update_weight *= normal_weight;
+    update_weight *= normal_weight *
+                     update_weight_distance_cell_to_hit_kernel_bandwith_factor;
     UpdateCell(cell_index, update_tsd, update_weight, tsdf);
   }
   }

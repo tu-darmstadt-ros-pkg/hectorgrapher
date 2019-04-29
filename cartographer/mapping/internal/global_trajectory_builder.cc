@@ -52,8 +52,13 @@ class GlobalTrajectoryBuilder : public mapping::TrajectoryBuilderInterface {
   void AddSensorData(
       const std::string& sensor_id,
       const sensor::TimedPointCloudData& timed_point_cloud_data) override {
-    CHECK(local_trajectory_builder_)
-        << "Cannot add TimedPointCloudData without a LocalTrajectoryBuilder.";
+    //        static int range_data_index = 0;
+    //        range_data_index++;
+    //        if(range_data_index % 4 != 1)
+    //          return;
+    //    CHECK(local_trajectory_builder_)
+    //        << "Cannot add TimedPointCloudData without a
+    //        LocalTrajectoryBuilder.";
     std::unique_ptr<typename LocalTrajectoryBuilder::MatchingResult>
         matching_result = local_trajectory_builder_->AddRangeData(
             sensor_id, timed_point_cloud_data);
@@ -93,11 +98,29 @@ class GlobalTrajectoryBuilder : public mapping::TrajectoryBuilderInterface {
 
   void AddSensorData(const std::string& sensor_id,
                      const sensor::OdometryData& odometry_data) override {
-    CHECK(odometry_data.pose.IsValid()) << odometry_data.pose;
-    if (local_trajectory_builder_) {
-      local_trajectory_builder_->AddOdometryData(odometry_data);
+    //    LOG(INFO)<<odometry_data.pose;
+    bool pertubate = false;
+    if (pertubate) {
+      static std::default_random_engine e1(42);
+      static std::normal_distribution<double> normal_distribution(0.0, 0.04);
+
+      transform::Rigid3d pertubation = transform::Rigid3d::Translation(
+          {normal_distribution(e1), normal_distribution(e1), 0.0});
+      sensor::OdometryData odometry_data_pert = odometry_data;
+      odometry_data_pert.pose = odometry_data.pose * pertubation;
+      CHECK(odometry_data_pert.pose.IsValid()) << odometry_data_pert.pose;
+      if (local_trajectory_builder_) {
+        local_trajectory_builder_->AddOdometryData(odometry_data_pert);
+      }
+      pose_graph_->AddOdometryData(trajectory_id_, odometry_data_pert);
+
+    } else {
+      CHECK(odometry_data.pose.IsValid()) << odometry_data.pose;
+      if (local_trajectory_builder_) {
+        local_trajectory_builder_->AddOdometryData(odometry_data);
+      }
+      pose_graph_->AddOdometryData(trajectory_id_, odometry_data);
     }
-    pose_graph_->AddOdometryData(trajectory_id_, odometry_data);
   }
 
   void AddSensorData(

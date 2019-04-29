@@ -234,6 +234,9 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
+  LOG(INFO) << "FLAGS_read_text_file_with_unix_timestamps "
+            << FLAGS_read_text_file_with_unix_timestamps;
+
   ::cartographer::ground_truth::Run(
       FLAGS_pose_graph_filename, FLAGS_relations_filename,
       FLAGS_read_text_file_with_unix_timestamps, FLAGS_write_relation_metrics);
