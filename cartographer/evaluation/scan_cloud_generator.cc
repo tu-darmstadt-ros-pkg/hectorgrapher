@@ -27,7 +27,7 @@ void ScanCloudGenerator::generateRectangle(
                                                       noise_std_dev);  // 0.01
 
   cloud.clear();
-  float x_min = -size_x / 2.0;
+  float x_min = -size_x / 2.0f;
   float x_max = size_x / 2.0;
   float y_min = -size_y / 2.0;
   float y_max = size_y / 2.0;

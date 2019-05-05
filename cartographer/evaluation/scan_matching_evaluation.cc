@@ -105,6 +105,28 @@ Sample GenerateSample(double error_trans, double error_rot,
   return sample;
 }
 
+Sample GenerateDefinedSample(double error_x, double error_y, double error_phi,
+                             const ScanCloudGenerator::ModelType model_type,
+                             const Eigen::Vector2d size,
+                             const double resolution,
+                             float cloud_noise_std_dev) {
+  cartographer::sensor::RangeData range_data;
+  GenerateRangeData(model_type, size, resolution, range_data,
+                    cloud_noise_std_dev);
+
+  double x = error_x;
+  double y = error_y;
+  Sample sample;
+  sample.ground_truth_pose =
+      cartographer::transform::Rigid2d({x, y}, error_phi);
+  sensor::RangeData initial_pose_estimate_range_data =
+      cartographer::sensor::TransformRangeData(
+          range_data,
+          transform::Embed3D(sample.ground_truth_pose.cast<float>()));
+  sample.range_data = initial_pose_estimate_range_data;
+  return sample;
+}
+
 void GenerateSampleSet(int n_training, int n_test, double error_trans,
                        double error_rot,
                        const ScanCloudGenerator::ModelType model_type,
@@ -121,6 +143,27 @@ void GenerateSampleSet(int n_training, int n_test, double error_trans,
                                       resolution, cloud_noise_std_dev));
   }
 }
+
+void GenerateDefinedSampleSet(
+    int n_training, int n_test, double error_trans, double error_rot,
+    const ScanCloudGenerator::ModelType model_type, const Eigen::Vector2d size,
+    const double resolution, const float cloud_noise_std_dev,
+    std::vector<Sample>& training_set, std::vector<Sample>& test_set) {
+  for (int i = 0; i < n_training; ++i) {
+    training_set.push_back(GenerateSample(0.0, 0.0, model_type, size,
+                                          resolution, cloud_noise_std_dev));
+  }
+
+  double error_scale = 0.5 / n_test;
+  for (int i_dx = -n_test; i_dx <= n_test; ++i_dx) {
+    for (int i_dy = -n_test; i_dy <= n_test; ++i_dy) {
+      test_set.push_back(GenerateDefinedSample(
+          i_dx * error_scale, i_dy * error_scale, 0.0, model_type, size,
+          resolution, cloud_noise_std_dev));
+    }
+  }
+}
+
 template <typename GridType>
 std::unique_ptr<GridType> generateGrid(
     const cartographer::mapping::proto::RangeDataInserterOptions& options) {
@@ -432,11 +475,19 @@ void renderGridwithScanBase(
       float b = 1.f;
       float normalized_tsdf =
           grid.GetTSD({iy, ix}) / grid.GetMaxCorrespondenceCost();
-      if (normalized_tsdf > 0.f) {
-        g = 1. - std::pow(std::abs(normalized_tsdf), 0.5);
+      if (normalized_tsdf > 0.99f) {
+        r = 1.f;
+        g = 1.f;
+        b = 1.f;
+      } else if (normalized_tsdf < -0.99f) {
+        r = 0.7f;
+        g = 0.7f;
+        b = 0.7f;
+      } else if (normalized_tsdf > 0.f) {
+        g = 1. - std::pow(std::abs(normalized_tsdf), 0.7);
         b = g;
       } else {
-        r = 1. - std::pow(std::abs(normalized_tsdf), 0.5);
+        r = 1. - std::pow(std::abs(normalized_tsdf), 0.7);
         g = r;
       }
       cairo_set_source_rgb(grid_surface_context, r, g, b);
@@ -515,17 +566,17 @@ void renderGridwithScanBase(
   //    }
 
   // IsoSurface
-  std::vector<std::vector<Eigen::Vector2f>> surface = computeSurfaces(grid);
-  for (auto& segment : surface) {
-    cairo_set_source_rgb(grid_surface_context, 0, 0, 0);
-    float x = scale * (limits.max().x() - segment[0][0]);
-    float y = scale * (limits.max().y() - segment[0][1]);
-    float x2 = scale * (limits.max().x() - segment[1][0]);
-    float y2 = scale * (limits.max().y() - segment[1][1]);
-    cairo_move_to(grid_surface_context, x * scale, y * scale);
-    cairo_line_to(grid_surface_context, x2 * scale, y2 * scale);
-    cairo_stroke(grid_surface_context);
-  }
+  //  std::vector<std::vector<Eigen::Vector2f>> surface = computeSurfaces(grid);
+  //  for (auto& segment : surface) {
+  //    cairo_set_source_rgb(grid_surface_context, 0, 0, 0);
+  //    float x = scale * (limits.max().x() - segment[0][0]);
+  //    float y = scale * (limits.max().y() - segment[0][1]);
+  //    float x2 = scale * (limits.max().x() - segment[1][0]);
+  //    float y2 = scale * (limits.max().y() - segment[1][1]);
+  //    cairo_move_to(grid_surface_context, x * scale, y * scale);
+  //    cairo_line_to(grid_surface_context, x2 * scale, y2 * scale);
+  //    cairo_stroke(grid_surface_context);
+  //  }
 
   time_t seconds;
   time(&seconds);
@@ -639,13 +690,12 @@ void EvaluateCostFunction(
     const cartographer::mapping::scan_matching::proto::
         CeresScanMatcherOptions2D& ceres_scan_matcher_options,
     std::vector<std::vector<double>>* gradients) {
-  float min_trans = -0.05;
-  float max_trans = 0.05;
-  float resolution_trans = 0.005;
-  float min_rot = -0.1f;
-  float max_rot = 0.1;  // 1E-7f;  // 2.f * M_PI;
-  float resolution_rot =
-      resolution_trans * (max_rot - min_rot) / (max_trans - min_trans);
+  float min_trans = -1.2;
+  float max_trans = 1.2;
+  float resolution_trans = 0.05;
+  float min_rot = -0.0f;
+  float max_rot = 0.00001;  // 1E-7f;  // 2.f * M_PI;
+  float resolution_rot = 0.1;
   for (float x = min_trans; x <= max_trans; x += resolution_trans) {
     for (float y = min_trans; y <= max_trans; y += resolution_trans) {
       for (float theta = min_rot; theta <= max_rot; theta += resolution_rot) {
@@ -755,39 +805,40 @@ void MatchScan(
   //            << sample_result->matching_iterations << " \t"
   //            << sample_result->matching_time;
 
-  //  if (sample_result->matching_iterations > 50) {
-  //    LOG(INFO) << summary.FullReport();
-  //    renderGridwithScan(grid, sample, initial_pose_estimate,
-  //                       matched_pose_estimate, options);
-  //    std::vector<std::vector<double>> gradients;
-  //    //      EvaluateCostFunctionSinglePoint(grid,options,
-  //    //    ceres_scan_matcher_options, &gradients);
-  //    EvaluateCostFunction(sample, grid, options, ceres_scan_matcher_options,
-  //                         &gradients);
-  //    std::ofstream log_file;
-  //    time_t seconds;
-  //    time(&seconds);
-  //    std::string grid_type;
-  //    switch (grid.GetGridType()) {
-  //      case cartographer::mapping::GridType::PROBABILITY_GRID:
-  //        grid_type = "pg";
-  //        break;
-  //      case cartographer::mapping::GridType::TSDF:
-  //        grid_type = "tsdf";
-  //        break;
-  //    }
-  //    std::string log_file_path =
-  //        "gradient_" + grid_type + "_" +
-  //        std::to_string(sample_result->matching_iterations) + ".csv";
-  //    log_file.open(log_file_path);
-  //    for (auto& row : gradients) {
-  //      for (auto& element : row) {
-  //        log_file << element << ",";
-  //      }
-  //      log_file << "\n";
-  //    }
-  //    log_file.close();
-  //  }
+  if (sample_result->matching_iterations > 0 &&
+      sample_result->matching_trans_error < 0.01) {
+    LOG(INFO) << summary.FullReport();
+    renderGridwithScan(grid, sample, initial_pose_estimate,
+                       matched_pose_estimate, options);
+    std::vector<std::vector<double>> gradients;
+    //      EvaluateCostFunctionSinglePoint(grid,options,
+    //    ceres_scan_matcher_options, &gradients);
+    EvaluateCostFunction(sample, grid, options, ceres_scan_matcher_options,
+                         &gradients);
+    std::ofstream log_file;
+    time_t seconds;
+    time(&seconds);
+    std::string grid_type;
+    switch (grid.GetGridType()) {
+      case cartographer::mapping::GridType::PROBABILITY_GRID:
+        grid_type = "pg";
+        break;
+      case cartographer::mapping::GridType::TSDF:
+        grid_type = "tsdf";
+        break;
+    }
+    std::string log_file_path =
+        "gradient_" + grid_type + "_" +
+        std::to_string(sample_result->matching_iterations) + ".csv";
+    log_file.open(log_file_path);
+    for (auto& row : gradients) {
+      for (auto& element : row) {
+        log_file << element << ",";
+      }
+      log_file << "\n";
+    }
+    log_file.close();
+  }
 }
 
 void RunScanMatchingEvaluation() {
@@ -810,12 +861,15 @@ void RunScanMatchingEvaluation() {
       "sample_radius = 0.15,"
       "tsdf_weight_scale = 0.0,"
       "const_weight = 0.1,"
+      "sort_range_data = false,"
       "use_pca = false,"
       "},"
+      "free_space_weight = 0.0,"
       "project_sdf_distance_to_scan_normal = true,"
       "update_weight_range_exponent = 0,"
       "update_weight_angle_scan_normal_to_ray_kernel_bandwith = 0.7,"
       "update_weight_distance_cell_to_hit_kernel_bandwith = 0.1,"
+      "min_normal_weight = 0.1,"
       "},"
       "}");
   range_data_inserter_options =
@@ -826,7 +880,7 @@ void RunScanMatchingEvaluation() {
           occupied_space_weight = 1.,
           translation_weight = 0.0,
           rotation_weight = 0.0,
-          empty_space_cost = 0.5,
+          empty_space_cost = 1.0,
           ceres_solver_options = {
             use_nonmonotonic_steps = false,
             max_num_iterations = 500,
@@ -838,7 +892,7 @@ void RunScanMatchingEvaluation() {
           cartographer::mapping::scan_matching::CreateCeresScanMatcherOptions2D(
               parameter_dictionary.get());
   int n_training = 100;
-  int n_test = 100;
+  int n_test = 1;
 
   std::ofstream log_file;
   std::string log_file_path;
@@ -857,8 +911,8 @@ void RunScanMatchingEvaluation() {
 
   //  std::vector<double> trans_errors = {0.0,  0.1, 0.2, 0.3, 0.4};
   //  std::vector<double> rot_errors = {0.0, 0.2, 0.4, 0.6, 0.8};
-  std::vector<double> trans_errors = {0.1, 0.2, 0.35, 0.4, 0.45, 0.5};
-  //  std::vector<double> trans_errors = {0.0};
+  //  std::vector<double> trans_errors = {0.0, 0.05};
+  std::vector<double> trans_errors = {0.0};
 
   //  std::vector<double> trans_errors = {0.0};
   std::vector<double> rot_errors = {0.0};
@@ -883,7 +937,7 @@ void RunScanMatchingEvaluation() {
               ScanCloudGenerator::ModelType::RECTANGLE;
           const Eigen::Vector2d size = {size_x, size_y};
           const double resolution = 0.025;
-          const float cloud_noise = 0.025;
+          const float cloud_noise = 0.01;
           std::vector<Sample> training_set;
           std::vector<Sample> test_set;
           GenerateSampleSet(n_training, n_test, error_trans, error_rot,
@@ -962,6 +1016,177 @@ void RunScanMatchingEvaluation() {
           LOG(INFO) << "\n";
         }
       }
+    }
+  }
+  log_file.close();
+}
+
+void RunScanMatchingConvergenceWindowEvaluation() {
+  cartographer::mapping::proto::RangeDataInserterOptions
+      range_data_inserter_options;
+  auto parameter_dictionary_range_data_inserter = common::MakeDictionary(
+      "return { "
+      "range_data_inserter_type = \"PROBABILITY_GRID_INSERTER_2D\","
+      "probability_grid_range_data_inserter = {"
+      "insert_free_space = true, "
+      "hit_probability = 0.7, "
+      "miss_probability = 0.4, "
+      "},"
+      "tsdf_range_data_inserter = {"
+      "truncation_distance = 0.25,"
+      "maximum_weight = 300.,"
+      "update_free_space = true,"
+      "normal_estimation_options = {"
+      "num_normal_samples = 400,"
+      "sample_radius = 0.15,"
+      "tsdf_weight_scale = 0.0,"
+      "const_weight = 0.1,"
+      "sort_range_data = false,"
+      "use_pca = false,"
+      "},"
+      "free_space_weight = 0.3,"
+      "project_sdf_distance_to_scan_normal = true,"
+      "update_weight_range_exponent = 0,"
+      "update_weight_angle_scan_normal_to_ray_kernel_bandwith = 0.0,"
+      "update_weight_distance_cell_to_hit_kernel_bandwith = 0.0,"
+      "min_normal_weight = 0.1,"
+      "},"
+      "}");
+  range_data_inserter_options =
+      cartographer::mapping::CreateRangeDataInserterOptions(
+          parameter_dictionary_range_data_inserter.get());
+  auto parameter_dictionary = common::MakeDictionary(R"text(
+        return {
+          occupied_space_weight = 1.,
+          translation_weight = 0.0,
+          rotation_weight = 0.0,
+          empty_space_cost = 1.0,
+          ceres_solver_options = {
+            use_nonmonotonic_steps = false,
+            max_num_iterations = 500,
+            num_threads = 1,
+          },
+        })text");
+  const cartographer::mapping::scan_matching::proto::CeresScanMatcherOptions2D
+      ceres_scan_matcher_options =
+          cartographer::mapping::scan_matching::CreateCeresScanMatcherOptions2D(
+              parameter_dictionary.get());
+  int n_training = 100;
+  int n_test = 25;
+
+  std::ofstream log_file;
+  std::string log_file_path;
+  time_t seconds;
+  time(&seconds);
+  log_file_path = "scan_matching_benchmark" + std::to_string(seconds) + ".csv";
+  log_file.open(log_file_path);
+  log_file << "grid_type,grid_resolution,initial_error_trans,initial_error_"
+              "angle,matched_error_trans,matched_error_angle,solver_iterations,"
+              "matching_time,size_x,size_y\n";
+
+  //  std::vector<double> trans_errors = {0.0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3,
+  //  0.35, 0.4, 0.45, 0.5};
+  //  std::vector<double> rot_errors = {0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7,
+  //  0.8};
+
+  //  std::vector<double> trans_errors = {0.0,  0.1, 0.2, 0.3, 0.4};
+  //  std::vector<double> rot_errors = {0.0, 0.2, 0.4, 0.6, 0.8};
+  std::vector<double> trans_errors = {0.1, 0.2, 0.35, 0.4, 0.45, 0.5};
+  //  std::vector<double> trans_errors = {0.0};
+
+  //  std::vector<double> trans_errors = {0.0};
+  std::vector<double> rot_errors = {0.0};
+  const double resolution = 0.025;
+  const float cloud_noise = 0.01;
+  float size_x = 1.0;
+  float size_y = 1.0;
+  float base_size = 1.0;
+  int num_shapes = 1;
+  int num_repetitions = 1;
+  for (int square_idx = 0; square_idx < num_shapes; ++square_idx) {
+    float offset =
+        float(square_idx) * float(0.05f) / float(num_shapes) - 0.5f * 0.05f;
+    if (num_shapes == 1) offset = 0.f;
+    size_x = base_size + offset;
+    size_y = base_size + offset;
+
+    for (int i_rep = 0; i_rep < num_repetitions; ++i_rep) {
+      const ScanCloudGenerator::ModelType model_type =
+          ScanCloudGenerator::ModelType::RECTANGLE;
+      const Eigen::Vector2d size = {size_x, size_y};
+      const double resolution = 0.025;
+      const float cloud_noise = 0.01;  // 0.025;
+      std::vector<Sample> training_set;
+      std::vector<Sample> test_set;
+      GenerateDefinedSampleSet(n_training, n_test, 0., 0., model_type, size,
+                               resolution, cloud_noise, training_set, test_set);
+
+      //      Sample sample;
+      //      sample.ground_truth_pose =
+      //      cartographer::transform::Rigid2d({0,
+      //      0}, 0);
+      //      sensor::RangeData initial_pose_estimate_range_data;
+      //      cartographer::sensor::PointCloud returns;
+      //      returns.push_back({Eigen::Vector3f(-0.1, 0.5, 0)});
+      //      returns.push_back({Eigen::Vector3f(-0.05, 0.5, 0)});
+      //      returns.push_back({Eigen::Vector3f(0.0, 0.5, 0)});
+      //      returns.push_back({Eigen::Vector3f(0.05, 0.5, 0)});
+      //      returns.push_back({Eigen::Vector3f(0.1, 0.5, 0)});
+      //      initial_pose_estimate_range_data.origin = Eigen::Vector3f{0,
+      //      0,
+      //      0};
+      //      initial_pose_estimate_range_data.returns = returns;
+      //      sample.range_data = initial_pose_estimate_range_data;
+      //      training_set.push_back(sample);
+      //      test_set.push_back(sample);
+
+      std::vector<SampleResult> probability_grid_results;
+      LOG(INFO) << "Evaluating probability grid:";
+      EvaluateScanMatcher<
+          cartographer::mapping::ProbabilityGrid,
+          cartographer::mapping::ProbabilityGridRangeDataInserter2D>(
+          training_set, test_set, range_data_inserter_options,
+          ceres_scan_matcher_options, &probability_grid_results);
+      double avg_matching_trans_error = 0.0;
+      double avg_matching_rot_error = 0.0;
+      for (const auto& res : probability_grid_results) {
+        log_file << "PROBABILITY_GRID"
+                 << "," << resolution << "," << res.initial_trans_error << ","
+                 << res.initial_rot_error << "," << res.matching_trans_error
+                 << "," << res.matching_rot_error << ","
+                 << res.matching_iterations << "," << res.matching_time << ","
+                 << size[0] << "," << size[1] << "\n";
+        avg_matching_trans_error +=
+            res.matching_trans_error / probability_grid_results.size();
+        avg_matching_rot_error +=
+            std::abs(res.matching_rot_error / probability_grid_results.size());
+      }
+      LOG(INFO) << "PG avg_matching_trans_error \t" << avg_matching_trans_error;
+      LOG(INFO) << "PG avg_matching_rot_error \t" << avg_matching_rot_error;
+      std::vector<SampleResult> tsdf_results;
+      LOG(INFO) << "Evaluating TSDF:";
+      EvaluateScanMatcher<cartographer::mapping::TSDF2D,
+                          cartographer::mapping::TSDFRangeDataInserter2D>(
+          training_set, test_set, range_data_inserter_options,
+          ceres_scan_matcher_options, &tsdf_results);
+      avg_matching_trans_error = 0.0;
+      avg_matching_rot_error = 0.0;
+      for (const auto& res : tsdf_results) {
+        log_file << "TSDF"
+                 << "," << resolution << "," << res.initial_trans_error << ","
+                 << res.initial_rot_error << "," << res.matching_trans_error
+                 << "," << res.matching_rot_error << ","
+                 << res.matching_iterations << "," << res.matching_time << ","
+                 << size[0] << "," << size[1] << "\n";
+        avg_matching_trans_error +=
+            res.matching_trans_error / tsdf_results.size();
+        avg_matching_rot_error +=
+            std::abs(res.matching_rot_error / tsdf_results.size());
+      }
+      LOG(INFO) << "TSDF avg_matching_trans_error \t"
+                << avg_matching_trans_error;
+      LOG(INFO) << "TSDF avg_matching_rot_error \t" << avg_matching_rot_error;
+      LOG(INFO) << "\n";
     }
   }
   log_file.close();

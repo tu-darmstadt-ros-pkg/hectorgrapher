@@ -221,7 +221,7 @@ LocalTrajectoryBuilder2D::AddAccumulatedRangeData(
 
   // Computes a gravity aligned pose prediction.
   const transform::Rigid3d non_gravity_aligned_pose_prediction =
-      //      extrapolator_->GetLastPose();
+      //            extrapolator_->GetLastPose();
       extrapolator_->ExtrapolatePose(time);
   const transform::Rigid2d pose_prediction = transform::Project2D(
       non_gravity_aligned_pose_prediction * gravity_alignment.inverse());

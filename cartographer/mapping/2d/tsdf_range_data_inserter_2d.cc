@@ -97,11 +97,14 @@ float ComputeRangeWeightFactor(float range, int exponent) {
 }
 
 float ExponentialWeightFactor(float range, float sigma, float epsilon) {
-  if (std::abs(range) < epsilon) {
-    return 1.0;
+  float res = 0.f;
+  if (range > -epsilon) {
+    res = 1.0;
   } else {
-    return std::exp(-sigma * (range - epsilon) * (range - epsilon));
+    res = std::exp(-sigma * (std::abs(range) - epsilon) *
+                   (std::abs(range) - epsilon));
   }
+  return res;
 }
 
 float WeightedMeanOfTwoAngles(float a, float wa, float b, float wb) {
@@ -333,9 +336,7 @@ void TSDFRangeDataInserter2D::InsertHit(
     const proto::TSDFRangeDataInserterOptions2D& options,
     const Eigen::Vector2f& hit, const Eigen::Vector2f& origin, float normal,
     TSDF2D* tsdf, float normal_weight = 1.f) const {
-
-  if(!options_.project_sdf_distance_to_scan_normal())
-  {
+  if (!options_.project_sdf_distance_to_scan_normal()) {
     normal_weight = 1.f;
   }
 
@@ -401,9 +402,9 @@ void TSDFRangeDataInserter2D::InsertHit(
     update_weight *= normal_weight;
     if (options_.update_weight_distance_cell_to_hit_kernel_bandwith() != 0.f) {
       float d = update_tsd;  // update_tsd;  // for some reason this works
-                             // better than range -
-                             //      d = range - distance_cell_to_origin;
-                             // distance_cell_to_origin TODO(kdaun) Understand.
+      // better than range -
+      //      d = range - distance_cell_to_origin;
+      // distance_cell_to_origin TODO(kdaun) Understand.
       // std::max(double(std::abs(range - distance_cell_to_origin)),
       // options.truncation_distance());//update_tsd;//range -
       // distance_cell_to_origin;
@@ -412,7 +413,7 @@ void TSDFRangeDataInserter2D::InsertHit(
       //          options_.update_weight_distance_cell_to_hit_kernel_bandwith());
       update_weight *= ExponentialWeightFactor(
           d, options_.update_weight_distance_cell_to_hit_kernel_bandwith(),
-          options.truncation_distance() * 0.2);
+          tsdf->limits().resolution() * 1.0);
     }
     UpdateCell(cell_index, update_tsd, update_weight, tsdf);
   }
@@ -423,26 +424,31 @@ void TSDFRangeDataInserter2D::InsertHit(
         ExponentialWeightFactor(
             options.truncation_distance(),
             options_.update_weight_distance_cell_to_hit_kernel_bandwith(),
-            options.truncation_distance() * 0.2);
+            tsdf->limits().resolution() * 1.0);
   }
 
-  if(options_.update_free_space()){
-  for (const Eigen::Array2i& cell_index : ray_freespace_mask) {
-    // if (tsdf->CellIsUpdated(cell_index)) continue;
-    Eigen::Vector2f cell_center = tsdf->limits().GetCellCenter(cell_index);
-    float distance_cell_to_origin = (cell_center - origin).norm();
-    float update_tsd = range - distance_cell_to_origin;
-    if (options.project_sdf_distance_to_scan_normal()) {
-      update_tsd = (cell_center - hit).dot(normal_vector);
+  static int freespace_idx = 0;
+  //  ++freespace_idx;
+
+  if (options_.update_free_space() && freespace_idx % 5 == 0) {
+    freespace_idx = 0;
+    for (const Eigen::Array2i& cell_index : ray_freespace_mask) {
+      // if (tsdf->CellIsUpdated(cell_index)) continue;
+      Eigen::Vector2f cell_center = tsdf->limits().GetCellCenter(cell_index);
+      float distance_cell_to_origin = (cell_center - origin).norm();
+      float update_tsd = range - distance_cell_to_origin;
+      if (options.project_sdf_distance_to_scan_normal()) {
+        update_tsd = (cell_center - hit).dot(normal_vector);
+      }
+      if (update_tsd < truncation_distance) continue;
+      update_tsd = truncation_distance;
+      float update_weight = options_.free_space_weight() * weight_factor_range *
+                            weight_factor_angle_ray_normal;
+      update_weight *=
+          normal_weight *
+          update_weight_distance_cell_to_hit_kernel_bandwith_factor;
+      UpdateCell(cell_index, update_tsd, update_weight, tsdf);
     }
-    if (update_tsd < truncation_distance) continue;
-    update_tsd = truncation_distance;
-    float update_weight = options_.free_space_weight() * weight_factor_range *
-                          weight_factor_angle_ray_normal;
-    update_weight *= normal_weight *
-                     update_weight_distance_cell_to_hit_kernel_bandwith_factor;
-    UpdateCell(cell_index, update_tsd, update_weight, tsdf);
-  }
   }
 }
 
