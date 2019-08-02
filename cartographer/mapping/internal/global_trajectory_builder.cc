@@ -100,6 +100,7 @@ class GlobalTrajectoryBuilder : public mapping::TrajectoryBuilderInterface {
                      const sensor::OdometryData& odometry_data) override {
     //    LOG(INFO)<<odometry_data.pose;
     bool pertubate = false;
+/**
     if (pertubate) {
       static std::default_random_engine e1(42);
       static std::normal_distribution<double> normal_distribution(0.0, 0.04);
@@ -121,6 +122,7 @@ class GlobalTrajectoryBuilder : public mapping::TrajectoryBuilderInterface {
       }
       pose_graph_->AddOdometryData(trajectory_id_, odometry_data);
     }
+**/
   }
 
   void AddSensorData(

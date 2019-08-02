@@ -65,6 +65,11 @@ void GridDrawer::DrawTSD(const cartographer::mapping::TSDF2D& grid) {
         r = 1. - std::pow(std::abs(val), 0.5);
         g = r;
       }
+      if(std::abs(val) > 0.999) {
+        r = 0.95f;
+        g = 0.95f;
+        b = 0.95f;
+      }
       //      r = 0.2 + 0.6* std::abs(val);
       //      g = 0.2 + 0.6* std::abs(val);
       //      b = 0.2 + 0.6* std::abs(val);
@@ -329,6 +334,8 @@ void GridDrawer::DrawWeightedNormals(std::vector<std::pair<float, float>> normal
 void GridDrawer::DrawIsoSurface(const cartographer::mapping::TSDF2D& grid) {
   // IsoSurface
   std::vector<std::vector<Eigen::Vector2f>> surface = computeSurfaces(grid);
+  cairo_set_line_width(grid_surface_context_, 4);
+
   for (auto& segment : surface) {
     cairo_set_source_rgb(grid_surface_context_, 0, 0, 0);
     float x = (limits_.max().x() - segment[0][0]) / limits_.resolution();

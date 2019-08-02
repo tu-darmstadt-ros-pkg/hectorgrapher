@@ -15,6 +15,7 @@
 cmake_minimum_required(VERSION 3.2)
 
 project(cartographer)
+set (CMAKE_CXX_STANDARD 11)
 
 set(CARTOGRAPHER_MAJOR_VERSION 1)
 set(CARTOGRAPHER_MINOR_VERSION 0)
@@ -34,9 +35,9 @@ find_package(Boost REQUIRED COMPONENTS iostreams)
 find_package(Ceres REQUIRED COMPONENTS SuiteSparse)
 find_package(Eigen3 REQUIRED)
 find_package(LuaGoogle REQUIRED)
-set(PROTOBUF_INCLUDE_DIRS "/home/kevin/tsdf_ws/external/protobuf3/include")
-set(PROTOBUF_LIBRARY "/home/kevin/tsdf_ws/external/protobuf3/lib/libprotobuf.a")
-set(PROTOBUF_PROTOC_EXECUTABLE "/home/kevin/tsdf_ws/external/protobuf3/bin/protoc")
+set(PROTOBUF_INCLUDE_DIRS "/home/daun/tsdf_ws/external/protobuf3/include")
+set(PROTOBUF_LIBRARY "/home/daun/tsdf_ws/external/protobuf3/lib/libprotobuf.a")
+set(PROTOBUF_PROTOC_EXECUTABLE "/home/daun/tsdf_ws/external/protobuf3/bin/protoc")
 
 if (${BUILD_GRPC})
   find_package(async_grpc REQUIRED)

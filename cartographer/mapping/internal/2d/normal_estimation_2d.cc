@@ -44,7 +44,7 @@ std::pair<float, float> EstimateNormal(const sensor::PointCloud& returns,
       2) {
     return std::make_pair<float, float>(
         NormalTo2DAngle(sensor_origin - estimation_point),
-        static_cast<float>(num_samples));
+        0.f); // static_cast<float>(num_samples));
   }
   Eigen::Vector3f mean_normal = Eigen::Vector3f::Zero();
   const Eigen::Vector3f& estimation_point_to_observation =
@@ -221,7 +221,7 @@ std::vector<std::pair<float, float>> EstimateNormalsFromTSDF(
 
     const Eigen::Vector3f& estimation_point_to_observation =
         range_data.origin - hit;
-    if (sample_normal.dot(estimation_point_to_observation) < 0) {
+    if (sample_normal.dot(estimation_point_to_observation) < 0.f) {
       //sample_normal = -sample_normal;
       w_min = 0.f;
     }

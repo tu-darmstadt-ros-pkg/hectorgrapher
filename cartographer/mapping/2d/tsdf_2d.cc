@@ -161,12 +161,18 @@ bool TSDF2D::DrawToSubmapTexture(
     //    value_converter_->getMaxTSD() - 0.75, 0.0) * 4.f;
     float normalized_tsdf =
         std::abs(GetTSD(xy_index + offset)) / value_converter_->getMaxTSD();
-    normalized_tsdf = std::pow(normalized_tsdf, 1.5f);
-    //    if (normalized_tsdf > 0.7) {normalized_tsdf = 1;}
+    //normalized_tsdf = std::pow(normalized_tsdf, 1.5f);
+    //if (normalized_tsdf > 0.7) {normalized_tsdf = 1;}
+    if (normalized_tsdf < 0.7) {normalized_tsdf = 0;}
+
     //    else {normalized_tsdf = 0;}
     float normalized_weight =
         GetWeight(xy_index + offset) / value_converter_->getMaxWeight();
     // normalized_weight = 1.f;
+    //normalized_weight = std::pow(normalized_weight, 1.5f);
+    if(normalized_weight > 0.8) normalized_weight = 1;
+    else normalized_weight = 0.01;
+
     const int delta = static_cast<int>(
         std::round(normalized_weight * (normalized_tsdf * 255. - 128.)));
     const uint8 alpha = delta > 0 ? 0 : -delta;
@@ -178,7 +184,7 @@ bool TSDF2D::DrawToSubmapTexture(
   common::FastGzipString(cells, texture->mutable_cells());
   texture->set_width(cell_limits.num_x_cells);
   texture->set_height(cell_limits.num_y_cells);
-  const double resolution = limits().resolution();
+  const double resolution = limits().resolution()*2.0;
   texture->set_resolution(resolution);
   const double max_x = limits().max().x() - resolution * offset.y();
   const double max_y = limits().max().y() - resolution * offset.x();
