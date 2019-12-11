@@ -142,6 +142,9 @@ TEST(NormalEstimationHelperTest, DiagonalEstimateNormal) {
 TEST(NormalEstimationHelperTest, SimpleGenerateNormalHistogram) {
 
   PointCloud point_cloud = {{Eigen::Vector3f{0.f, 1.5f, 0.f}},
+                            {Eigen::Vector3f{-0.25f, 1.5f, 0.f}},
+                            {Eigen::Vector3f{-0.5f, 1.5f, 0.f}},
+                            {Eigen::Vector3f{-0.75f, 1.5f, 0.f}},
                             {Eigen::Vector3f{-1.f, 1.5f, 0.f}},
                             {Eigen::Vector3f{-2.f, 1.5f, 0.f}},
                             {Eigen::Vector3f{-2.f, 0.5f, 0.f}},
@@ -156,7 +159,58 @@ TEST(NormalEstimationHelperTest, SimpleGenerateNormalHistogram) {
                             {Eigen::Vector3f{2.f, 1.5f, 0.f}},
                             {Eigen::Vector3f{1.f, 1.5f, 0.f}}};
 
-  auto res = GenerateNormalHistogram(point_cloud, 4);
+  uint histogramSize = 10;
+  auto histogram = GenerateNormalHistogram( point_cloud, histogramSize);
+  std::vector<int> lengths;
+  lengths.resize(histogramSize);
+
+  std::transform (histogram.begin(), histogram.end(), lengths.begin(), [](std::vector<size_t> bin){
+    return bin.size();
+  });
+
+  std::cout << "Histogram size: ";
+  for(int i = 0; i < lengths.size(); ++i) {
+    if(i == 0) {
+      std::cout << lengths[i];
+    } else {
+      std::cout << ", " << lengths[i];
+    }
+  }
+  std::cout << std::endl;
+  PointCloud results;
+  uint points_to_remove = 9;
+  std::random_device rd;
+  std::mt19937 gen(rd());
+
+  for(size_t i = 0; i < points_to_remove; ++i) {
+    size_t histogram_index = std::max_element(lengths.begin(),lengths.end()) - lengths.begin();
+    auto& bin = histogram[histogram_index];
+
+    std::uniform_int_distribution<> dis(0, bin.size() - 1);
+    auto point_index = dis(gen);
+
+    lengths[histogram_index] = lengths[histogram_index] - 1;
+    bin.erase(bin.begin() + point_index);
+  }
+
+  for(size_t i = 0; i < histogram.size(); ++i) {
+    auto& bin = histogram[i];
+    for(size_t j = 0; j < bin.size(); ++j) {
+      results.push_back(point_cloud[bin[j]]);
+    }
+  }
+
+  std::cout << "Histogram filtered sizes: ";
+  for(int i = 0; i < lengths.size(); ++i) {
+    if(i == 0) {
+      std::cout << lengths[i];
+    } else {
+      std::cout << ", " << lengths[i];
+    }
+  }
+  std::cout << std::endl;
+
+  ASSERT_TRUE(point_cloud.size() - results.size() == points_to_remove);
 }
 
 }  // namespace

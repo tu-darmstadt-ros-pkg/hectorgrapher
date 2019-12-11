@@ -56,25 +56,11 @@ LocalTrajectoryBuilder2D::TransformToGravityAlignedFrameAndFilter(
       sensor::CropRangeData(sensor::TransformRangeData(
                                 range_data, transform_to_gravity_aligned_frame),
                             options_.min_z(), options_.max_z());
-  /*
+
   return sensor::RangeData{
       cropped.origin,
-      sensor::RandomFilter(options_.voxel_filter_size()).Filter(cropped.returns),
-      sensor::RandomFilter(options_.voxel_filter_size()).Filter(cropped.misses)};
-  */
-  /*
-  return sensor::RangeData{
-    cropped.origin,
-    sensor::RandomFilter(options_.adaptive_voxel_filter_options()).Filter(cropped.returns),
-    sensor::RandomFilter(options_.adaptive_voxel_filter_options()).Filter(cropped.misses)};
-  */
-  return sensor::RangeData{
-    cropped.origin,
-    cartographer::sensor::scan_matching_Filter_factory::createFastFilter(
-      options_.scan_matching_filter_options())->Filter(cropped.returns) ,
-    cartographer::sensor::scan_matching_Filter_factory::createFastFilter(
-      options_.scan_matching_filter_options())->Filter(cropped.misses) };
-
+      sensor::VoxelFilter(options_.voxel_filter_size()).Filter(cropped.returns),
+      sensor::VoxelFilter(options_.voxel_filter_size()).Filter(cropped.misses)};
  }
 
 std::unique_ptr<transform::Rigid2d> LocalTrajectoryBuilder2D::ScanMatch(
@@ -239,17 +225,21 @@ LocalTrajectoryBuilder2D::AddAccumulatedRangeData(
       extrapolator_->ExtrapolatePose(time);
   const transform::Rigid2d pose_prediction = transform::Project2D(
       non_gravity_aligned_pose_prediction * gravity_alignment.inverse());
-  
-  const sensor::PointCloud& filtered_gravity_aligned_point_cloud =
-    cartographer::sensor::scan_matching_Filter_factory::createFilter(
-      options_.scan_matching_filter_options())->Filter(gravity_aligned_range_data.returns);
 
+  // TODO change filter for experiments
+/*
+  const sensor::PointCloud& filtered_gravity_aligned_point_cloud =
+    sensor::AdaptiveVoxelFilter(options_.adaptive_voxel_filter_options())
+      .Filter(gravity_aligned_range_data.returns);
+*/
   /*
   const sensor::PointCloud& filtered_gravity_aligned_point_cloud =
-    sensor::RandomFilter(options_.adaptive_voxel_filter_options())
-      .Filter(gravity_aligned_range_data.returns);
+    sensor::RandomFilter(options_.adaptive_voxel_filter_options().min_num_points())
+    .Filter(gravity_aligned_range_data.returns);
   */
-
+  const sensor::PointCloud& filtered_gravity_aligned_point_cloud =
+    sensor::MaxEntropyNormalAngleFilter(options_.adaptive_voxel_filter_options().min_num_points())
+      .Filter(gravity_aligned_range_data.returns);
 
   if (filtered_gravity_aligned_point_cloud.empty()) {
     return nullptr;

@@ -30,30 +30,44 @@ namespace sensor {
 
 // Currently only in 2D!!!
 PointCloud MaxEntropyNormalAngleFilter::Filter(const PointCloud& point_cloud) {
+  //std::cerr << "Start filter" << std::endl;
   std::random_device rd;
   std::mt19937 gen(rd());
 
   size_t number_bins = 20; // TODO make configurable
+  //std::cerr << "Generate Histogram" << std::endl ;
   auto histogram = GenerateNormalHistogram(point_cloud, number_bins);
+  //std::cerr << "Complete Histogram" << std::endl;
+  std::vector<int> lengths;
+  lengths.resize(number_bins);
+  std::transform (histogram.begin(), histogram.end(), lengths.begin(), [](std::vector<size_t> bin){
+    return bin.size();
+  });
+
   PointCloud results;
 
-  for(size_t i = 0; i < number_of_points_; ++i) {
-    size_t histogram_index = i % number_bins;
-
-    auto bin = histogram[histogram_index];
-    while (!bin.empty()) {
-      histogram_index = (histogram_index + 1) % number_bins;
-      bin = histogram[histogram_index];
-    }
+  uint points_to_remove = std::max<int>(0, point_cloud.size() - number_of_points_) ;
+  // maximizing the entropy of the distribution over the normal orientations
+  for(size_t i = 0; i < points_to_remove; ++i) {
+    size_t histogram_index = std::max_element(lengths.begin(),lengths.end()) - lengths.begin();
+    auto& bin = histogram[histogram_index];
 
     std::uniform_int_distribution<> dis(0, bin.size() - 1);
     auto point_index = dis(gen);
 
-    results.push_back(point_cloud[bin[point_index]]);
-
+    lengths[histogram_index] = lengths[histogram_index] - 1;
+    bin.erase(bin.begin() + point_index);
   }
 
+  // add points to result point cloud
+  for(size_t i = 0; i < histogram.size(); ++i) {
+    auto& bin = histogram[i];
+    for(size_t j = 0; j < bin.size(); ++j) {
+      results.push_back(point_cloud[bin[j]]);
+    }
+  }
 
+  //std::cerr << "Complete filter" << std::endl;
   return results;
 }
 

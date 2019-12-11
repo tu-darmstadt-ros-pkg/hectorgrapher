@@ -56,11 +56,11 @@ std::set<size_t> SelectNeighborhood(const RangefinderPoint& point, const PointCl
   size_t min_number_points = 3; // TODO make configurable
   float ball_radius = 0.25; // TODO make configurable
 
-  while(neighbors.size() < 3){
+  while(neighbors.size() < min_number_points){
     for(size_t index = 0; index < point_cloud.size(); ++index){
       auto singlePoint = point_cloud[index];
       auto distance = (point.position - singlePoint.position).norm();
-      if(distance <= min_number_points)
+      if(distance <= ball_radius)
         neighbors.insert(index);
     }
     ball_radius = ball_radius + 0.5 * ball_radius;
@@ -70,9 +70,11 @@ std::set<size_t> SelectNeighborhood(const RangefinderPoint& point, const PointCl
 }
 
 Eigen::Vector2f EstimateNormal(const RangefinderPoint& point, const PointCloud& point_cloud){
+  //std::cerr << "SelectNeighborhood" << std::endl ;
   auto neighbors = SelectNeighborhood(point, point_cloud);
-
+  //std::cerr << "start pca" << std::endl ;
   auto normal_candidate = Pca(neighbors, point_cloud);
+  //std::cerr << "estimated normal" << std::endl ;
   normal_candidate.normalize();
   float dir = normal_candidate.dot(-point.position.head<2>()); // origin = 0
   return dir > 0 ? normal_candidate : -normal_candidate;
@@ -109,9 +111,8 @@ std::vector<std::vector<size_t >> GenerateNormalHistogram( const PointCloud &poi
     // calc normal orientation
     auto normal = EstimateNormal(point, point_cloud);
     auto angle = NormalOrientation( normal );
-    std::cout << "Calc angle: " << angle << std::endl;
     size_t bin_index = std::floor(angle / slice);
-    res[bin_index].push_back(index);
+    res[bin_index % number_bins].push_back(index);
 
   }
 
