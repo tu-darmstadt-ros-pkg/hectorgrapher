@@ -82,7 +82,7 @@ sensor::TimedPointCloudOriginData RangeDataCollator::CropAndMerge() {
     // Copy overlapping range.
     if (overlap_begin < overlap_end) {
       std::size_t origin_index = result.origins.size();
-      result.origins.push_back(data.origin);
+      result.origins.push_back(data.origin());
       const float time_correction =
           static_cast<float>(common::ToSeconds(data.time - current_end_));
       for (auto overlap_it = overlap_begin; overlap_it != overlap_end;
@@ -103,7 +103,7 @@ sensor::TimedPointCloudOriginData RangeDataCollator::CropAndMerge() {
       ++it;
     } else {
       data = sensor::TimedPointCloudData{
-          data.time, data.origin,
+          data.time, transform::Rigid3f::Translation(data.origin()),
           sensor::TimedPointCloud(overlap_end, ranges.end())};
       ++it;
     }

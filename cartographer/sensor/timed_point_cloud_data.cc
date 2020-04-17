@@ -26,7 +26,7 @@ proto::TimedPointCloudData ToProto(
     const TimedPointCloudData& timed_point_cloud_data) {
   proto::TimedPointCloudData proto;
   proto.set_timestamp(common::ToUniversal(timed_point_cloud_data.time));
-  *proto.mutable_origin() = transform::ToProto(timed_point_cloud_data.origin);
+  *proto.mutable_origin() = transform::ToProto(timed_point_cloud_data.origin());
   proto.mutable_point_data()->Reserve(timed_point_cloud_data.ranges.size());
   for (const TimedRangefinderPoint& range : timed_point_cloud_data.ranges) {
     *proto.add_point_data() = ToProto(range);
@@ -48,9 +48,10 @@ TimedPointCloudData FromProto(const proto::TimedPointCloudData& proto) {
       timed_point_cloud.push_back({timed_point.head<3>(), timed_point[3]});
     }
   }
-  return TimedPointCloudData{common::FromUniversal(proto.timestamp()),
-                             transform::ToEigen(proto.origin()),
-                             timed_point_cloud};
+  return TimedPointCloudData{
+      common::FromUniversal(proto.timestamp()),
+      transform::Rigid3f::Translation(transform::ToEigen(proto.origin())),
+      timed_point_cloud};
 }
 
 }  // namespace sensor
