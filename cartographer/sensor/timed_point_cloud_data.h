@@ -26,8 +26,23 @@ namespace sensor {
 
 struct TimedPointCloudData {
   common::Time time;
-  Eigen::Vector3f origin;
+  transform::Rigid3f origin_transform;
   TimedPointCloud ranges;
+
+  TimedPointCloudData(const common::Time& time) : time(time) {}
+  TimedPointCloudData(const common::Time& time,
+                      const transform::Rigid3f& origin_transform,
+                      const TimedPointCloud& ranges)
+      : time(time), origin_transform(origin_transform), ranges(ranges) {}
+  TimedPointCloudData(const common::Time& time, const Eigen::Vector3f& origin,
+                      const TimedPointCloud& ranges)
+      : time(time),
+        origin_transform(transform::Rigid3f::Translation(origin)),
+        ranges(ranges) {}
+
+  const Eigen::Vector3f& origin() const {
+    return origin_transform.translation();
+  }
 };
 
 struct TimedPointCloudOriginData {
