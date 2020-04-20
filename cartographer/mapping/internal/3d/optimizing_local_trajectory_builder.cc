@@ -146,7 +146,8 @@ void OptimizingLocalTrajectoryBuilder::AddOdometryData(
   odometer_data_.push_back(odometry_data);
 }
 
-FeatureCloudSet OptimizingLocalTrajectoryBuilder::ComputeFeatureSet(
+std::shared_ptr<FeatureCloudSet>
+OptimizingLocalTrajectoryBuilder::ComputeFeatureSet(
     const sensor::TimedPointCloudData& range_data_in_tracking) {
   sensor::TimedPointCloudData range_data_in_sensor =
       sensor::TimedPointCloudData{
@@ -158,16 +159,18 @@ FeatureCloudSet OptimizingLocalTrajectoryBuilder::ComputeFeatureSet(
   size_t num_scans = 16;
   float scan_range_rad = common::DegToRad(30);
   std::vector<sensor::TimedPointCloud> filterd_multi_scan_cloud(num_scans);
-  std::vector<std::vector<float>> point_curvatures(num_scans);
 
   auto cloud = std::make_shared<open3d::geometry::PointCloud>();
 
-  float plane_threshold = 1e-6;
+  float plane_threshold = 1e-5;
   float edge_threshold = 0.1;
-  size_t num_segments = 12;
+  float min_feature_distance = 0.1;
+  size_t num_segments = 4;
+  size_t num_edge_features_per_segment = 6;
+  size_t num_plane_features_per_segment = 6;
 
-  FeatureCloudSet feature_cloud_set(plane_threshold, edge_threshold, num_scans,
-                                    num_segments);
+  auto feature_cloud_set = std::make_shared<FeatureCloudSet>(
+      plane_threshold, edge_threshold, num_scans, num_segments);
 
   for (const auto& point : range_data_in_sensor.ranges) {
     float angle = std::atan2(
@@ -177,119 +180,126 @@ FeatureCloudSet OptimizingLocalTrajectoryBuilder::ComputeFeatureSet(
                               float(num_scans - 1));
     CHECK_GE(scan_idx, 0);
     CHECK_GT(num_scans, scan_idx);
-    feature_cloud_set.multi_scan_cloud_[scan_idx].push_back({point.position});
+    feature_cloud_set->multi_scan_cloud_[scan_idx].push_back({point.position});
   }
 
   int i = 0;
-  for (const auto& cloud : feature_cloud_set.multi_scan_cloud_) {
-    LOG(INFO) << "line_size\t" << i << "\t" << cloud.size();
+  for (const auto& cloud : feature_cloud_set->multi_scan_cloud_) {
     ++i;
   }
 
   // Compute curvature
   for (size_t scan_cloud_idx = 0;
-       scan_cloud_idx < feature_cloud_set.multi_scan_cloud_.size();
+       scan_cloud_idx < feature_cloud_set->multi_scan_cloud_.size();
        scan_cloud_idx++) {
     const auto& scan_cloud =
-        feature_cloud_set.multi_scan_cloud_[scan_cloud_idx];
+        feature_cloud_set->multi_scan_cloud_[scan_cloud_idx];
     for (size_t point_idx = 0; point_idx < scan_cloud.size(); point_idx++) {
-      if (point_idx < 6 || point_idx >= scan_cloud.size() - 6) {
-        //        point_curvatures[scan_cloud_idx].push_back(0.f);
-      } else {
-        auto point = scan_cloud[point_idx];
-        int i = point_idx;
-        float diff_x =
-            scan_cloud[i - 5].position.x() + scan_cloud[i - 4].position.x() +
-            scan_cloud[i - 3].position.x() + scan_cloud[i - 2].position.x() +
-            scan_cloud[i - 1].position.x() + scan_cloud[i + 5].position.x() +
-            scan_cloud[i + 4].position.x() + scan_cloud[i + 3].position.x() +
-            scan_cloud[i + 2].position.x() + scan_cloud[i + 1].position.x() -
-            10 * scan_cloud[i].position.x();
-        float diff_y =
-            scan_cloud[i - 5].position.y() + scan_cloud[i - 4].position.y() +
-            scan_cloud[i - 3].position.y() + scan_cloud[i - 2].position.y() +
-            scan_cloud[i - 1].position.y() + scan_cloud[i + 5].position.y() +
-            scan_cloud[i + 4].position.y() + scan_cloud[i + 3].position.y() +
-            scan_cloud[i + 2].position.y() + scan_cloud[i + 1].position.y() -
-            10 * scan_cloud[i].position.y();
-        float diff_z =
-            scan_cloud[i - 5].position.z() + scan_cloud[i - 4].position.z() +
-            scan_cloud[i - 3].position.z() + scan_cloud[i - 2].position.z() +
-            scan_cloud[i - 1].position.z() + scan_cloud[i + 5].position.z() +
-            scan_cloud[i + 4].position.z() + scan_cloud[i + 3].position.z() +
-            scan_cloud[i + 2].position.z() + scan_cloud[i + 1].position.z() -
-            10 * scan_cloud[i].position.z();
-        float point_curvature =
-            diff_x * diff_x + diff_y * diff_y + diff_z * diff_z;
-        point_curvature /= scan_cloud[i].position.norm();
+      if (point_idx < 6 || point_idx >= scan_cloud.size() - 6) continue;
+      auto point = scan_cloud[point_idx];
+      int i = point_idx;
+      float diff_x =
+          scan_cloud[i - 5].position.x() + scan_cloud[i - 4].position.x() +
+          scan_cloud[i - 3].position.x() + scan_cloud[i - 2].position.x() +
+          scan_cloud[i - 1].position.x() + scan_cloud[i + 5].position.x() +
+          scan_cloud[i + 4].position.x() + scan_cloud[i + 3].position.x() +
+          scan_cloud[i + 2].position.x() + scan_cloud[i + 1].position.x() -
+          10 * scan_cloud[i].position.x();
+      float diff_y =
+          scan_cloud[i - 5].position.y() + scan_cloud[i - 4].position.y() +
+          scan_cloud[i - 3].position.y() + scan_cloud[i - 2].position.y() +
+          scan_cloud[i - 1].position.y() + scan_cloud[i + 5].position.y() +
+          scan_cloud[i + 4].position.y() + scan_cloud[i + 3].position.y() +
+          scan_cloud[i + 2].position.y() + scan_cloud[i + 1].position.y() -
+          10 * scan_cloud[i].position.y();
+      float diff_z =
+          scan_cloud[i - 5].position.z() + scan_cloud[i - 4].position.z() +
+          scan_cloud[i - 3].position.z() + scan_cloud[i - 2].position.z() +
+          scan_cloud[i - 1].position.z() + scan_cloud[i + 5].position.z() +
+          scan_cloud[i + 4].position.z() + scan_cloud[i + 3].position.z() +
+          scan_cloud[i + 2].position.z() + scan_cloud[i + 1].position.z() -
+          10 * scan_cloud[i].position.z();
+      float point_curvature =
+          diff_x * diff_x + diff_y * diff_y + diff_z * diff_z;
+      point_curvature /= scan_cloud[i].position.norm();
 
-        float angle = std::atan2(scan_cloud[i + 5].position.y(),
-                                 scan_cloud[i + 5].position.x()) -
-                      std::atan2(scan_cloud[i - 5].position.y(),
-                                 scan_cloud[i - 5].position.x());
-        bool angle_continuous = (std::abs(common::RadToDeg(angle)) < 2.1);
-        bool depth_continuous = true;
+      float angle = std::atan2(scan_cloud[i + 5].position.y(),
+                               scan_cloud[i + 5].position.x()) -
+                    std::atan2(scan_cloud[i - 5].position.y(),
+                               scan_cloud[i - 5].position.x());
+      bool angle_continuous = (std::abs(common::RadToDeg(angle)) < 2.1);
+      bool depth_continuous = true;
 
-        Eigen::Vector3f scan_direction = scan_cloud[i].position.normalized();
-        for (int i_depth = -5; i_depth <= 5; ++i_depth) {
-          if (std::abs((scan_cloud[i - i_depth].position -
-                        scan_cloud[i - i_depth + 1].position)
-                           .dot(scan_direction)) > 0.2)
-            depth_continuous = false;
-        }
+      Eigen::Vector3f scan_direction = scan_cloud[i].position.normalized();
+      for (int i_depth = -5; i_depth <= 5; ++i_depth) {
+        if (std::abs((scan_cloud[i - i_depth].position -
+                      scan_cloud[i - i_depth + 1].position)
+                         .dot(scan_direction)) > 0.2)
+          depth_continuous = false;
+      }
 
-        if (angle_continuous && depth_continuous) {
-          point_curvatures[scan_cloud_idx].push_back(point_curvature);
-          filterd_multi_scan_cloud[scan_cloud_idx].push_back(
-              {scan_cloud[i].position});
-          double r = point_curvature / 0.05;
-          r = common::Clamp(r, 0.0, 1.0);
-          cloud->colors_.emplace_back(r, 1.0 - r, 0.1);
-          cloud->points_.emplace_back(point.position[0], point.position[1],
-                                      point.position[2]);
-        }
-        //        else if (angle_continuous) {
-        //          cloud->colors_.push_back({0.5, 0.5,0.5});
-        //
-        //        }
-        //        else if (depth_continuous) {
-        //          cloud->colors_.push_back({0.0, 0.0,1.0});
-        //
-        //        }
-        //        else {
-        //          cloud->colors_.push_back({0.0, 0.0,0.0});
-        //        }
+      if (angle_continuous && depth_continuous) {
+        filterd_multi_scan_cloud[scan_cloud_idx].push_back(
+            {scan_cloud[i].position, point_curvature});
+        double r = point_curvature / 0.05;
+        r = common::Clamp(r, 0.0, 1.0);
+        cloud->colors_.emplace_back(r, 1.0 - r, 0.1);
+        cloud->points_.emplace_back(point.position[0], point.position[1],
+                                    point.position[2]);
       }
     }
   }
 
-  std::vector<sensor::PointCloud>& plane_feature_locations =
-      feature_cloud_set.plane_feature_locations_;
-  std::vector<std::vector<float>>& plane_feature_values =
-      feature_cloud_set.plane_feature_values_;
-  std::vector<sensor::PointCloud>& edge_feature_locations =
-      feature_cloud_set.edge_feature_locations_;
-  std::vector<std::vector<float>>& edge_feature_values =
-      feature_cloud_set.edge_feature_values_;
-
-  for (size_t scan_cloud_idx = 0;
-       scan_cloud_idx < filterd_multi_scan_cloud.size(); scan_cloud_idx++) {
-    const auto& scan_cloud = filterd_multi_scan_cloud[scan_cloud_idx];
-    for (size_t point_idx = 0; point_idx < scan_cloud.size(); point_idx++) {
-      auto point = scan_cloud[point_idx];
-      float curvature = point_curvatures[scan_cloud_idx][point_idx];
+  for (const auto& scan_cloud : filterd_multi_scan_cloud) {
+    std::vector<sensor::TimedPointCloud> segmented_scan_cloud(num_segments);
+    for (const auto& point : scan_cloud) {
       float angle = std::atan2(point.position.y(), point.position.x());
       int segment_idx =
           std::round((angle + M_PI) / (2.0 * M_PI) * float(num_segments - 1));
-      // plane
-      if (curvature < plane_feature_values[scan_cloud_idx][segment_idx]) {
-        plane_feature_values[scan_cloud_idx][segment_idx] = curvature;
-        plane_feature_locations[scan_cloud_idx][segment_idx] = {point.position};
+      segmented_scan_cloud[segment_idx].push_back(point);
+    }
+    for (auto& scan_cloud_segment : segmented_scan_cloud) {
+      if (scan_cloud_segment.empty()) continue;
+      std::sort(scan_cloud_segment.begin(), scan_cloud_segment.end(),
+                [](sensor::TimedRangefinderPoint lhs,
+                   sensor::TimedRangefinderPoint rhs) {
+                  return lhs.time < rhs.time;
+                });
+
+      sensor::TimedPointCloud segment_features;
+      // plane features
+      for (const auto& candidate : scan_cloud_segment) {
+        if (candidate.time > plane_threshold ||
+            segment_features.size() == num_plane_features_per_segment)
+          break;
+        bool distance_check = true;
+        for (const auto& point : segment_features) {
+          if ((candidate.position - point.position).norm() <
+              min_feature_distance)
+            distance_check = false;
+        }
+        if (distance_check) segment_features.push_back(candidate);
       }
-      if (curvature > edge_feature_values[scan_cloud_idx][segment_idx]) {
-        edge_feature_values[scan_cloud_idx][segment_idx] = curvature;
-        edge_feature_locations[scan_cloud_idx][segment_idx] = {point.position};
+      feature_cloud_set->plane_feature_locations_.insert(
+          feature_cloud_set->plane_feature_locations_.end(),
+          segment_features.begin(), segment_features.end());
+      segment_features.clear();
+      for (int i = scan_cloud_segment.size() - 1; i >= 0; --i) {
+        sensor::TimedRangefinderPoint& candidate = scan_cloud_segment[i];
+        if (candidate.time < edge_threshold ||
+            segment_features.size() == num_edge_features_per_segment)
+          break;
+        bool distance_check = true;
+        for (const auto& point : segment_features) {
+          if ((candidate.position - point.position).norm() <
+              min_feature_distance)
+            distance_check = false;
+        }
+        if (distance_check) segment_features.push_back(candidate);
       }
+      feature_cloud_set->edge_feature_locations_.insert(
+          feature_cloud_set->edge_feature_locations_.end(),
+          segment_features.begin(), segment_features.end());
     }
   }
 
@@ -299,37 +309,103 @@ FeatureCloudSet OptimizingLocalTrajectoryBuilder::ComputeFeatureSet(
       open3d::geometry::TriangleMesh::CreateCoordinateFrame(0.5));
   render_geometries.push_back(cloud);
 
-  for (size_t scan_cloud_idx = 0;
-       scan_cloud_idx < filterd_multi_scan_cloud.size(); scan_cloud_idx++) {
-    for (size_t segment_idx = 0; segment_idx < num_segments; segment_idx++) {
-      if (plane_feature_values[scan_cloud_idx][segment_idx] < plane_threshold) {
-        std::shared_ptr<open3d::geometry::TriangleMesh> sphere =
-            open3d::geometry::TriangleMesh::CreateSphere(0.1, 20);
-        Eigen::Matrix4d trans_to_origin = Eigen::Matrix4d::Identity();
-        trans_to_origin.block<3, 1>(0, 3) =
-            plane_feature_locations[scan_cloud_idx][segment_idx]
-                .position.cast<double>();
-        sphere->Transform(trans_to_origin);
-        sphere->PaintUniformColor({0.0, 1.0, 0.0});
-        render_geometries.push_back(sphere);
-      }
-      if (edge_feature_values[scan_cloud_idx][segment_idx] > edge_threshold) {
-        std::shared_ptr<open3d::geometry::TriangleMesh> sphere =
-            open3d::geometry::TriangleMesh::CreateSphere(0.1, 20);
-        Eigen::Matrix4d trans_to_origin = Eigen::Matrix4d::Identity();
-        trans_to_origin.block<3, 1>(0, 3) =
-            edge_feature_locations[scan_cloud_idx][segment_idx]
-                .position.cast<double>();
-        sphere->Transform(trans_to_origin);
-        sphere->PaintUniformColor({1.0, 0.0, 0.0});
-        render_geometries.push_back(sphere);
-      }
-    }
+  for (const auto& edge_feature : feature_cloud_set->edge_feature_locations_) {
+    std::shared_ptr<open3d::geometry::TriangleMesh> sphere =
+        open3d::geometry::TriangleMesh::CreateSphere(0.1, 20);
+    Eigen::Matrix4d trans_to_origin = Eigen::Matrix4d::Identity();
+    trans_to_origin.block<3, 1>(0, 3) = edge_feature.position.cast<double>();
+    sphere->Transform(trans_to_origin);
+    sphere->PaintUniformColor({1.0, 0.0, 0.0});
+    render_geometries.push_back(sphere);
+  }
+  for (const auto& plane_feature :
+       feature_cloud_set->plane_feature_locations_) {
+    std::shared_ptr<open3d::geometry::TriangleMesh> sphere =
+        open3d::geometry::TriangleMesh::CreateSphere(0.1, 20);
+    Eigen::Matrix4d trans_to_origin = Eigen::Matrix4d::Identity();
+    trans_to_origin.block<3, 1>(0, 3) = plane_feature.position.cast<double>();
+    sphere->Transform(trans_to_origin);
+    sphere->PaintUniformColor({0.0, 1.0, 0.0});
+    render_geometries.push_back(sphere);
   }
 
   open3d::visualization::DrawGeometries(render_geometries);
 
+  feature_cloud_set->Transform(range_data_in_tracking.origin_transform);
+
   return feature_cloud_set;
+}
+
+void OptimizingLocalTrajectoryBuilder::MatchFeatureSets(
+    const FeatureCloudSet& lhs, const FeatureCloudSet& rhs) {
+  auto cloud_edge_lhs = std::make_shared<open3d::geometry::PointCloud>();
+  for (const auto& point : lhs.edge_feature_locations_) {
+    cloud_edge_lhs->points_.emplace_back(point.position.cast<double>());
+  }
+  auto cloud_plane_lhs = std::make_shared<open3d::geometry::PointCloud>();
+  for (const auto& point : lhs.plane_feature_locations_) {
+    cloud_plane_lhs->points_.emplace_back(point.position.cast<double>());
+  }
+  auto cloud_edge_rhs = std::make_shared<open3d::geometry::PointCloud>();
+  for (const auto& point : rhs.edge_feature_locations_) {
+    cloud_edge_rhs->points_.emplace_back(point.position.cast<double>());
+  }
+  auto cloud_plane_rhs = std::make_shared<open3d::geometry::PointCloud>();
+  for (const auto& point : rhs.plane_feature_locations_) {
+    cloud_plane_rhs->points_.emplace_back(point.position.cast<double>());
+  }
+
+  open3d::geometry::KDTreeFlann kdtree_edge_lhs;
+  open3d::geometry::KDTreeFlann kdtree_plane_lhs;
+  kdtree_edge_lhs.SetGeometry(*cloud_edge_lhs);
+  kdtree_plane_lhs.SetGeometry(*cloud_plane_lhs);
+
+  cloud_edge_lhs->PaintUniformColor({1.0, 0.0, 0.0});
+  cloud_edge_rhs->PaintUniformColor({0.5, 0.0, 0.0});
+  cloud_plane_lhs->PaintUniformColor({0.0, 0.5, 0.0});
+  cloud_plane_rhs->PaintUniformColor({0.0, 1.0, 0.0});
+
+  std::vector<std::vector<int>> edge_correspondences;
+  std::vector<std::pair<int, int>> edge_render_correspondences;
+  for (int edge_idx = 0; edge_idx < cloud_edge_rhs->points_.size();
+       ++edge_idx) {
+    std::vector<int> indices_vec(2);
+    std::vector<double> dists_vec(2);
+    int k = kdtree_edge_lhs.SearchHybrid(cloud_edge_rhs->points_[edge_idx], 0.4,
+                                         2, indices_vec, dists_vec);
+    if (k == 2) {
+      edge_correspondences.push_back(
+          {edge_idx, indices_vec[0], indices_vec[1]});
+      edge_render_correspondences.emplace_back(edge_idx, indices_vec[0]);
+      edge_render_correspondences.emplace_back(edge_idx, indices_vec[1]);
+    }
+  }
+  std::vector<std::vector<int>> plane_correspondences;
+  std::vector<std::pair<int, int>> plane_render_correspondences;
+  for (int plane_idx = 0; plane_idx < cloud_plane_rhs->points_.size();
+       ++plane_idx) {
+    std::vector<int> indices_vec(3);
+    std::vector<double> dists_vec(3);
+    int k = kdtree_plane_lhs.SearchHybrid(cloud_plane_rhs->points_[plane_idx],
+                                          0.5, 3, indices_vec, dists_vec);
+    if (k == 3) {
+      plane_correspondences.push_back(
+          {plane_idx, indices_vec[0], indices_vec[1], indices_vec[2]});
+      plane_render_correspondences.emplace_back(plane_idx, indices_vec[0]);
+      plane_render_correspondences.emplace_back(plane_idx, indices_vec[1]);
+      plane_render_correspondences.emplace_back(plane_idx, indices_vec[2]);
+    }
+  }
+  auto edge_lineset =
+      open3d::geometry::LineSet::CreateFromPointCloudCorrespondences(
+          *cloud_edge_rhs, *cloud_edge_lhs, edge_render_correspondences);
+  auto plane_lineset =
+      open3d::geometry::LineSet::CreateFromPointCloudCorrespondences(
+          *cloud_plane_rhs, *cloud_plane_lhs, plane_render_correspondences);
+
+  open3d::visualization::DrawGeometries({cloud_edge_lhs, cloud_edge_rhs,
+                                         cloud_plane_lhs, cloud_plane_rhs,
+                                         edge_lineset, plane_lineset});
 }
 
 std::unique_ptr<OptimizingLocalTrajectoryBuilder::MatchingResult>
@@ -343,6 +419,14 @@ OptimizingLocalTrajectoryBuilder::AddRangeData(
     // cannot compute the orientation of the rangefinder.
     LOG(INFO) << "IMU not yet initialized.";
     return nullptr;
+  }
+
+  feature_sets_in_tracking_.push_back(
+      ComputeFeatureSet(range_data_in_tracking));
+
+  if (feature_sets_in_tracking_.size() > 1) {
+    MatchFeatureSets(*feature_sets_in_tracking_[0],
+                     *feature_sets_in_tracking_[1]);
   }
 
   PointCloudSet point_cloud_set;

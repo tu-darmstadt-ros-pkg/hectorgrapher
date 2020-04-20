@@ -47,37 +47,25 @@ struct FeatureCloudSet {
         edge_threshold_(edge_threshold),
         num_scans_(num_scans),
         num_segments_(num_segments),
-        multi_scan_cloud_(num_scans),
-        plane_feature_locations_(
-            num_scans, std::vector<sensor::RangefinderPoint>(num_segments)),
-        plane_feature_values_(
-            num_scans, std::vector<float>(num_segments, plane_threshold)),
-        edge_feature_locations_(
-            num_scans, std::vector<sensor::RangefinderPoint>(num_segments)),
-        edge_feature_values_(
-            num_scans, std::vector<float>(num_segments, edge_threshold)) {}
+        multi_scan_cloud_(num_scans) {}
 
   void Transform(const transform::Rigid3f& transformation) {
     for (auto& cloud : multi_scan_cloud_) {
-      cloud = sensor::TransformPointCloud(cloud, transformation);
+      cloud = sensor::TransformTimedPointCloud(cloud, transformation);
     }
-    for (auto& cloud : plane_feature_locations_) {
-      cloud = sensor::TransformPointCloud(cloud, transformation);
-    }
-    for (auto& cloud : edge_feature_locations_) {
-      cloud = sensor::TransformPointCloud(cloud, transformation);
-    }
+    plane_feature_locations_ = sensor::TransformTimedPointCloud(
+        plane_feature_locations_, transformation);
+    edge_feature_locations_ = sensor::TransformTimedPointCloud(
+        edge_feature_locations_, transformation);
   }
 
   float plane_threshold_;
   float edge_threshold_;
   size_t num_scans_;
   size_t num_segments_;
-  std::vector<sensor::PointCloud> multi_scan_cloud_;
-  std::vector<sensor::PointCloud> plane_feature_locations_;
-  std::vector<std::vector<float>> plane_feature_values_;
-  std::vector<sensor::PointCloud> edge_feature_locations_;
-  std::vector<std::vector<float>> edge_feature_values_;
+  std::vector<sensor::TimedPointCloud> multi_scan_cloud_;
+  sensor::TimedPointCloud plane_feature_locations_;
+  sensor::TimedPointCloud edge_feature_locations_;
 };
 
 // Batches up some sensor data and optimizes them in one go to get a locally
@@ -138,8 +126,10 @@ class OptimizingLocalTrajectoryBuilder {
     State state;
   };
 
-  FeatureCloudSet ComputeFeatureSet(
+  std::shared_ptr<FeatureCloudSet> ComputeFeatureSet(
       const sensor::TimedPointCloudData& range_data_in_tracking);
+
+  void MatchFeatureSets(const FeatureCloudSet& lhs, const FeatureCloudSet& rhs);
 
   State PredictStateRK4(const State& start_state, const common::Time start_time,
                         const common::Time end_time);
@@ -193,7 +183,7 @@ class OptimizingLocalTrajectoryBuilder {
   std::unique_ptr<ImuIntegrator> imu_integrator_;
   bool map_update_enabled_;
 
-  std::vector<std::shared_ptr<FeatureCloudSet>> feature_sets_in_tracking;
+  std::vector<std::shared_ptr<FeatureCloudSet>> feature_sets_in_tracking_;
 };
 
 }  // namespace mapping
