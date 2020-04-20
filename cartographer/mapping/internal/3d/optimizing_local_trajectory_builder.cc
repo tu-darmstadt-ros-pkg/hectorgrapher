@@ -20,9 +20,11 @@
 #include "cartographer/common/time.h"
 #include "cartographer/evaluation/grid_drawer.h"
 #include "cartographer/mapping/internal/3d/imu_static_calibration.h"
+#include "cartographer/mapping/internal/3d/scan_matching/edge_feature_cost_functor_3d.h"
 #include "cartographer/mapping/internal/3d/scan_matching/interpolated_occupied_space_cost_function_3d.h"
 #include "cartographer/mapping/internal/3d/scan_matching/interpolated_tsdf_space_cost_function_3d.h"
 #include "cartographer/mapping/internal/3d/scan_matching/occupied_space_cost_function_3d.h"
+#include "cartographer/mapping/internal/3d/scan_matching/plane_feature_cost_functor_3d.h"
 #include "cartographer/mapping/internal/3d/scan_matching/prediction_direct_imu_integration_cost_functor.h"
 #include "cartographer/mapping/internal/3d/scan_matching/prediction_imu_preintegration_cost_functor.h"
 #include "cartographer/mapping/internal/3d/scan_matching/relative_translation_and_yaw_cost_function.h"
@@ -406,6 +408,71 @@ void OptimizingLocalTrajectoryBuilder::MatchFeatureSets(
   open3d::visualization::DrawGeometries({cloud_edge_lhs, cloud_edge_rhs,
                                          cloud_plane_lhs, cloud_plane_rhs,
                                          edge_lineset, plane_lineset});
+
+  ceres::Problem problem;
+  std::array<double, 3> translation = {{0, 0, 0}};
+  std::array<double, 4> rotation = {{1, 0, 0, 0}};
+
+  problem.AddResidualBlock(
+      new ceres::AutoDiffCostFunction<EdgeFeatureCostFunctor3D, ceres::DYNAMIC,
+                                      3, 4>(
+          new EdgeFeatureCostFunctor3D(1.0, lhs.edge_feature_locations_,
+                                       rhs.edge_feature_locations_,
+                                       edge_correspondences),
+          edge_correspondences.size()),
+      nullptr, translation.data(), rotation.data());
+
+  problem.AddResidualBlock(
+      new ceres::AutoDiffCostFunction<PlaneFeatureCostFunctor3D, ceres::DYNAMIC,
+                                      3, 4>(
+          new PlaneFeatureCostFunctor3D(1.0, lhs.plane_feature_locations_,
+                                        rhs.plane_feature_locations_,
+                                        plane_correspondences),
+          plane_correspondences.size()),
+      nullptr, translation.data(), rotation.data());
+
+  problem.SetParameterization(rotation.data(),
+                              new ceres::QuaternionParameterization());
+
+  ceres::Solver::Summary summary;
+  ceres::Solve(ceres_solver_options_, &problem, &summary);
+  LOG(INFO) << summary.FullReport();
+
+  const transform::Rigid3d transform_optimized(
+      Eigen::Map<const Eigen::Matrix<double, 3, 1>>(translation.data()),
+      Eigen::Quaterniond(rotation[0], rotation[1], rotation[2], rotation[3]));
+
+  LOG(INFO) << transform_optimized.DebugString();
+
+  auto cloud_edge_rhs_optimized =
+      std::make_shared<open3d::geometry::PointCloud>();
+  for (const auto& point : rhs.edge_feature_locations_) {
+    cloud_edge_rhs_optimized->points_.emplace_back(
+        transform_optimized * point.position.cast<double>());
+  }
+  auto cloud_plane_rhs_optimized =
+      std::make_shared<open3d::geometry::PointCloud>();
+  for (const auto& point : rhs.plane_feature_locations_) {
+    cloud_plane_rhs_optimized->points_.emplace_back(
+        transform_optimized * point.position.cast<double>());
+  }
+
+  cloud_edge_rhs_optimized->PaintUniformColor({0.5, 0.0, 0.0});
+  cloud_plane_rhs_optimized->PaintUniformColor({0.0, 1.0, 0.0});
+
+  auto edge_lineset_optimized =
+      open3d::geometry::LineSet::CreateFromPointCloudCorrespondences(
+          *cloud_edge_rhs_optimized, *cloud_edge_lhs,
+          edge_render_correspondences);
+  auto plane_lineset_optimized =
+      open3d::geometry::LineSet::CreateFromPointCloudCorrespondences(
+          *cloud_plane_rhs_optimized, *cloud_plane_lhs,
+          plane_render_correspondences);
+
+  open3d::visualization::DrawGeometries(
+      {cloud_edge_lhs, cloud_edge_rhs_optimized, cloud_plane_lhs,
+       cloud_plane_rhs_optimized, edge_lineset_optimized,
+       plane_lineset_optimized});
 }
 
 std::unique_ptr<OptimizingLocalTrajectoryBuilder::MatchingResult>
