@@ -23,7 +23,6 @@
 
 #include "Eigen/Core"
 #include "Eigen/Geometry"
-#include "absl/strings/substitute.h"
 #include "cartographer/common/lua_parameter_dictionary.h"
 #include "cartographer/common/math.h"
 #include "cartographer/common/port.h"
@@ -78,8 +77,12 @@ class Rigid2 {
   }
 
   std::string DebugString() const {
-    return absl::Substitute("{ t: [$0, $1], r: [$2] }", translation().x(),
-                            translation().y(), rotation().angle());
+    //    return absl::Substitute("{ t: [$0, $1], r: [$2] }", translation().x(),
+    //                            translation().y(), rotation().angle());
+
+    return ("{ t: [%f, %f], r: [%f] }");
+    //    , translation().x(),
+    //                            translation().y(), rotation().angle());
   }
 
  private:
@@ -163,10 +166,12 @@ class Rigid3 {
   }
 
   std::string DebugString() const {
-    return absl::Substitute("{ t: [$0, $1, $2], q: [$3, $4, $5, $6] }",
-                            translation().x(), translation().y(),
-                            translation().z(), rotation().w(), rotation().x(),
-                            rotation().y(), rotation().z());
+    return ("{ t: [%f, %f, %f], q: [%f, %f, %f, %f] }");
+    //    ,
+    //                            translation().x(), translation().y(),
+    //                            translation().z(), rotation().w(),
+    //                            rotation().x(), rotation().y(),
+    //                            rotation().z());
   }
 
   bool IsValid() const {

@@ -26,27 +26,42 @@ class PlaneFeatureCostFunctor3D {
         correspondences_(correspondences) {}
 
   template <typename T>
-  bool operator()(const T* const translation, const T* const rotation,
+  bool operator()(const T* const translation_0, const T* const rotation_0,
+                  const T* const translation_1, const T* const rotation_1,
                   T* const residual) const {
-    const transform::Rigid3<T> transform(
-        Eigen::Map<const Eigen::Matrix<T, 3, 1>>(translation),
-        Eigen::Quaternion<T>(rotation[0], rotation[1], rotation[2],
-                             rotation[3]));
+    const transform::Rigid3<T> transform_0(
+        Eigen::Map<const Eigen::Matrix<T, 3, 1>>(translation_0),
+        Eigen::Quaternion<T>(rotation_0[0], rotation_0[1], rotation_0[2],
+                             rotation_0[3]));
+    const transform::Rigid3<T> transform_1(
+        Eigen::Map<const Eigen::Matrix<T, 3, 1>>(translation_1),
+        Eigen::Quaternion<T>(rotation_1[0], rotation_1[1], rotation_1[2],
+                             rotation_1[3]));
 
     for (size_t i = 0; i < correspondences_.size(); ++i) {
+      CHECK_GT(correspondences_.size(), i);
+      CHECK_EQ(correspondences_[i].size(), 4);
+      CHECK(rhs_plane_features_.size() > correspondences_[i][0]);
+      CHECK(lhs_plane_features_.size() > correspondences_[i][1]);
+      CHECK(lhs_plane_features_.size() > correspondences_[i][2]);
+      CHECK(lhs_plane_features_.size() > correspondences_[i][3]);
       const Eigen::Matrix<T, 3, 1> rhs_i =
-          transform *
+          transform_1 *
           rhs_plane_features_[correspondences_[i][0]].position.cast<T>();
       const Eigen::Matrix<T, 3, 1> lhs_j =
+          transform_0 *
           lhs_plane_features_[correspondences_[i][1]].position.cast<T>();
       const Eigen::Matrix<T, 3, 1> lhs_l =
+          transform_0 *
           lhs_plane_features_[correspondences_[i][2]].position.cast<T>();
       const Eigen::Matrix<T, 3, 1> lhs_m =
+          transform_0 *
           lhs_plane_features_[correspondences_[i][3]].position.cast<T>();
 
       const T numerator =
           (rhs_i - lhs_j).dot((lhs_j - lhs_l).cross(lhs_j - lhs_m));
-      const T denominator = ((lhs_j - lhs_l).cross(lhs_j - lhs_m)).norm();
+      const T denominator =
+          ((lhs_j - lhs_l).cross(lhs_j - lhs_m)).norm() + T(1e-7);
       residual[i] = scaling_factor_ * numerator / denominator;
     }
     return true;

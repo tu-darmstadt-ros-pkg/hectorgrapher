@@ -24,6 +24,7 @@
 
 #include "cartographer/common/time.h"
 #include "cartographer/mapping/3d/submap_3d.h"
+#include "cartographer/mapping/internal/3d/feature_cloud_set.h"
 #include "cartographer/mapping/internal/3d/imu_integration.h"
 #include "cartographer/mapping/internal/3d/state.h"
 #include "cartographer/mapping/internal/motion_filter.h"
@@ -39,34 +40,6 @@
 
 namespace cartographer {
 namespace mapping {
-
-struct FeatureCloudSet {
-  FeatureCloudSet(float plane_threshold, float edge_threshold, size_t num_scans,
-                  size_t num_segments)
-      : plane_threshold_(plane_threshold),
-        edge_threshold_(edge_threshold),
-        num_scans_(num_scans),
-        num_segments_(num_segments),
-        multi_scan_cloud_(num_scans) {}
-
-  void Transform(const transform::Rigid3f& transformation) {
-    for (auto& cloud : multi_scan_cloud_) {
-      cloud = sensor::TransformTimedPointCloud(cloud, transformation);
-    }
-    plane_feature_locations_ = sensor::TransformTimedPointCloud(
-        plane_feature_locations_, transformation);
-    edge_feature_locations_ = sensor::TransformTimedPointCloud(
-        edge_feature_locations_, transformation);
-  }
-
-  float plane_threshold_;
-  float edge_threshold_;
-  size_t num_scans_;
-  size_t num_segments_;
-  std::vector<sensor::TimedPointCloud> multi_scan_cloud_;
-  sensor::TimedPointCloud plane_feature_locations_;
-  sensor::TimedPointCloud edge_feature_locations_;
-};
 
 // Batches up some sensor data and optimizes them in one go to get a locally
 // consistent trajectory.
@@ -119,17 +92,13 @@ class OptimizingLocalTrajectoryBuilder {
     sensor::PointCloud points;
     sensor::PointCloud high_resolution_filtered_points;
     sensor::PointCloud low_resolution_filtered_points;
+    std::shared_ptr<FeatureCloudSet> feature_cloud_set_;
   };
 
   struct ControlPoint {
     common::Time time;
     State state;
   };
-
-  std::shared_ptr<FeatureCloudSet> ComputeFeatureSet(
-      const sensor::TimedPointCloudData& range_data_in_tracking);
-
-  void MatchFeatureSets(const FeatureCloudSet& lhs, const FeatureCloudSet& rhs);
 
   State PredictStateRK4(const State& start_state, const common::Time start_time,
                         const common::Time end_time);

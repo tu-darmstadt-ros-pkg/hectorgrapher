@@ -148,332 +148,146 @@ void OptimizingLocalTrajectoryBuilder::AddOdometryData(
   odometer_data_.push_back(odometry_data);
 }
 
-std::shared_ptr<FeatureCloudSet>
-OptimizingLocalTrajectoryBuilder::ComputeFeatureSet(
-    const sensor::TimedPointCloudData& range_data_in_tracking) {
-  sensor::TimedPointCloudData range_data_in_sensor =
-      sensor::TimedPointCloudData{
-          range_data_in_tracking.time, transform::Rigid3f::Identity(),
-          sensor::TransformTimedPointCloud(
-              range_data_in_tracking.ranges,
-              range_data_in_tracking.origin_transform.inverse())};
-
-  size_t num_scans = 16;
-  float scan_range_rad = common::DegToRad(30);
-  std::vector<sensor::TimedPointCloud> filterd_multi_scan_cloud(num_scans);
-
-  auto cloud = std::make_shared<open3d::geometry::PointCloud>();
-
-  float plane_threshold = 1e-5;
-  float edge_threshold = 0.1;
-  float min_feature_distance = 0.1;
-  size_t num_segments = 4;
-  size_t num_edge_features_per_segment = 6;
-  size_t num_plane_features_per_segment = 6;
-
-  auto feature_cloud_set = std::make_shared<FeatureCloudSet>(
-      plane_threshold, edge_threshold, num_scans, num_segments);
-
-  for (const auto& point : range_data_in_sensor.ranges) {
-    float angle = std::atan2(
-        point.position.z(), std::sqrt(point.position.x() * point.position.x() +
-                                      point.position.y() * point.position.y()));
-    int scan_idx = std::round((angle + scan_range_rad / 2.f) / scan_range_rad *
-                              float(num_scans - 1));
-    CHECK_GE(scan_idx, 0);
-    CHECK_GT(num_scans, scan_idx);
-    feature_cloud_set->multi_scan_cloud_[scan_idx].push_back({point.position});
-  }
-
-  int i = 0;
-  for (const auto& cloud : feature_cloud_set->multi_scan_cloud_) {
-    ++i;
-  }
-
-  // Compute curvature
-  for (size_t scan_cloud_idx = 0;
-       scan_cloud_idx < feature_cloud_set->multi_scan_cloud_.size();
-       scan_cloud_idx++) {
-    const auto& scan_cloud =
-        feature_cloud_set->multi_scan_cloud_[scan_cloud_idx];
-    for (size_t point_idx = 0; point_idx < scan_cloud.size(); point_idx++) {
-      if (point_idx < 6 || point_idx >= scan_cloud.size() - 6) continue;
-      auto point = scan_cloud[point_idx];
-      int i = point_idx;
-      float diff_x =
-          scan_cloud[i - 5].position.x() + scan_cloud[i - 4].position.x() +
-          scan_cloud[i - 3].position.x() + scan_cloud[i - 2].position.x() +
-          scan_cloud[i - 1].position.x() + scan_cloud[i + 5].position.x() +
-          scan_cloud[i + 4].position.x() + scan_cloud[i + 3].position.x() +
-          scan_cloud[i + 2].position.x() + scan_cloud[i + 1].position.x() -
-          10 * scan_cloud[i].position.x();
-      float diff_y =
-          scan_cloud[i - 5].position.y() + scan_cloud[i - 4].position.y() +
-          scan_cloud[i - 3].position.y() + scan_cloud[i - 2].position.y() +
-          scan_cloud[i - 1].position.y() + scan_cloud[i + 5].position.y() +
-          scan_cloud[i + 4].position.y() + scan_cloud[i + 3].position.y() +
-          scan_cloud[i + 2].position.y() + scan_cloud[i + 1].position.y() -
-          10 * scan_cloud[i].position.y();
-      float diff_z =
-          scan_cloud[i - 5].position.z() + scan_cloud[i - 4].position.z() +
-          scan_cloud[i - 3].position.z() + scan_cloud[i - 2].position.z() +
-          scan_cloud[i - 1].position.z() + scan_cloud[i + 5].position.z() +
-          scan_cloud[i + 4].position.z() + scan_cloud[i + 3].position.z() +
-          scan_cloud[i + 2].position.z() + scan_cloud[i + 1].position.z() -
-          10 * scan_cloud[i].position.z();
-      float point_curvature =
-          diff_x * diff_x + diff_y * diff_y + diff_z * diff_z;
-      point_curvature /= scan_cloud[i].position.norm();
-
-      float angle = std::atan2(scan_cloud[i + 5].position.y(),
-                               scan_cloud[i + 5].position.x()) -
-                    std::atan2(scan_cloud[i - 5].position.y(),
-                               scan_cloud[i - 5].position.x());
-      bool angle_continuous = (std::abs(common::RadToDeg(angle)) < 2.1);
-      bool depth_continuous = true;
-
-      Eigen::Vector3f scan_direction = scan_cloud[i].position.normalized();
-      for (int i_depth = -5; i_depth <= 5; ++i_depth) {
-        if (std::abs((scan_cloud[i - i_depth].position -
-                      scan_cloud[i - i_depth + 1].position)
-                         .dot(scan_direction)) > 0.2)
-          depth_continuous = false;
-      }
-
-      if (angle_continuous && depth_continuous) {
-        filterd_multi_scan_cloud[scan_cloud_idx].push_back(
-            {scan_cloud[i].position, point_curvature});
-        double r = point_curvature / 0.05;
-        r = common::Clamp(r, 0.0, 1.0);
-        cloud->colors_.emplace_back(r, 1.0 - r, 0.1);
-        cloud->points_.emplace_back(point.position[0], point.position[1],
-                                    point.position[2]);
-      }
-    }
-  }
-
-  for (const auto& scan_cloud : filterd_multi_scan_cloud) {
-    std::vector<sensor::TimedPointCloud> segmented_scan_cloud(num_segments);
-    for (const auto& point : scan_cloud) {
-      float angle = std::atan2(point.position.y(), point.position.x());
-      int segment_idx =
-          std::round((angle + M_PI) / (2.0 * M_PI) * float(num_segments - 1));
-      segmented_scan_cloud[segment_idx].push_back(point);
-    }
-    for (auto& scan_cloud_segment : segmented_scan_cloud) {
-      if (scan_cloud_segment.empty()) continue;
-      std::sort(scan_cloud_segment.begin(), scan_cloud_segment.end(),
-                [](sensor::TimedRangefinderPoint lhs,
-                   sensor::TimedRangefinderPoint rhs) {
-                  return lhs.time < rhs.time;
-                });
-
-      sensor::TimedPointCloud segment_features;
-      // plane features
-      for (const auto& candidate : scan_cloud_segment) {
-        if (candidate.time > plane_threshold ||
-            segment_features.size() == num_plane_features_per_segment)
-          break;
-        bool distance_check = true;
-        for (const auto& point : segment_features) {
-          if ((candidate.position - point.position).norm() <
-              min_feature_distance)
-            distance_check = false;
-        }
-        if (distance_check) segment_features.push_back(candidate);
-      }
-      feature_cloud_set->plane_feature_locations_.insert(
-          feature_cloud_set->plane_feature_locations_.end(),
-          segment_features.begin(), segment_features.end());
-      segment_features.clear();
-      for (int i = scan_cloud_segment.size() - 1; i >= 0; --i) {
-        sensor::TimedRangefinderPoint& candidate = scan_cloud_segment[i];
-        if (candidate.time < edge_threshold ||
-            segment_features.size() == num_edge_features_per_segment)
-          break;
-        bool distance_check = true;
-        for (const auto& point : segment_features) {
-          if ((candidate.position - point.position).norm() <
-              min_feature_distance)
-            distance_check = false;
-        }
-        if (distance_check) segment_features.push_back(candidate);
-      }
-      feature_cloud_set->edge_feature_locations_.insert(
-          feature_cloud_set->edge_feature_locations_.end(),
-          segment_features.begin(), segment_features.end());
-    }
-  }
-
-  std::vector<std::shared_ptr<const open3d::geometry::Geometry>>
-      render_geometries;
-  render_geometries.push_back(
-      open3d::geometry::TriangleMesh::CreateCoordinateFrame(0.5));
-  render_geometries.push_back(cloud);
-
-  for (const auto& edge_feature : feature_cloud_set->edge_feature_locations_) {
-    std::shared_ptr<open3d::geometry::TriangleMesh> sphere =
-        open3d::geometry::TriangleMesh::CreateSphere(0.1, 20);
-    Eigen::Matrix4d trans_to_origin = Eigen::Matrix4d::Identity();
-    trans_to_origin.block<3, 1>(0, 3) = edge_feature.position.cast<double>();
-    sphere->Transform(trans_to_origin);
-    sphere->PaintUniformColor({1.0, 0.0, 0.0});
-    render_geometries.push_back(sphere);
-  }
-  for (const auto& plane_feature :
-       feature_cloud_set->plane_feature_locations_) {
-    std::shared_ptr<open3d::geometry::TriangleMesh> sphere =
-        open3d::geometry::TriangleMesh::CreateSphere(0.1, 20);
-    Eigen::Matrix4d trans_to_origin = Eigen::Matrix4d::Identity();
-    trans_to_origin.block<3, 1>(0, 3) = plane_feature.position.cast<double>();
-    sphere->Transform(trans_to_origin);
-    sphere->PaintUniformColor({0.0, 1.0, 0.0});
-    render_geometries.push_back(sphere);
-  }
-
-  open3d::visualization::DrawGeometries(render_geometries);
-
-  feature_cloud_set->Transform(range_data_in_tracking.origin_transform);
-
-  return feature_cloud_set;
-}
-
-void OptimizingLocalTrajectoryBuilder::MatchFeatureSets(
-    const FeatureCloudSet& lhs, const FeatureCloudSet& rhs) {
-  auto cloud_edge_lhs = std::make_shared<open3d::geometry::PointCloud>();
-  for (const auto& point : lhs.edge_feature_locations_) {
-    cloud_edge_lhs->points_.emplace_back(point.position.cast<double>());
-  }
-  auto cloud_plane_lhs = std::make_shared<open3d::geometry::PointCloud>();
-  for (const auto& point : lhs.plane_feature_locations_) {
-    cloud_plane_lhs->points_.emplace_back(point.position.cast<double>());
-  }
-  auto cloud_edge_rhs = std::make_shared<open3d::geometry::PointCloud>();
-  for (const auto& point : rhs.edge_feature_locations_) {
-    cloud_edge_rhs->points_.emplace_back(point.position.cast<double>());
-  }
-  auto cloud_plane_rhs = std::make_shared<open3d::geometry::PointCloud>();
-  for (const auto& point : rhs.plane_feature_locations_) {
-    cloud_plane_rhs->points_.emplace_back(point.position.cast<double>());
-  }
-
-  open3d::geometry::KDTreeFlann kdtree_edge_lhs;
-  open3d::geometry::KDTreeFlann kdtree_plane_lhs;
-  kdtree_edge_lhs.SetGeometry(*cloud_edge_lhs);
-  kdtree_plane_lhs.SetGeometry(*cloud_plane_lhs);
-
-  cloud_edge_lhs->PaintUniformColor({1.0, 0.0, 0.0});
-  cloud_edge_rhs->PaintUniformColor({0.5, 0.0, 0.0});
-  cloud_plane_lhs->PaintUniformColor({0.0, 0.5, 0.0});
-  cloud_plane_rhs->PaintUniformColor({0.0, 1.0, 0.0});
-
-  std::vector<std::vector<int>> edge_correspondences;
-  std::vector<std::pair<int, int>> edge_render_correspondences;
-  for (int edge_idx = 0; edge_idx < cloud_edge_rhs->points_.size();
-       ++edge_idx) {
-    std::vector<int> indices_vec(2);
-    std::vector<double> dists_vec(2);
-    int k = kdtree_edge_lhs.SearchHybrid(cloud_edge_rhs->points_[edge_idx], 0.4,
-                                         2, indices_vec, dists_vec);
-    if (k == 2) {
-      edge_correspondences.push_back(
-          {edge_idx, indices_vec[0], indices_vec[1]});
-      edge_render_correspondences.emplace_back(edge_idx, indices_vec[0]);
-      edge_render_correspondences.emplace_back(edge_idx, indices_vec[1]);
-    }
-  }
-  std::vector<std::vector<int>> plane_correspondences;
-  std::vector<std::pair<int, int>> plane_render_correspondences;
-  for (int plane_idx = 0; plane_idx < cloud_plane_rhs->points_.size();
-       ++plane_idx) {
-    std::vector<int> indices_vec(3);
-    std::vector<double> dists_vec(3);
-    int k = kdtree_plane_lhs.SearchHybrid(cloud_plane_rhs->points_[plane_idx],
-                                          0.5, 3, indices_vec, dists_vec);
-    if (k == 3) {
-      plane_correspondences.push_back(
-          {plane_idx, indices_vec[0], indices_vec[1], indices_vec[2]});
-      plane_render_correspondences.emplace_back(plane_idx, indices_vec[0]);
-      plane_render_correspondences.emplace_back(plane_idx, indices_vec[1]);
-      plane_render_correspondences.emplace_back(plane_idx, indices_vec[2]);
-    }
-  }
-  auto edge_lineset =
-      open3d::geometry::LineSet::CreateFromPointCloudCorrespondences(
-          *cloud_edge_rhs, *cloud_edge_lhs, edge_render_correspondences);
-  auto plane_lineset =
-      open3d::geometry::LineSet::CreateFromPointCloudCorrespondences(
-          *cloud_plane_rhs, *cloud_plane_lhs, plane_render_correspondences);
-
-  open3d::visualization::DrawGeometries({cloud_edge_lhs, cloud_edge_rhs,
-                                         cloud_plane_lhs, cloud_plane_rhs,
-                                         edge_lineset, plane_lineset});
-
-  ceres::Problem problem;
-  std::array<double, 3> translation = {{0, 0, 0}};
-  std::array<double, 4> rotation = {{1, 0, 0, 0}};
-
-  problem.AddResidualBlock(
-      new ceres::AutoDiffCostFunction<EdgeFeatureCostFunctor3D, ceres::DYNAMIC,
-                                      3, 4>(
-          new EdgeFeatureCostFunctor3D(1.0, lhs.edge_feature_locations_,
-                                       rhs.edge_feature_locations_,
-                                       edge_correspondences),
-          edge_correspondences.size()),
-      nullptr, translation.data(), rotation.data());
-
-  problem.AddResidualBlock(
-      new ceres::AutoDiffCostFunction<PlaneFeatureCostFunctor3D, ceres::DYNAMIC,
-                                      3, 4>(
-          new PlaneFeatureCostFunctor3D(1.0, lhs.plane_feature_locations_,
-                                        rhs.plane_feature_locations_,
-                                        plane_correspondences),
-          plane_correspondences.size()),
-      nullptr, translation.data(), rotation.data());
-
-  problem.SetParameterization(rotation.data(),
-                              new ceres::QuaternionParameterization());
-
-  ceres::Solver::Summary summary;
-  ceres::Solve(ceres_solver_options_, &problem, &summary);
-  LOG(INFO) << summary.FullReport();
-
-  const transform::Rigid3d transform_optimized(
-      Eigen::Map<const Eigen::Matrix<double, 3, 1>>(translation.data()),
-      Eigen::Quaterniond(rotation[0], rotation[1], rotation[2], rotation[3]));
-
-  LOG(INFO) << transform_optimized.DebugString();
-
-  auto cloud_edge_rhs_optimized =
-      std::make_shared<open3d::geometry::PointCloud>();
-  for (const auto& point : rhs.edge_feature_locations_) {
-    cloud_edge_rhs_optimized->points_.emplace_back(
-        transform_optimized * point.position.cast<double>());
-  }
-  auto cloud_plane_rhs_optimized =
-      std::make_shared<open3d::geometry::PointCloud>();
-  for (const auto& point : rhs.plane_feature_locations_) {
-    cloud_plane_rhs_optimized->points_.emplace_back(
-        transform_optimized * point.position.cast<double>());
-  }
-
-  cloud_edge_rhs_optimized->PaintUniformColor({0.5, 0.0, 0.0});
-  cloud_plane_rhs_optimized->PaintUniformColor({0.0, 1.0, 0.0});
-
-  auto edge_lineset_optimized =
-      open3d::geometry::LineSet::CreateFromPointCloudCorrespondences(
-          *cloud_edge_rhs_optimized, *cloud_edge_lhs,
-          edge_render_correspondences);
-  auto plane_lineset_optimized =
-      open3d::geometry::LineSet::CreateFromPointCloudCorrespondences(
-          *cloud_plane_rhs_optimized, *cloud_plane_lhs,
-          plane_render_correspondences);
-
-  open3d::visualization::DrawGeometries(
-      {cloud_edge_lhs, cloud_edge_rhs_optimized, cloud_plane_lhs,
-       cloud_plane_rhs_optimized, edge_lineset_optimized,
-       plane_lineset_optimized});
-}
+//
+// void OptimizingLocalTrajectoryBuilder::ExtractCorrespondences(
+//    const FeatureCloudSet& lhs, const FeatureCloudSet& rhs) {
+//  auto cloud_edge_lhs = std::make_shared<open3d::geometry::PointCloud>();
+//  for (const auto& point : lhs.edge_feature_locations_) {
+//    cloud_edge_lhs->points_.emplace_back(point.position.cast<double>());
+//  }
+//  auto cloud_plane_lhs = std::make_shared<open3d::geometry::PointCloud>();
+//  for (const auto& point : lhs.plane_feature_locations_) {
+//    cloud_plane_lhs->points_.emplace_back(point.position.cast<double>());
+//  }
+//  auto cloud_edge_rhs = std::make_shared<open3d::geometry::PointCloud>();
+//  for (const auto& point : rhs.edge_feature_locations_) {
+//    cloud_edge_rhs->points_.emplace_back(point.position.cast<double>());
+//  }
+//  auto cloud_plane_rhs = std::make_shared<open3d::geometry::PointCloud>();
+//  for (const auto& point : rhs.plane_feature_locations_) {
+//    cloud_plane_rhs->points_.emplace_back(point.position.cast<double>());
+//  }
+//
+//  open3d::geometry::KDTreeFlann kdtree_edge_lhs;
+//  open3d::geometry::KDTreeFlann kdtree_plane_lhs;
+//  kdtree_edge_lhs.SetGeometry(*cloud_edge_lhs);
+//  kdtree_plane_lhs.SetGeometry(*cloud_plane_lhs);
+//
+//  cloud_edge_lhs->PaintUniformColor({1.0, 0.0, 0.0});
+//  cloud_edge_rhs->PaintUniformColor({0.5, 0.0, 0.0});
+//  cloud_plane_lhs->PaintUniformColor({0.0, 0.5, 0.0});
+//  cloud_plane_rhs->PaintUniformColor({0.0, 1.0, 0.0});
+//
+//  std::vector<std::vector<int>> edge_correspondences;
+//  std::vector<std::pair<int, int>> edge_render_correspondences;
+//  for (int edge_idx = 0; edge_idx < cloud_edge_rhs->points_.size();
+//       ++edge_idx) {
+//    std::vector<int> indices_vec(2);
+//    std::vector<double> dists_vec(2);
+//    int k = kdtree_edge_lhs.SearchHybrid(cloud_edge_rhs->points_[edge_idx],
+//    0.4,
+//                                         2, indices_vec, dists_vec);
+//    if (k == 2) {
+//      edge_correspondences.push_back(
+//          {edge_idx, indices_vec[0], indices_vec[1]});
+//      edge_render_correspondences.emplace_back(edge_idx, indices_vec[0]);
+//      edge_render_correspondences.emplace_back(edge_idx, indices_vec[1]);
+//    }
+//  }
+//  std::vector<std::vector<int>> plane_correspondences;
+//  std::vector<std::pair<int, int>> plane_render_correspondences;
+//  for (int plane_idx = 0; plane_idx < cloud_plane_rhs->points_.size();
+//       ++plane_idx) {
+//    std::vector<int> indices_vec(3);
+//    std::vector<double> dists_vec(3);
+//    int k = kdtree_plane_lhs.SearchHybrid(cloud_plane_rhs->points_[plane_idx],
+//                                          0.5, 3, indices_vec, dists_vec);
+//    if (k == 3) {
+//      plane_correspondences.push_back(
+//          {plane_idx, indices_vec[0], indices_vec[1], indices_vec[2]});
+//      plane_render_correspondences.emplace_back(plane_idx, indices_vec[0]);
+//      plane_render_correspondences.emplace_back(plane_idx, indices_vec[1]);
+//      plane_render_correspondences.emplace_back(plane_idx, indices_vec[2]);
+//    }
+//  }
+//  auto edge_lineset =
+//      open3d::geometry::LineSet::CreateFromPointCloudCorrespondences(
+//          *cloud_edge_rhs, *cloud_edge_lhs, edge_render_correspondences);
+//  auto plane_lineset =
+//      open3d::geometry::LineSet::CreateFromPointCloudCorrespondences(
+//          *cloud_plane_rhs, *cloud_plane_lhs, plane_render_correspondences);
+//
+//  open3d::visualization::DrawGeometries({cloud_edge_lhs, cloud_edge_rhs,
+//                                         cloud_plane_lhs, cloud_plane_rhs,
+//                                         edge_lineset, plane_lineset});
+//
+//  ceres::Problem problem;
+//  std::array<double, 3> translation = {{0, 0, 0}};
+//  std::array<double, 4> rotation = {{1, 0, 0, 0}};
+//
+//  problem.AddResidualBlock(
+//      new ceres::AutoDiffCostFunction<EdgeFeatureCostFunctor3D,
+//      ceres::DYNAMIC,
+//                                      3, 4>(
+//          new EdgeFeatureCostFunctor3D(1.0, lhs.edge_feature_locations_,
+//                                       rhs.edge_feature_locations_,
+//                                       edge_correspondences),
+//          edge_correspondences.size()),
+//      nullptr, translation.data(), rotation.data());
+//
+//  problem.AddResidualBlock(
+//      new ceres::AutoDiffCostFunction<PlaneFeatureCostFunctor3D,
+//      ceres::DYNAMIC,
+//                                      3, 4>(
+//          new PlaneFeatureCostFunctor3D(1.0, lhs.plane_feature_locations_,
+//                                        rhs.plane_feature_locations_,
+//                                        plane_correspondences),
+//          plane_correspondences.size()),
+//      nullptr, translation.data(), rotation.data());
+//
+//  problem.SetParameterization(rotation.data(),
+//                              new ceres::QuaternionParameterization());
+//
+//  ceres::Solver::Summary summary;
+//  ceres::Solve(ceres_solver_options_, &problem, &summary);
+//  LOG(INFO) << summary.FullReport();
+//
+//  const transform::Rigid3d transform_optimized(
+//      Eigen::Map<const Eigen::Matrix<double, 3, 1>>(translation.data()),
+//      Eigen::Quaterniond(rotation[0], rotation[1], rotation[2], rotation[3]));
+//
+//  LOG(INFO) << transform_optimized.DebugString();
+//
+//  auto cloud_edge_rhs_optimized =
+//      std::make_shared<open3d::geometry::PointCloud>();
+//  for (const auto& point : rhs.edge_feature_locations_) {
+//    cloud_edge_rhs_optimized->points_.emplace_back(
+//        transform_optimized * point.position.cast<double>());
+//  }
+//  auto cloud_plane_rhs_optimized =
+//      std::make_shared<open3d::geometry::PointCloud>();
+//  for (const auto& point : rhs.plane_feature_locations_) {
+//    cloud_plane_rhs_optimized->points_.emplace_back(
+//        transform_optimized * point.position.cast<double>());
+//  }
+//
+//  cloud_edge_rhs_optimized->PaintUniformColor({0.5, 0.0, 0.0});
+//  cloud_plane_rhs_optimized->PaintUniformColor({0.0, 1.0, 0.0});
+//
+//  auto edge_lineset_optimized =
+//      open3d::geometry::LineSet::CreateFromPointCloudCorrespondences(
+//          *cloud_edge_rhs_optimized, *cloud_edge_lhs,
+//          edge_render_correspondences);
+//  auto plane_lineset_optimized =
+//      open3d::geometry::LineSet::CreateFromPointCloudCorrespondences(
+//          *cloud_plane_rhs_optimized, *cloud_plane_lhs,
+//          plane_render_correspondences);
+//
+//  open3d::visualization::DrawGeometries(
+//      {cloud_edge_lhs, cloud_edge_rhs_optimized, cloud_plane_lhs,
+//       cloud_plane_rhs_optimized, edge_lineset_optimized,
+//       plane_lineset_optimized});
+//}
 
 std::unique_ptr<OptimizingLocalTrajectoryBuilder::MatchingResult>
 OptimizingLocalTrajectoryBuilder::AddRangeData(
@@ -488,17 +302,21 @@ OptimizingLocalTrajectoryBuilder::AddRangeData(
     return nullptr;
   }
 
-  feature_sets_in_tracking_.push_back(
-      ComputeFeatureSet(range_data_in_tracking));
-
-  if (feature_sets_in_tracking_.size() > 1) {
-    MatchFeatureSets(*feature_sets_in_tracking_[0],
-                     *feature_sets_in_tracking_[1]);
-  }
+  //  feature_sets_in_tracking_.push_back(
+  //      ComputeFeatureSet(range_data_in_tracking));
+  //
+  //  if (feature_sets_in_tracking_.size() > 1) {
+  //    ExtractCorrespondences(*feature_sets_in_tracking_[0],
+  //                     *feature_sets_in_tracking_[1]);
+  //  }
 
   PointCloudSet point_cloud_set;
   point_cloud_set.time = range_data_in_tracking.time;
   point_cloud_set.origin = range_data_in_tracking.origin();
+  sensor::TimedPointCloudData timed_point_cloud_filtered(
+      range_data_in_tracking.time);
+  timed_point_cloud_filtered.origin_transform =
+      range_data_in_tracking.origin_transform;
   for (const auto& hit : range_data_in_tracking.ranges) {
     const Eigen::Vector3f delta =
         hit.position - range_data_in_tracking.origin();
@@ -506,9 +324,19 @@ OptimizingLocalTrajectoryBuilder::AddRangeData(
     if (range >= options_.min_range()) {
       if (range <= options_.max_range()) {
         point_cloud_set.points.push_back({hit.position});
+        timed_point_cloud_filtered.ranges.push_back(hit);
       }
     }
   }
+
+  float plane_threshold = 1e-5;
+  float edge_threshold = 0.1;
+  size_t num_scans = 16;
+  size_t num_segments = 4;
+  point_cloud_set.feature_cloud_set_ = std::make_shared<FeatureCloudSet>(
+      plane_threshold, edge_threshold, num_scans, num_segments);
+    point_cloud_set.feature_cloud_set_->ComputeFeatureSet(
+        timed_point_cloud_filtered);
 
   auto high_resolution_options =
       options_.high_resolution_adaptive_voxel_filter_options();
@@ -549,15 +377,18 @@ void OptimizingLocalTrajectoryBuilder::AddControlPoint(common::Time t) {
       control_points_.push_back(ControlPoint{
           t, State(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(),
                    Eigen::Vector3d::Zero())});
+      control_points_.back().state.translation[1] += 0.1;
     }
   } else {
     if (active_submaps_.submaps().empty()) {
       control_points_.push_back(
           ControlPoint{t, control_points_.back().state});
+      control_points_.back().state.translation[1] += 0.1;
     } else {
       control_points_.push_back(
           ControlPoint{t, PredictState(control_points_.back().state,
                                        control_points_.back().time, t)});
+      control_points_.back().state.translation[1] += 0.1;
     }
   }
 }
@@ -672,9 +503,95 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
     // solving the optimization problem.
     TransformStates(matching_submap->local_pose().inverse());
     auto next_control_point = control_points_.begin();
-    for (size_t i = 0; i < point_cloud_data_.size(); ++i) {
+
+
+    std::vector<std::vector<std::vector<int>>> data_edge_correspondences;
+    std::vector<std::vector<std::vector<int>>> data_plane_correspondences;
+    std::vector<std::shared_ptr<const open3d::geometry::Geometry>>
+      geometry_ptrs;
+    for (size_t i = 0; i < point_cloud_data_.size()-1; ++i) {
       PointCloudSet& point_cloud_set = point_cloud_data_[i];
+      PointCloudSet& next_point_cloud_set = point_cloud_data_[i + 1];
       if (point_cloud_set.time < control_points_.back().time) {
+        while (next_control_point->time <= point_cloud_set.time) {
+          CHECK(next_control_point != control_points_.end());
+          next_control_point++;
+        }
+        CHECK(next_control_point != control_points_.begin());
+        CHECK_LE(std::prev(next_control_point)->time, point_cloud_set.time);
+        CHECK_GE(next_control_point->time, point_cloud_set.time);
+        const double duration = common::ToSeconds(
+          next_control_point->time - std::prev(next_control_point)->time);
+        const double interpolation_factor =
+          common::ToSeconds(point_cloud_set.time -
+            std::prev(next_control_point)->time) /
+            duration;
+
+        std::vector<std::vector<int>> edge_correspondences;
+        std::vector<std::vector<int>> plane_correspondences;
+
+        transform::Rigid3d
+          dT = std::prev(next_control_point)->state.ToRigid() * next_control_point->state.ToRigid().inverse();
+        sensor::TimedPointCloud transformed_plane_feature_locations =
+          sensor::TransformTimedPointCloud(next_point_cloud_set.feature_cloud_set_->plane_feature_locations_,
+                                           dT.cast<float>());
+        sensor::TimedPointCloud transformed_edge_feature_locations =
+          sensor::TransformTimedPointCloud(next_point_cloud_set.feature_cloud_set_->edge_feature_locations_,
+                                           dT.cast<float>());
+
+        point_cloud_set.feature_cloud_set_->ExtractCorrespondences(
+          transformed_plane_feature_locations,
+          transformed_edge_feature_locations,
+          &edge_correspondences, &plane_correspondences);
+        data_edge_correspondences.push_back(edge_correspondences);
+        data_plane_correspondences.push_back(plane_correspondences);
+
+
+
+        auto next_cloud_edge = std::make_shared<open3d::geometry::PointCloud>();
+        for (const auto& point : next_point_cloud_set.points
+          ) {
+          next_cloud_edge->points_.emplace_back( next_control_point->state.ToRigid() * point.position.cast<double>());
+        }
+        auto next_cloud_plane = std::make_shared<open3d::geometry::PointCloud>();
+        for (const auto& point : next_point_cloud_set.points
+          ) {
+          next_cloud_plane->points_.emplace_back( next_control_point->state.ToRigid() * point.position.cast<double>());
+        }
+//        auto cloud_edge = std::make_shared<open3d::geometry::PointCloud>();
+//        for (const auto& point : point_cloud_set.points
+//          ) {
+//          cloud_edge->points_.emplace_back( next_control_point->state.ToRigid() * point.position.cast<double>());
+//        }
+//        auto cloud_plane = std::make_shared<open3d::geometry::PointCloud>();
+//        for (const auto& point : point_cloud_set.points
+//          ) {
+//          cloud_plane->points_.emplace_back( next_control_point->state.ToRigid() * point.position.cast<double>());
+//        }
+
+//        cloud_edge->PaintUniformColor({1.0, 0.0, 0.0});
+//        cloud_plane->PaintUniformColor({0.0, 0.5, 0.0});
+        next_cloud_edge->PaintUniformColor({0.5, 0.0, 0.0});
+        next_cloud_plane->PaintUniformColor({0.0, 1.0, 0.0});
+
+//        geometry_ptrs.push_back(cloud_edge);
+//        geometry_ptrs.push_back(cloud_plane);
+        geometry_ptrs.push_back(next_cloud_edge);
+        geometry_ptrs.push_back(next_cloud_plane);
+
+      }
+    }
+    static int vis_counter = 0;
+    if(vis_counter % 25 == 0) {
+      open3d::visualization::DrawGeometries(geometry_ptrs);
+    }
+    ++vis_counter;
+    next_control_point = control_points_.begin();
+    for (size_t i = 0; i < point_cloud_data_.size()-1; ++i) {
+      PointCloudSet& point_cloud_set = point_cloud_data_[i];
+      PointCloudSet& next_point_cloud_set = point_cloud_data_[i + 1];
+      if (point_cloud_set.time < control_points_.back().time) {
+
         while (next_control_point->time <= point_cloud_set.time) {
           CHECK(next_control_point != control_points_.end());
           next_control_point++;
@@ -688,113 +605,200 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
             common::ToSeconds(point_cloud_set.time -
                               std::prev(next_control_point)->time) /
             duration;
-        switch (matching_submap->high_resolution_hybrid_grid().GetGridType()) {
-          case GridType::PROBABILITY_GRID: {
-            problem.AddResidualBlock(
-                scan_matching::InterpolatedOccupiedSpaceCostFunction3D::
-                    CreateAutoDiffCostFunction(
-                        options_.optimizing_local_trajectory_builder_options()
-                                .high_resolution_grid_weight() /
-                            std::sqrt(static_cast<double>(
-                                point_cloud_set.high_resolution_filtered_points
-                                    .size())),
-                        point_cloud_set.high_resolution_filtered_points,
-                        static_cast<const HybridGrid&>(
-                            matching_submap->high_resolution_hybrid_grid()),
-                        interpolation_factor),
-                nullptr,
-                std::prev(next_control_point)->state.translation.data(),
-                std::prev(next_control_point)->state.rotation.data(),
-                next_control_point->state.translation.data(),
-                next_control_point->state.rotation.data());
-            break;
-          }
-          case GridType::TSDF: {
-            if (options_.optimizing_local_trajectory_builder_options()
-                    .high_resolution_grid_weight() > 0.0) {
-              if(std::prev(next_control_point)->time == point_cloud_set.time) {
-              problem.AddResidualBlock(
-                  scan_matching::TSDFSpaceCostFunction3D::
-                  CreateAutoDiffCostFunction(
-                      options_.optimizing_local_trajectory_builder_options()
-                          .high_resolution_grid_weight() /
-                          std::sqrt(static_cast<double>(
-                                        point_cloud_set
-                                            .high_resolution_filtered_points.size())),
-                      point_cloud_set.high_resolution_filtered_points,
-                      static_cast<const HybridGridTSDF&>(
-                          matching_submap->high_resolution_hybrid_grid())),
-                  nullptr,
-                  std::prev(next_control_point)->state.translation.data(),
-                  std::prev(next_control_point)->state.rotation.data());
-              }
-              else {
-                problem.AddResidualBlock(
-                    scan_matching::InterpolatedTSDFSpaceCostFunction3D::
-                    CreateAutoDiffCostFunction(
-                        options_.optimizing_local_trajectory_builder_options()
-                            .high_resolution_grid_weight() /
-                            std::sqrt(static_cast<double>(
-                                          point_cloud_set
-                                              .high_resolution_filtered_points.size())),
-                        point_cloud_set.high_resolution_filtered_points,
-                        static_cast<const HybridGridTSDF &>(
-                            matching_submap->high_resolution_hybrid_grid()),
-                        interpolation_factor),
-                    nullptr,
-                    std::prev(next_control_point)->state.translation.data(),
-                    std::prev(next_control_point)->state.rotation.data(),
-                    next_control_point->state.translation.data(),
-                    next_control_point->state.rotation.data());
-              }
-            }
-            if (options_.optimizing_local_trajectory_builder_options()
-                    .low_resolution_grid_weight() > 0.0) {
 
-              if(std::prev(next_control_point)->time == point_cloud_set.time) {
-                problem.AddResidualBlock(
-                    scan_matching::TSDFSpaceCostFunction3D::
-                    CreateAutoDiffCostFunction(
-                        options_.optimizing_local_trajectory_builder_options()
-                            .low_resolution_grid_weight() /
-                            std::sqrt(static_cast<double>(
-                                          point_cloud_set
-                                              .low_resolution_filtered_points.size())),
-                        point_cloud_set.low_resolution_filtered_points,
-                        static_cast<const HybridGridTSDF&>(
-                            matching_submap->low_resolution_hybrid_grid())),
-                    nullptr,
-                    std::prev(next_control_point)->state.translation.data(),
-                    std::prev(next_control_point)->state.rotation.data());
-              }
-              else {
-              problem.AddResidualBlock(
-                  scan_matching::InterpolatedTSDFSpaceCostFunction3D::
-                      CreateAutoDiffCostFunction(
-                          options_.optimizing_local_trajectory_builder_options()
-                                  .low_resolution_grid_weight() /
-                              std::sqrt(static_cast<double>(
-                                  point_cloud_set.low_resolution_filtered_points
-                                      .size())),
-                          point_cloud_set.low_resolution_filtered_points,
-                          static_cast<const HybridGridTSDF&>(
-                              matching_submap->low_resolution_hybrid_grid()),
-                          interpolation_factor),
-                  nullptr,
-                  std::prev(next_control_point)->state.translation.data(),
-                  std::prev(next_control_point)->state.rotation.data(),
-                  next_control_point->state.translation.data(),
-                  next_control_point->state.rotation.data());
-            }
-            }
-            break;
-          }
-          case GridType::NONE:
-            LOG(FATAL) << "Gridtype not initialized.";
-            break;
-        }
+        problem.AddResidualBlock(
+            new ceres::AutoDiffCostFunction<EdgeFeatureCostFunctor3D,
+                                            ceres::DYNAMIC, 3, 4, 3, 4>(
+                new EdgeFeatureCostFunctor3D(
+                    1000.0,
+                    point_cloud_set.feature_cloud_set_
+                        ->edge_feature_locations_,
+                    next_point_cloud_set.feature_cloud_set_->edge_feature_locations_,
+                    data_edge_correspondences[i]),
+                data_edge_correspondences[i].size()),
+            nullptr, std::prev(next_control_point)->state.translation.data(),
+            std::prev(next_control_point)->state.rotation.data(),
+            next_control_point->state.translation.data(),
+            next_control_point->state.rotation.data());
+
+        problem.AddResidualBlock(
+            new ceres::AutoDiffCostFunction<PlaneFeatureCostFunctor3D,
+                                            ceres::DYNAMIC, 3, 4, 3, 4>(
+                new PlaneFeatureCostFunctor3D(
+                    1000.0,
+                    point_cloud_set.feature_cloud_set_
+                        ->plane_feature_locations_,
+                    next_point_cloud_set.feature_cloud_set_
+                        ->plane_feature_locations_,
+                    data_plane_correspondences[i]),
+                data_plane_correspondences[i].size()),
+            nullptr, std::prev(next_control_point)->state.translation.data(),
+            std::prev(next_control_point)->state.rotation.data(),
+            next_control_point->state.translation.data(),
+            next_control_point->state.rotation.data());
+
+        //        problem.AddResidualBlock(
+        //          new ceres::AutoDiffCostFunction<PlaneFeatureCostFunctor3D,
+        //          ceres::DYNAMIC,
+        //                                          3, 4>(
+        //            new PlaneFeatureCostFunctor3D(1.0,
+        //            lhs.plane_feature_locations_,
+        //                                          rhs.plane_feature_locations_,
+        //                                          plane_correspondences),
+        //            plane_correspondences.size()),
+        //          nullptr, translation.data(), rotation.data());
+
+        //        switch
+        //        (matching_submap->high_resolution_hybrid_grid().GetGridType())
+        //        {
+        //          case GridType::PROBABILITY_GRID: {
+        //            problem.AddResidualBlock(
+        //                scan_matching::InterpolatedOccupiedSpaceCostFunction3D::
+        //                    CreateAutoDiffCostFunction(
+        //                        options_.optimizing_local_trajectory_builder_options()
+        //                                .high_resolution_grid_weight() /
+        //                            std::sqrt(static_cast<double>(
+        //                                point_cloud_set.high_resolution_filtered_points
+        //                                    .size())),
+        //                        point_cloud_set.high_resolution_filtered_points,
+        //                        static_cast<const HybridGrid&>(
+        //                            matching_submap->high_resolution_hybrid_grid()),
+        //                        interpolation_factor),
+        //                nullptr,
+        //                std::prev(next_control_point)->state.translation.data(),
+        //                std::prev(next_control_point)->state.rotation.data(),
+        //                next_control_point->state.translation.data(),
+        //                next_control_point->state.rotation.data());
+        //            break;
       }
     }
+
+    //    for (size_t i = 0; i < point_cloud_data_.size(); ++i) {
+    //      PointCloudSet& point_cloud_set = point_cloud_data_[i];
+    //      if (point_cloud_set.time < control_points_.back().time) {
+    //        while (next_control_point->time <= point_cloud_set.time) {
+    //          CHECK(next_control_point != control_points_.end());
+    //          next_control_point++;
+    //        }
+    //        CHECK(next_control_point != control_points_.begin());
+    //        CHECK_LE(std::prev(next_control_point)->time,
+    //        point_cloud_set.time); CHECK_GE(next_control_point->time,
+    //        point_cloud_set.time); const double duration = common::ToSeconds(
+    //            next_control_point->time -
+    //            std::prev(next_control_point)->time);
+    //        const double interpolation_factor =
+    //            common::ToSeconds(point_cloud_set.time -
+    //                              std::prev(next_control_point)->time) /
+    //            duration;
+    //        switch
+    //        (matching_submap->high_resolution_hybrid_grid().GetGridType()) {
+    //          case GridType::PROBABILITY_GRID: {
+    //            problem.AddResidualBlock(
+    //                scan_matching::InterpolatedOccupiedSpaceCostFunction3D::
+    //                    CreateAutoDiffCostFunction(
+    //                        options_.optimizing_local_trajectory_builder_options()
+    //                                .high_resolution_grid_weight() /
+    //                            std::sqrt(static_cast<double>(
+    //                                point_cloud_set.high_resolution_filtered_points
+    //                                    .size())),
+    //                        point_cloud_set.high_resolution_filtered_points,
+    //                        static_cast<const HybridGrid&>(
+    //                            matching_submap->high_resolution_hybrid_grid()),
+    //                        interpolation_factor),
+    //                nullptr,
+    //                std::prev(next_control_point)->state.translation.data(),
+    //                std::prev(next_control_point)->state.rotation.data(),
+    //                next_control_point->state.translation.data(),
+    //                next_control_point->state.rotation.data());
+    //            break;
+    //          }
+    //          case GridType::TSDF: {
+    //            if (options_.optimizing_local_trajectory_builder_options()
+    //                    .high_resolution_grid_weight() > 0.0) {
+    //              if(std::prev(next_control_point)->time ==
+    //              point_cloud_set.time) { problem.AddResidualBlock(
+    //                  scan_matching::TSDFSpaceCostFunction3D::
+    //                  CreateAutoDiffCostFunction(
+    //                      options_.optimizing_local_trajectory_builder_options()
+    //                          .high_resolution_grid_weight() /
+    //                          std::sqrt(static_cast<double>(
+    //                                        point_cloud_set
+    //                                            .high_resolution_filtered_points.size())),
+    //                      point_cloud_set.high_resolution_filtered_points,
+    //                      static_cast<const HybridGridTSDF&>(
+    //                          matching_submap->high_resolution_hybrid_grid())),
+    //                  nullptr,
+    //                  std::prev(next_control_point)->state.translation.data(),
+    //                  std::prev(next_control_point)->state.rotation.data());
+    //              }
+    //              else {
+    //                problem.AddResidualBlock(
+    //                    scan_matching::InterpolatedTSDFSpaceCostFunction3D::
+    //                    CreateAutoDiffCostFunction(
+    //                        options_.optimizing_local_trajectory_builder_options()
+    //                            .high_resolution_grid_weight() /
+    //                            std::sqrt(static_cast<double>(
+    //                                          point_cloud_set
+    //                                              .high_resolution_filtered_points.size())),
+    //                        point_cloud_set.high_resolution_filtered_points,
+    //                        static_cast<const HybridGridTSDF &>(
+    //                            matching_submap->high_resolution_hybrid_grid()),
+    //                        interpolation_factor),
+    //                    nullptr,
+    //                    std::prev(next_control_point)->state.translation.data(),
+    //                    std::prev(next_control_point)->state.rotation.data(),
+    //                    next_control_point->state.translation.data(),
+    //                    next_control_point->state.rotation.data());
+    //              }
+    //            }
+    //            if (options_.optimizing_local_trajectory_builder_options()
+    //                    .low_resolution_grid_weight() > 0.0) {
+    //
+    //              if(std::prev(next_control_point)->time ==
+    //              point_cloud_set.time) {
+    //                problem.AddResidualBlock(
+    //                    scan_matching::TSDFSpaceCostFunction3D::
+    //                    CreateAutoDiffCostFunction(
+    //                        options_.optimizing_local_trajectory_builder_options()
+    //                            .low_resolution_grid_weight() /
+    //                            std::sqrt(static_cast<double>(
+    //                                          point_cloud_set
+    //                                              .low_resolution_filtered_points.size())),
+    //                        point_cloud_set.low_resolution_filtered_points,
+    //                        static_cast<const HybridGridTSDF&>(
+    //                            matching_submap->low_resolution_hybrid_grid())),
+    //                    nullptr,
+    //                    std::prev(next_control_point)->state.translation.data(),
+    //                    std::prev(next_control_point)->state.rotation.data());
+    //              }
+    //              else {
+    //              problem.AddResidualBlock(
+    //                  scan_matching::InterpolatedTSDFSpaceCostFunction3D::
+    //                      CreateAutoDiffCostFunction(
+    //                          options_.optimizing_local_trajectory_builder_options()
+    //                                  .low_resolution_grid_weight() /
+    //                              std::sqrt(static_cast<double>(
+    //                                  point_cloud_set.low_resolution_filtered_points
+    //                                      .size())),
+    //                          point_cloud_set.low_resolution_filtered_points,
+    //                          static_cast<const HybridGridTSDF&>(
+    //                              matching_submap->low_resolution_hybrid_grid()),
+    //                          interpolation_factor),
+    //                  nullptr,
+    //                  std::prev(next_control_point)->state.translation.data(),
+    //                  std::prev(next_control_point)->state.rotation.data(),
+    //                  next_control_point->state.translation.data(),
+    //                  next_control_point->state.rotation.data());
+    //            }
+    //            }
+    //            break;
+    //          }
+    //          case GridType::NONE:
+    //            LOG(FATAL) << "Gridtype not initialized.";
+    //            break;
+    //        }
+    //      }
+    //    }
 
     switch (options_.optimizing_local_trajectory_builder_options()
                 .imu_cost_term()) {
@@ -915,7 +919,9 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
           control_points_[i].state.rotation.data());
     }
     ceres::Solver::Summary summary;
+
     ceres::Solve(ceres_solver_options_, &problem, &summary);
+//    LOG(INFO) << summary.FullReport();
     // The optimized states in 'control_points_' are in the submap frame and we
     // transform them in place to be in the local SLAM frame again.
     TransformStates(matching_submap->local_pose());
