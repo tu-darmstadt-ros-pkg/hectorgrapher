@@ -35,7 +35,7 @@
 #include "cartographer/transform/rigid_transform.h"
 #include "cartographer/transform/transform.h"
 
-namespace cartographer {
+namespace cartographer {//test
 namespace mapping {
 namespace {
 
