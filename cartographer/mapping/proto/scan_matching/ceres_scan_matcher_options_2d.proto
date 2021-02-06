@@ -17,6 +17,7 @@ syntax = "proto3";
 package cartographer.mapping.scan_matching.proto;
 
 import "cartographer/common/proto/ceres_solver_options.proto";
+import "cartographer/mapping/proto/2d/gnc_2d.proto";
 
 // NEXT ID: 10
 message CeresScanMatcherOptions2D {
@@ -24,9 +25,11 @@ message CeresScanMatcherOptions2D {
   double occupied_space_weight = 1;
   double translation_weight = 2;
   double rotation_weight = 3;
+  double translation_weight_vertical = 4;
 
   // Configure the Ceres solver. See the Ceres documentation for more
   // information: https://code.google.com/p/ceres-solver/
   common.proto.CeresSolverOptions ceres_solver_options = 9;
   double empty_space_cost = 10;
+  cartographer.mapping.proto.GncOptions2D gnc_options_2d = 11;
 }
