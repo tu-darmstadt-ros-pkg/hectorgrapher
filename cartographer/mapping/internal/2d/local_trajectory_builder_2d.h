@@ -19,6 +19,16 @@
 
 #include <chrono>
 #include <memory>
+#include <cartographer/mapping/internal/2d/scan_matching/ceres_scan_matcher_gnc_2d.h>
+#include <boost/accumulators/statistics/variance.hpp>
+#include <boost/accumulators/accumulators.hpp>
+#include <boost/accumulators/statistics/rolling_variance.hpp>
+#include <boost/accumulators/statistics/stats.hpp>
+#include <boost/accumulators/framework/accumulator_set.hpp>
+#include<boost/accumulators/framework/extractor.hpp>
+#include <boost/fusion/functional.hpp>
+#include <fstream>
+#include <boost/circular_buffer.hpp>
 
 #include "cartographer/common/time.h"
 #include "cartographer/mapping/2d/submap_2d.h"
@@ -34,6 +44,14 @@
 #include "cartographer/sensor/odometry_data.h"
 #include "cartographer/sensor/range_data.h"
 #include "cartographer/transform/rigid_transform.h"
+
+namespace ba = boost::accumulators;
+namespace bt = ba::tag;
+typedef ba::accumulator_set<double,
+                            ba::stats <bt::rolling_variance> > VarAccumulator;
+typedef ba::accumulator_set<double,
+    ba::stats <bt::rolling_variance> > MeanAccumulator;
+
 
 namespace cartographer {
 namespace mapping {
@@ -105,11 +123,12 @@ class LocalTrajectoryBuilder2D {
   MotionFilter motion_filter_;
   scan_matching::RealTimeCorrelativeScanMatcher2D
       real_time_correlative_scan_matcher_;
-  scan_matching::CeresScanMatcher2D ceres_scan_matcher_;
+  scan_matching::CeresScanMatcherGnc2D ceres_scan_matcher_;
 
   std::unique_ptr<PoseExtrapolator> extrapolator_;
 
   int num_accumulated_ = 0;
+  int num_accumulated_points_ = 0;
   sensor::RangeData accumulated_range_data_;
 
   absl::optional<std::chrono::steady_clock::time_point> last_wall_time_;
@@ -117,6 +136,37 @@ class LocalTrajectoryBuilder2D {
   absl::optional<common::Time> last_sensor_time_;
 
   RangeDataCollator range_data_collator_;
+
+//  boost::accumulators::accumulator_set<double,
+//      boost::accumulators::stats<
+//          boost::accumulators::tag::lazy_variance> > cost_var;
+  VarAccumulator cost_var;
+  MeanAccumulator cost_mean;
+
+  VarAccumulator num_points_var;
+  MeanAccumulator num_points_mean;
+
+//  boost::circular_buffer<int> error_buf(3);
+//  boost::circular_buffer<int> error_buf(3);
+
+  transform::Rigid2d last_pose;
+  int corr_counter = 0;
+  int total_counter = 0;
+  double min_start_score = std::numeric_limits<double>::max();
+  double max_start_score = 0;
+  double min_end_score = std::numeric_limits<double>::max();
+  double max_end_score = 0;
+  double mid_rel_score = 0;
+  double min_start_score_corr = std::numeric_limits<double>::max();
+  double max_start_score_corr = 0;
+  double min_end_score_corr = std::numeric_limits<double>::max();
+  double max_end_score_corr = 0;
+  double mid_rel_score_corr = 0;
+
+  std::ofstream log_file;
+  std::string log_file_path;
+  time_t seconds;
+
 };
 
 }  // namespace mapping

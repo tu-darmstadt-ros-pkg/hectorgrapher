@@ -19,6 +19,7 @@
 #include <limits>
 #include <memory>
 
+#include "cartographer/common/time.h"
 #include "absl/memory/memory.h"
 #include "cartographer/metrics/family_factory.h"
 #include "cartographer/sensor/range_data.h"
@@ -44,9 +45,43 @@ LocalTrajectoryBuilder2D::LocalTrajectoryBuilder2D(
       real_time_correlative_scan_matcher_(
           options_.real_time_correlative_scan_matcher_options()),
       ceres_scan_matcher_(options_.ceres_scan_matcher_options()),
-      range_data_collator_(expected_range_sensor_ids) {}
+      range_data_collator_(expected_range_sensor_ids),
+      cost_var(ba::tag::rolling_window::window_size = 5),
+      cost_mean(ba::tag::rolling_window::window_size = 5),
+      num_points_var(ba::tag::rolling_window::window_size = 3),
+      num_points_mean(ba::tag::rolling_window::window_size = 3),
+      last_pose(transform::Rigid2d()) {
+  time(&seconds);
+  const char * home_c_str = getenv ("HOME");
+  std::string home;
+  if (home_c_str == NULL) {
+    home = "";
+  } else {
+    home = home_c_str;
+    if (home.back() != '/') home += "/";
+  }
+  log_file_path = home + "trajectory_builder_log" + std::to_string(seconds)
+                       + ".csv";
+  LOG(INFO) << "Trajectory Builder Log Path: " << log_file_path;
+  log_file.open(log_file_path);
+  log_file << "timestamp,inital_pose_x,inital_pose_y,inital_pose_w,"
+              "corr_pose_x,corr_pose_y,corr_pose_w,ceres_pose_x,ceres_pose_y,"
+              "ceres_pose_w,corr_score,ceres_inital_score,"
+              "ceres_final_score,num_points,rejected,num_points_mean,"
+              "num_points_std,num_acc_points\n";;
+}
 
-LocalTrajectoryBuilder2D::~LocalTrajectoryBuilder2D() {}
+LocalTrajectoryBuilder2D::~LocalTrajectoryBuilder2D() {
+  log_file.close();
+  mid_rel_score /= total_counter;
+  mid_rel_score_corr /= corr_counter;
+  LOG(INFO) << "MidRel    : " << mid_rel_score << "\n"
+            << "MidRelCorr: " << mid_rel_score_corr << "\n"
+            << "Min / Max Start: " << min_start_score << " | " << max_start_score << "\n"
+            << "Min / Max Final: " << min_end_score << " | " << max_end_score << "\n"
+            << "Min / Max Start Corr: " << min_start_score_corr << " | " << max_start_score_corr << "\n"
+            << "Min / Max Final Corr: " << min_end_score_corr << " | " << max_end_score_corr << "\n";
+}
 
 sensor::RangeData
 LocalTrajectoryBuilder2D::TransformToGravityAlignedFrameAndFilter(
@@ -74,12 +109,35 @@ std::unique_ptr<transform::Rigid2d> LocalTrajectoryBuilder2D::ScanMatch(
   // the Ceres scan matcher.
   transform::Rigid2d initial_ceres_pose = pose_prediction;
 
-  if (options_.use_online_correlative_scan_matching()) {
+  bool use_correlative_scan_matching =
+      options_.use_online_correlative_scan_matching();
+  // use correlative scan matching if pose estimate from IMU is bigger than
+  // convergence area for ceres (gnc) scan matching:
+  transform::Rigid2d rel_pose = last_pose.inverse() * pose_prediction;
+//  LOG(INFO) << "Pose Prediction: " << rel_pose.translation().norm()
+//            << " m, " << rel_pose.rotation().angle() << "rad.";
+  if (rel_pose.translation().norm() > 0.08 ||
+      rel_pose.rotation().angle() > 0.1) {
+    use_correlative_scan_matching = true;
+  }
+  last_pose = pose_prediction;
+
+//  LOG(INFO) << "INIT POSE: " << pose_prediction.translation().x() << "|" << pose_prediction.translation().y();
+
+  transform::Rigid2d initial_pose = pose_prediction;
+  double corr_score = 0;
+  if (use_correlative_scan_matching) {
     const double score = real_time_correlative_scan_matcher_.Match(
         pose_prediction, filtered_gravity_aligned_point_cloud,
         *matching_submap->grid(), &initial_ceres_pose);
     kRealTimeCorrelativeScanMatcherScoreMetric->Observe(score);
+    corr_score = score;
+//    LOG(INFO) << "Correlative scan matcher pose: " << initial_ceres_pose.translation().x()
+//            << ", " << initial_ceres_pose.translation().x() << ", " << initial_ceres_pose.rotation().angle();
   }
+  transform::Rigid2d corr_pose = initial_ceres_pose;
+
+//  LOG(INFO) << "CORR POSE: " << initial_ceres_pose.translation().x() << "|" << initial_ceres_pose.translation().y();
 
   auto pose_observation = absl::make_unique<transform::Rigid2d>();
   ceres::Solver::Summary summary;
@@ -87,6 +145,132 @@ std::unique_ptr<transform::Rigid2d> LocalTrajectoryBuilder2D::ScanMatch(
                             filtered_gravity_aligned_point_cloud,
                             *matching_submap->grid(), pose_observation.get(),
                             &summary);
+//  LOG(INFO) << "DONE:";
+  std::chrono::time_point<std::chrono::system_clock> now =
+      std::chrono::system_clock::now();
+  auto duration = now.time_since_epoch();
+  auto millis = std::chrono::duration_cast<std::chrono::milliseconds>
+      (duration).count();
+
+  double current_rel = summary.initial_cost / summary.final_cost /
+                       filtered_gravity_aligned_point_cloud.size();
+  bool rejected = false;
+  bool enable_pose_rejection = false;
+  if (enable_pose_rejection && current_rel > (ba::rolling_mean(cost_mean)
+    + 3 * sqrt(ba::rolling_variance(cost_var)))) {
+    LOG(INFO) << "Rejected current pose.###################";
+    LOG(INFO) << "Current rel: " << current_rel << " Current mean: "
+              << ba::rolling_mean(cost_mean) << " Current var: "
+              << ba::rolling_variance(cost_var) << " Total: "
+              << ba::rolling_mean(cost_mean) + 3 * sqrt(ba::rolling_variance(cost_var));
+    LOG(INFO) << "Ceres Pose: " << pose_observation.get()->translation().x()
+              << "|" << pose_observation.get()->translation().y() << ", "
+              << pose_observation.get()->rotation().angle();
+    LOG(INFO) << "Init. Pose: " << pose_prediction.translation().x()
+              << "|" << pose_prediction.translation().y() << ", "
+              << pose_prediction.rotation().angle();
+    rejected = true;
+    pose_observation = std::move(absl::make_unique<transform::Rigid2d>(pose_prediction));
+  }
+
+  cost_var(current_rel);
+  cost_mean(current_rel);
+
+//  log_file << millis << ","
+  log_file << time.time_since_epoch().count() << ","
+           << initial_pose.translation().x() << ","
+           << initial_pose.translation().y() << ","
+           << initial_pose.rotation().angle() << ","
+           << corr_pose.translation().x() << ","
+           << corr_pose.translation().y() << ","
+           << corr_pose.rotation().angle() << ","
+           << pose_observation.get()->translation().x() << ","
+           << pose_observation.get()->translation().y() << ","
+           << pose_observation.get()->rotation().angle() << ","
+           << corr_score << "," << summary.initial_cost << ","
+           << summary.final_cost << ","
+           << filtered_gravity_aligned_point_cloud.size() << ","
+           << rejected << ","
+           << ba::rolling_mean(num_points_mean) << ","
+           << ba::rolling_variance(num_points_var)
+           << num_accumulated_points_ << "\n";
+  /* if (!options_.use_online_correlative_scan_matching()) {
+    //  costs.push_back(summary.initial_cost / summary.final_cost);
+    double current_rel = summary.initial_cost / summary.final_cost /
+                         filtered_gravity_aligned_point_cloud.size();
+    cost_var(current_rel);
+    cost_mean(current_rel);
+
+    //  LOG(INFO) << "First: " << summary.initial_cost << ", End: " << summary.final_cost <<
+    //            ", Usable?: " << summary.IsSolutionUsable();
+    //  LOG(INFO) << "Diff: " << summary.initial_cost - summary.final_cost
+    //            << "Rel: " << summary.initial_cost / summary.final_cost;
+    //  LOG(INFO) << "TSDF        scan matcher pose: " << pose_observation.get()->translation().x()
+    //            << ", " << pose_observation.get()->translation().x() << ", " << pose_observation.get()->rotation().angle();
+    total_counter++;
+//    LOG(INFO) << "Current Rel: " << current_rel << " Std Dev Rel: "
+//              << sqrt(ba::rolling_variance(cost_var))
+//              << " Middle  Rel: " << ba::rolling_mean(cost_mean) * 0.8;
+    if (min_end_score > summary.final_cost) min_end_score = summary.final_cost;
+    if (max_end_score < summary.final_cost) max_end_score = summary.final_cost;
+    if (min_start_score > summary.initial_cost)
+      min_start_score = summary.initial_cost;
+    if (max_start_score < summary.initial_cost)
+      max_start_score = summary.initial_cost;
+    mid_rel_score += summary.initial_cost / summary.final_cost;
+    if (current_rel < (ba::rolling_mean(cost_mean) * 0.8) || total_counter < 10) {
+//      LOG(INFO) << "USING REALTIMECORR";
+      corr_counter++;
+      initial_ceres_pose = pose_prediction;
+      const double score = real_time_correlative_scan_matcher_.Match(
+          pose_prediction, filtered_gravity_aligned_point_cloud,
+          *matching_submap->grid(), &initial_ceres_pose);
+      kRealTimeCorrelativeScanMatcherScoreMetric->Observe(score);
+//      LOG(INFO) << "Correlative scan matcher pose: "
+//                << initial_ceres_pose.translation().x() << ", "
+//                << initial_ceres_pose.translation().x() << ", "
+//                << initial_ceres_pose.rotation().angle();
+      ceres::Solver::Summary summary;
+      ceres_scan_matcher_.Match(pose_prediction.translation(),
+                                initial_ceres_pose,
+                                filtered_gravity_aligned_point_cloud,
+                                *matching_submap->grid(),
+                                pose_observation.get(), &summary);
+      //    LOG(INFO) << "First: " << summary.initial_cost << ", End: " << summary.final_cost <<
+      //              ", Usable?: " << summary.IsSolutionUsable();
+      //    LOG(INFO) << "Diff: " << summary.initial_cost - summary.final_cost
+      //              << "Rel: " << summary.initial_cost / summary.final_cost;
+      //    LOG(INFO) << "TSDF        scan matcher pose: " << pose_observation.get()->translation().x()
+      //              << ", " << pose_observation.get()->translation().x() << ", " << pose_observation.get()->rotation().angle();
+
+      if (min_end_score_corr > summary.final_cost)
+        min_end_score_corr = summary.final_cost;
+      if (max_end_score_corr < summary.final_cost)
+        max_end_score_corr = summary.final_cost;
+      if (min_start_score_corr > summary.initial_cost)
+        min_start_score_corr = summary.initial_cost;
+      if (max_start_score_corr < summary.initial_cost)
+        max_start_score_corr = summary.initial_cost;
+      mid_rel_score_corr += summary.initial_cost / summary.final_cost;
+    }
+  } */
+
+//  sensor::PointCloud gnc_point_cloud;
+//  auto weights = *ceres_scan_matcher_.get_gnc_callback()->get_weights();
+//  for (size_t i = 0; i < filtered_gravity_aligned_point_cloud.size(); ++i) {
+//    if (weights.at(i) > 0.33) {
+//      gnc_point_cloud.push_back(filtered_gravity_aligned_point_cloud[i]);
+//    }
+//  }
+//  LOG(INFO) << "Removed points: " << filtered_gravity_aligned_point_cloud.size()
+//            - gnc_point_cloud.size();
+//  auto pose_observation2 = absl::make_unique<transform::Rigid2d>();
+////  ceres_scan_matcher_.Match(pose_prediction.translation(), initial_ceres_pose,
+////                            gnc_point_cloud,
+////                            *matching_submap->grid(), pose_observation2.get(),
+////                            &summary);
+//  ceres_scan_matcher_.get_gnc_callback()->set_weights(weights);
+
   if (pose_observation) {
     kCeresScanMatcherCostMetric->Observe(summary.final_cost);
     const double residual_distance =
@@ -98,6 +282,7 @@ std::unique_ptr<transform::Rigid2d> LocalTrajectoryBuilder2D::ScanMatch(
                  pose_prediction.rotation().angle());
     kScanMatcherResidualAngleMetric->Observe(residual_angle);
   }
+//    LOG(INFO) << "T: " << pose_observation.get()->translation().x() << pose_observation.get()->translation().y() << " | Rot: " << pose_observation.get()->rotation().angle();
   return pose_observation;
 }
 
@@ -184,8 +369,23 @@ LocalTrajectoryBuilder2D::AddRangeData(
     }
   }
   ++num_accumulated_;
+  num_accumulated_points_ += synchronized_data.ranges.size();
 
-  if (num_accumulated_ >= options_.num_accumulated_range_data()) {
+  if (num_accumulated_ >= options_.num_accumulated_range_data() &&
+      num_accumulated_points_ >= options_.num_accumulated_range_data_points()) {
+    num_points_var(num_accumulated_points_);
+    num_points_mean(num_accumulated_points_);
+    float threshold = ba::rolling_mean(num_points_mean) - 3
+        * sqrt(ba::rolling_variance(num_points_var));
+    if (num_accumulated_points_ < threshold) {
+        LOG(INFO) << "GOT THRESHOLD / Points: " << threshold << " / "
+                  << num_accumulated_points_;
+//      return nullptr;
+    }
+//    LOG(INFO) << "MEAN acc points: " << ba::rolling_mean(num_points_mean);
+//    LOG(INFO) << "VAR  acc points: " << ba::rolling_variance(num_points_var);
+//    LOG(INFO) << "Current  points: " << num_accumulated_points_;
+
     const common::Time current_sensor_time = synchronized_data.time;
     absl::optional<common::Duration> sensor_duration;
     if (last_sensor_time_.has_value()) {
@@ -193,6 +393,7 @@ LocalTrajectoryBuilder2D::AddRangeData(
     }
     last_sensor_time_ = current_sensor_time;
     num_accumulated_ = 0;
+    num_accumulated_points_ = 0;
     const transform::Rigid3d gravity_alignment = transform::Rigid3d::Rotation(
         extrapolator_->EstimateGravityOrientation(time));
     // TODO(gaschler): This assumes that 'range_data_poses.back()' is at time
@@ -236,6 +437,28 @@ LocalTrajectoryBuilder2D::AddAccumulatedRangeData(
   // local map frame <- gravity-aligned frame
   std::unique_ptr<transform::Rigid2d> pose_estimate_2d =
       ScanMatch(time, pose_prediction, filtered_gravity_aligned_point_cloud);
+
+//  if (options_.ceres_scan_matcher_options().gnc_options_2d().use_gnc()) {
+//    // Remove outlier
+//    sensor::PointCloud gnc_point_cloud;
+//    auto weights = *ceres_scan_matcher_.get_gnc_callback()->get_weights();
+//    std::vector<double> weights_sorted(weights.size());AddAccumulatedRangeData
+//    partial_sort_copy(begin(weights), end(weights),
+//                      begin(weights_sorted), end(weights_sorted));
+//    int e = weights_sorted.size() * 0.9;
+//    while (weights_sorted.at(e) == weights_sorted.at(e - 1)) e--;
+//    for (size_t i = 0; i < filtered_gravity_aligned_point_cloud.size(); ++i) {
+//      if (weights.at(i) >= weights_sorted.at(e)) {
+//        gnc_point_cloud.push_back(filtered_gravity_aligned_point_cloud[i]);
+////        filtered_gravity_aligned_point_cloud.erase(
+////            filtered_gravity_aligned_point_cloud.begin() + i);
+//      }
+//    }
+//    LOG(INFO) << "Removed Points: " << filtered_gravity_aligned_point_cloud.size() - gnc_point_cloud.size();
+//    LOG(INFO) << "Total Points: " << filtered_gravity_aligned_point_cloud.size();
+//    filtered_gravity_aligned_point_cloud = gnc_point_cloud;
+//  }
+
   if (pose_estimate_2d == nullptr) {
     LOG(WARNING) << "Scan matching failed.";
     return nullptr;

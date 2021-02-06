@@ -36,6 +36,8 @@ proto::LocalTrajectoryBuilderOptions2D CreateLocalTrajectoryBuilderOptions2D(
       parameter_dictionary->GetDouble("missing_data_ray_length"));
   options.set_num_accumulated_range_data(
       parameter_dictionary->GetInt("num_accumulated_range_data"));
+  options.set_num_accumulated_range_data_points(
+      parameter_dictionary->GetInt("num_accumulated_range_data_points"));
   options.set_voxel_filter_size(
       parameter_dictionary->GetDouble("voxel_filter_size"));
   options.set_use_online_correlative_scan_matching(
