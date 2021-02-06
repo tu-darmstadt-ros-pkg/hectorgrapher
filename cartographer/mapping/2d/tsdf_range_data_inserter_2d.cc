@@ -88,6 +88,159 @@ struct RangeDataSorter {
   Eigen::Vector2f origin_;
 };
 
+Eigen::Array2f mask_to_polar(Eigen::Array2i ray) {
+  Eigen::Array2f polar_ray;
+  polar_ray.x() = sqrt(pow(ray.x(), 2) + pow(ray.y(), 2));
+  if (ray.x() == 0) polar_ray.y() = M_PI / 2;  // division by zero
+  else polar_ray.y() = atan(float(ray.y()) / float(ray.x()));
+  return polar_ray;
+}
+
+Eigen::Array2f polar_to_mask(Eigen::Array2f ray) {
+  Eigen::Array2f cart_ray;
+  cart_ray.x() = ray.x() * cos(ray.y());
+  cart_ray.y() = ray.x() * sin(ray.y());
+  return cart_ray;
+}
+
+struct PolarAndPixelDataSorter {
+  PolarAndPixelDataSorter() {}
+  bool operator()(const std::pair<Eigen::Vector2f, Eigen::Vector2i> &lhs,
+                  const std::pair<Eigen::Vector2f, Eigen::Vector2i> &rhs) {
+    // sort and group by angle, then for the same angle by range
+    if (lhs.first.y() == rhs.first.y()) {
+      return lhs.first.x() < rhs.first.x();
+    } else if (lhs.first.y() < rhs.first.y()) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+};
+
+struct PolarAndPixelDataSorterDesc {
+  // Sorts the range data based on polar coordinates (first / lhs) per angle
+  // and descending range, so that the farthest points away are inserted first
+  PolarAndPixelDataSorterDesc() {}
+  bool operator()(
+      const std::pair<Eigen::Vector2f, sensor::RangefinderPoint> &lhs,
+      const std::pair<Eigen::Vector2f, sensor::RangefinderPoint> &rhs) {
+    // sort and group by angle, then for the same angle by range
+    if (lhs.first.y() == rhs.first.y()) {
+      return lhs.first.x() > rhs.first.x();
+    } else if (lhs.first.y() < rhs.first.y()) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+};
+
+struct HitMaskSorter {
+  HitMaskSorter() {}
+  bool operator()(const Eigen::Vector2i& lhs,
+                  const Eigen::Vector2i& rhs) {
+    if (lhs.y() == rhs.y()) {  // sort and group by y, then for the same y by x
+      return lhs.x() < rhs.x();
+    } else if (lhs.y() < rhs.y()) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+};
+
+bool CompareVector2fLower(const Eigen::Vector2f& lhs, double value) {
+  return lhs.y() < value;
+}
+
+bool CompareVector2fUpper(double value, const Eigen::Vector2f& rhs) {
+  return value < rhs.y();
+}
+
+bool ComparePolarAndPixelLower(
+    const std::pair<Eigen::Vector2f, Eigen::Vector2i> &lhs, double value) {
+  return lhs.first.y() < value;
+}
+
+bool ComparePolarAndPixelUpper(
+    double value, const std::pair<Eigen::Vector2f, Eigen::Vector2i> &rhs) {
+  return value < rhs.first.y();
+}
+
+float getLowestRangeFromMask(const std::vector<Eigen::Array2f> &polar_masks,
+                             const float angle) {
+  auto low = std::lower_bound(polar_masks.begin(), polar_masks.end(), angle,
+                              CompareVector2fLower);
+  auto up = std::upper_bound(polar_masks.begin(), polar_masks.end(), angle,
+                             CompareVector2fUpper);
+  float min_element = INFINITY;
+  while (low != up) {
+    if (min_element > low->x()) min_element = low->x();
+    low++;
+  }
+  return min_element;
+}
+
+bool isAHitInFreespaceMask(const std::vector<Eigen::Array2i> &ray_freespace_mask,
+                           const Eigen::Vector2f& hit,
+                           const Eigen::Vector2f& origin, TSDF2D* tsdf,
+                           const std::vector<std::pair<Eigen::Array2f,
+                             Eigen::Array2i>> &hits_mask) {
+  std::vector<float> min_angles(2);
+  std::vector<float> max_angles(2);
+  int num_iterations = 1;
+  Eigen::Array2i hit_mask = tsdf->limits().GetCellIndex(hit);
+  Eigen::Array2i origin_mask = tsdf->limits().GetCellIndex(origin);
+  Eigen::Vector2i ray = hit_mask - origin_mask;
+  Eigen::Vector2f ray_polar = mask_to_polar(ray);
+  float angle_tolerance = 10 / 2 * M_PI / 180;  // to rad
+  float min_angle = ray_polar.y() - angle_tolerance;
+  float max_angle = ray_polar.y() + angle_tolerance;
+  min_angles[0] = min_angle;
+  max_angles[0] = max_angle;
+  if (min_angle < -M_PI_2) {
+    min_angles[0] = -M_PI_2;
+    max_angles[0] = max_angle;
+    min_angles[1] = min_angle + M_PI;
+    max_angles[1] = M_PI;
+    num_iterations = 2;
+  } else if (max_angle > M_PI_2) {
+    min_angles[0] = -M_PI_2;
+    max_angles[0] = max_angle - M_PI;
+    min_angles[1] = min_angle;
+    max_angles[1] = M_PI;
+    num_iterations = 2;
+  }
+  for (int n = 0; n < num_iterations; n++) {
+    auto low = std::lower_bound(hits_mask.begin(), hits_mask.end(),
+                                min_angles[n], ComparePolarAndPixelLower);
+    auto up = std::upper_bound(hits_mask.begin(), hits_mask.end(),
+                               max_angles[n], ComparePolarAndPixelUpper);
+    //  for (auto a: ray_freespace_mask) {
+    //    LOG(INFO) << a.x() << "," << a.y();
+    //  }
+    //  LOG(INFO) << "______________________";
+    // Check if one pixel from ray_freespace_mask is in the hits pixel mask hits_mask
+    while (low != up) {
+      for (Eigen::Array2i current_ray_mask : ray_freespace_mask) {
+        if (current_ray_mask.x() == low->second.x() &&
+            current_ray_mask.y() == low->second.y()) {
+          // in the freespace mask is a hit cell with lower range, so dont update
+          // free space:
+          if (ray_polar.x() > low->first.x() && low->first.x() > 5) {
+//            LOG(INFO) << "Point: " << ray_polar.x() << ", " << low->first.x()
+//                      << " angle: " << ray_polar.y() << ", " << low->first.y();
+            return true;
+          }
+        }
+      }
+      low++;
+    }
+  }
+  return false;
+}
+
 float ComputeRangeWeightFactor(float range, int exponent) {
   float weight = 0.f;
   if (std::abs(range) > kMinRangeMeters) {
@@ -137,6 +290,10 @@ proto::TSDFRangeDataInserterOptions2D CreateTSDFRangeDataInserterOptions2D(
       parameter_dictionary->GetDouble("free_space_weight"));
   options.set_min_normal_weight(
       parameter_dictionary->GetDouble("min_normal_weight"));
+  options.set_truncation_distance_update_factor(
+      parameter_dictionary->GetDouble("truncation_distance_update_factor"));
+  options.set_update_free_space_only_first_hits(
+      parameter_dictionary->GetBool("update_free_space_only_first_hits"));
   return options;
 }
 
@@ -292,6 +449,106 @@ void TSDFRangeDataInserter2D::Insert(const sensor::RangeData& range_data,
       //      }
 
       const Eigen::Vector2f origin = sorted_range_data.origin.head<2>();
+
+//      std::vector<Eigen::Array2f> hits_mask;  // polar and cartesian representation
+//      // Create a polar representation of the hit pixels, used for estimating
+//      // the first hits when updating the free space, if enabled
+//      if (options_.update_free_space_only_first_hits()) {
+//        Eigen::Array2i origin_mask = tsdf->limits().GetCellIndex(origin);
+//        // hits_mask.x() := range (pixels), hits_mask.y() := angle (rad)
+//        hits_mask.resize(sorted_range_data.returns.size());
+//        //      std::multimap<float, float> hits_mask_map;
+//        for (size_t hit_index = 0;
+//             hit_index < sorted_range_data.returns.size(); ++hit_index) {
+//          const Eigen::Vector2f hit = sorted_range_data.returns[hit_index].
+//              position.head<2>();
+//          Eigen::Array2i mask = tsdf->limits().GetCellIndex(hit);
+//          Eigen::Array2i ray = mask - origin_mask;
+//          // Ray to polar:
+//          Eigen::Vector2f polar_ray = mask_to_polar(ray);
+////          hits_mask_map.insert(std::pair<float, float>(polar_ray.y(),
+////                                                         polar_ray.x()));
+//          hits_mask.push_back(polar_ray);
+//        }
+//        // Sort the mask by grouping the angles together and then sorting in
+//        // ascending range for faster access by lower and upper bound
+//        std::sort(hits_mask.begin(), hits_mask.end(), PolarDataSorter());
+//      }
+
+    std::vector<std::pair<Eigen::Array2f, Eigen::Array2i>> hits_mask;  // polar cell and cartesian coordinates representation
+    std::vector<std::pair<Eigen::Array2f, sensor::RangefinderPoint>> zipped_range_data;  // polar and cartesian coordinates representation
+    // Create a polar representation of the hit pixels, used for estimating
+    // the first hits when updating the free space, if enabled
+    if (options_.update_free_space_only_first_hits() ||
+        options_.update_free_space()) {
+      Eigen::Array2i origin_mask = tsdf->limits().GetCellIndex(origin);
+      // hits_mask.x() := range (pixels), hits_mask.y() := angle (rad)
+      hits_mask.resize(sorted_range_data.returns.size());
+      //      std::multimap<float, float> hits_mask_map;
+      for (size_t hit_index = 0;
+           hit_index < sorted_range_data.returns.size(); ++hit_index) {
+        const Eigen::Vector2f hit = sorted_range_data.returns[hit_index].
+            position.head<2>();
+        Eigen::Array2i hit_mask = tsdf->limits().GetCellIndex(hit);
+        Eigen::Array2i ray = hit_mask - origin_mask;
+        // Ray to polar:
+        Eigen::Vector2f polar_ray = mask_to_polar(ray);
+//          hits_mask_map.insert(std::pair<float, float>(polar_ray.y(),
+//                                                         polar_ray.x()));
+        // Sort, if not already done, to avoid duplication in hits_mask
+        if (!options_.normal_estimation_options().sort_range_data())
+          std::sort(sorted_range_data.returns.begin(),
+                    sorted_range_data.returns.end(),
+                    RangeDataSorter(sorted_range_data.origin));
+        zipped_range_data.push_back(
+            std::pair<Eigen::Array2f, sensor::RangefinderPoint>(
+                polar_ray, sorted_range_data.returns[hit_index]));
+        if (hits_mask.back().second.x() == hit_mask.x() &&
+            hits_mask.back().second.y() == hit_mask.y())
+          continue;
+        hits_mask.push_back(
+            std::pair<Eigen::Array2f, Eigen::Array2i>(polar_ray, hit_mask));
+      }
+      // Sort the mask by grouping the angles together and then sorting in
+      // ascending range for faster access by lower and upper bound
+      if (options_.update_free_space_only_first_hits())
+        std::sort(hits_mask.begin(), hits_mask.end(), PolarAndPixelDataSorter());
+    }
+
+    if (options_.update_free_space()) {
+      // Sort descending, maybe helps?
+      std::sort(zipped_range_data.begin(), zipped_range_data.end(),
+                PolarAndPixelDataSorterDesc());
+      for (size_t hit_index_ = 0;
+           hit_index_ < sorted_range_data.returns.size(); ++hit_index_) {
+        sorted_range_data.returns[hit_index_] =
+            zipped_range_data[hit_index_].second;
+      }
+    }
+
+//    LOG(INFO) << "HITS MASK______________";
+//    for (auto a : hits_mask) {
+//      LOG(INFO) << a.first.x() << "," << a.first.y() << " | " << a.second.x() << "," << a.second.y();
+//    }
+
+//    std::vector<Eigen::Array2i> hits_mask;
+//    // Create a list of the hit pixels, used for estimating
+//    // the first hits when updating the free space, if enabled
+//    if (options_.update_free_space_only_first_hits()) {
+//      hits_mask.resize(sorted_range_data.returns.size());
+//      for (size_t hit_index = 0;
+//           hit_index < sorted_range_data.returns.size(); ++hit_index) {
+//        const Eigen::Vector2f hit = sorted_range_data.returns[hit_index].
+//            position.head<2>();
+//        Eigen::Array2i mask = tsdf->limits().GetCellIndex(hit);
+//        hits_mask.push_back(mask);
+//      }
+//      // Sort the mask by grouping the y in ascending order
+//      // together and then sorting in ascending x for faster access by lower and
+//      // upper bound
+//      std::sort(hits_mask.begin(), hits_mask.end(), HitMaskSorter());
+//    }
+
       for (size_t hit_index = 0; hit_index < sorted_range_data.returns.size();
            ++hit_index) {
         const Eigen::Vector2f hit =
@@ -302,7 +559,7 @@ void TSDFRangeDataInserter2D::Insert(const sensor::RangeData& range_data,
         float normal_weight = weights.empty()
                                   ? std::numeric_limits<float>::quiet_NaN()
                                   : weights[hit_index];
-        InsertHit(options_, hit, origin, normal, tsdf, normal_weight);
+        InsertHit(options_, hit, origin, normal, tsdf, normal_weight, hits_mask);
   }
   tsdf->FinishUpdate();
 
@@ -335,7 +592,10 @@ void TSDFRangeDataInserter2D::Insert(const sensor::RangeData& range_data,
 void TSDFRangeDataInserter2D::InsertHit(
     const proto::TSDFRangeDataInserterOptions2D& options,
     const Eigen::Vector2f& hit, const Eigen::Vector2f& origin, float normal,
-    TSDF2D* tsdf, float normal_weight = 1.f) const {
+    TSDF2D* tsdf, float normal_weight = 1.f,
+    const std::vector<std::pair<Eigen::Array2f, Eigen::Array2i>> &hits_mask =
+      std::vector<std::pair<Eigen::Array2f, Eigen::Array2i>>()
+    ) const {
   if (!options_.project_sdf_distance_to_scan_normal()) {
     normal_weight = 1.f;
   }
@@ -345,7 +605,12 @@ void TSDFRangeDataInserter2D::InsertHit(
   const float range = ray.norm();
   const float truncation_distance =
       static_cast<float>(options_.truncation_distance());
-  const float truncation_ratio = truncation_distance / range;
+  const float truncation_distance_update_factor =
+      options_.truncation_distance_update_factor() ?
+      options_.truncation_distance_update_factor() :
+      1.0;
+  const float truncation_ratio = truncation_distance / range *
+      truncation_distance_update_factor;
   Eigen::Vector2f ray_begin = range < truncation_distance
                                   ? origin
                                   : origin + (1.0f - truncation_ratio) * ray;
@@ -430,7 +695,19 @@ void TSDFRangeDataInserter2D::InsertHit(
   static int freespace_idx = 0;
   //  ++freespace_idx;
 
+
   if (options_.update_free_space() && freespace_idx % 5 == 0) {
+    Eigen::Array2i hit_mask = tsdf->limits().GetCellIndex(hit);
+    Eigen::Array2f polar_hit = mask_to_polar(hit_mask);
+    if (options_.update_free_space_only_first_hits()) {
+//      if (getLowestRangeFromMask(hits_mask, polar_hit.y()) < polar_hit.x()) {
+//        return;
+//      }
+      if (isAHitInFreespaceMask(ray_freespace_mask, hit, origin, tsdf,
+                                hits_mask)) {
+        return;
+      }
+    }
     freespace_idx = 0;
     for (const Eigen::Array2i& cell_index : ray_freespace_mask) {
       // if (tsdf->CellIsUpdated(cell_index)) continue;

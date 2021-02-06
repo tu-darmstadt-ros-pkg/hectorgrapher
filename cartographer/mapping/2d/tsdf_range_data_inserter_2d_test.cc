@@ -19,6 +19,7 @@
 #include "cartographer/common/lua_parameter_dictionary.h"
 #include "cartographer/common/lua_parameter_dictionary_test_helpers.h"
 #include "gmock/gmock.h"
+#include "gtest/gtest.h"
 
 namespace cartographer {
 namespace mapping {
