@@ -18,6 +18,7 @@
 #define CARTOGRAPHER_MAPPING_INTERNAL_NORMAL_ESTIMATION_2D_H_
 
 #include <vector>
+#include <random>
 #include "cartographer/mapping/2d/tsdf_2d.h"
 #include "cartographer/mapping/proto/2d/normal_estimation_options_2d.pb.h"
 #include "cartographer/sensor/point_cloud.h"
@@ -26,6 +27,9 @@
 
 namespace cartographer {
 namespace mapping {
+
+//static int stats_ransac = 0;
+//static int stats_avg = 0;
 
 proto::NormalEstimationOptions2D CreateNormalEstimationOptions2D(
     common::LuaParameterDictionary* parameter_dictionary);
