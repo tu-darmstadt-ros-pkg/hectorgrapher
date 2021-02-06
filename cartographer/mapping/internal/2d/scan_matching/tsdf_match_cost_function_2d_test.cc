@@ -15,6 +15,7 @@
  */
 
 #include "cartographer/mapping/internal/2d/scan_matching/tsdf_match_cost_function_2d.h"
+#include "cartographer/mapping/internal/2d/scan_matching/tsdf_match_gnc_cost_function_2d.h"
 
 #include "cartographer/common/lua_parameter_dictionary.h"
 #include "cartographer/common/lua_parameter_dictionary_test_helpers.h"
@@ -39,17 +40,23 @@ class TSDFSpaceCostFunction2DTest : public ::testing::Test {
               0.3, 1.0, &conversion_tables_) {
     auto parameter_dictionary = common::MakeDictionary(
         "return { "
-        "truncation_distance = 0.3,"
-        "maximum_weight = 1.0,"
-        "update_free_space = false,"
+        "truncation_distance = 0.07,"
+        "maximum_weight = 128,"
+        "update_free_space = true,"
         "normal_estimation_options = {"
-        "num_normal_samples = 2,"
-        "sample_radius = 10.,"
+        "use_pca = false,"
+        "const_weight = 0.1,"
+        "tsdf_weight_scale = 0.0,"
+        "sort_range_data = true,"
+        "num_normal_samples = 16,"
+        "sample_radius = 0.15,"
         "},"
+        "min_normal_weight = 0.1,"
+        "free_space_weight = 0.5,"
         "project_sdf_distance_to_scan_normal = true,"
         "update_weight_range_exponent = 0,"
         "update_weight_angle_scan_normal_to_ray_kernel_bandwith = 0,"
-        "update_weight_distance_cell_to_hit_kernel_bandwith = 0,"
+        "update_weight_distance_cell_to_hit_kernel_bandwith = 10,"
         "}");
     options_ = CreateTSDFRangeDataInserterOptions2D(parameter_dictionary.get());
     range_data_inserter_ = absl::make_unique<TSDFRangeDataInserter2D>(options_);
@@ -70,6 +77,7 @@ class TSDFSpaceCostFunction2DTest : public ::testing::Test {
   proto::TSDFRangeDataInserterOptions2D options_;
   TSDF2D tsdf_;
   std::unique_ptr<TSDFRangeDataInserter2D> range_data_inserter_;
+  GncIterationCallback gnc_weight_update;
 };
 
 TEST_F(TSDFSpaceCostFunction2DTest, MatchEmptyTSDF) {
@@ -165,3 +173,8 @@ TEST_F(TSDFSpaceCostFunction2DTest, InvalidInitialPose) {
 }  // namespace scan_matching
 }  // namespace mapping
 }  // namespace cartographer
+
+int main(int argc, char **argv) {
+  testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}
