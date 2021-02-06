@@ -35,6 +35,7 @@ message LocalTrajectoryBuilderOptions2D {
   // Number of range data to accumulate into one unwarped, combined range data
   // to use for scan matching.
   int32 num_accumulated_range_data = 19;
+  int32 num_accumulated_range_data_points = 21;
 
   // Voxel filter that gets applied to the range data immediately after
   // cropping.
