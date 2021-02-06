@@ -25,15 +25,6 @@ namespace cartographer {
 namespace mapping {
 namespace scan_matching {
 
-//struct ComputeDistValueFunctor {
-//    bool operator()(const double* r2, double* value) const {
-////      LOG(INFO) << "Writing in Adress: " << global_gnc_state;
-//      global_gnc_state->set_distance(current_pos, *r2);
-//      return true;
-//    }
-//    const GncIterationCallback* global_gnc_state;
-//    mutable unsigned long current_pos;
-//};
 
 // Computes a cost for matching the 'point_cloud' in the 'grid' at
 // a 'pose'. The cost increases with the signed distance of the matched point
@@ -51,16 +42,6 @@ class TSDFMatchGncCostFunction2D {
         point_cloud_(point_cloud),
         interpolated_grid_(grid),
         gnc_state(gnc_state) {}
-//        functor_(new ComputeDistValueFunctor{.global_gnc_state = gnc_state}){
-////      ComputeDistValueFunctor* functor_ = new ComputeDistValueFunctor;
-//      compute_dist.reset(new ceres::CostFunctionToFunctor<1, 1>(
-//          new ceres::NumericDiffCostFunction<ComputeDistValueFunctor,
-//              ceres::CENTRAL,
-//              1,
-//              1>(functor_)));
-////      LOG(INFO) << "GNC Adress: " << gnc_state;
-//    }
-
   template <typename T>
   bool operator()(const T* const pose, T* residual) const {
     const Eigen::Matrix<T, 2, 1> translation(pose[0], pose[1]);
@@ -68,13 +49,9 @@ class TSDFMatchGncCostFunction2D {
     const Eigen::Matrix<T, 2, 2> rotation_matrix = rotation.toRotationMatrix();
     Eigen::Matrix<T, 3, 3> transform;
     transform << rotation_matrix, translation, T(0.), T(0.), T(1.);
-//    std::cout << "Transform:" << transform << std::endl;
     T summed_weight = T(0);
     T res_sum = T(0);
     T max_residual = T(0);
-//    LOG(INFO) << "X: " << GetScalarFromJet(pose[0])
-//              << "Y: " << GetScalarFromJet(pose[1])
-//              << "w: " << GetScalarFromJet(pose[2]);
     for (size_t i = 0; i < point_cloud_.size(); ++i) {
       // Note that this is a 2D point. The third component is a scaling factor.
       const Eigen::Matrix<T, 3, 1> point((T(point_cloud_[i].position.x())),
@@ -84,72 +61,30 @@ class TSDFMatchGncCostFunction2D {
       T grid_weight = interpolated_grid_.GetWeight(world[0], world[1]);
       const T point_weight = grid_weight * T(1.0 - empty_space_cost_) +
                              T(empty_space_cost_) * max_weight_;
-      summed_weight += point_weight;  // TODO
-//      T p1 = interpolated_grid_.GetWeight(world[0], world[1]);
-//      T p2 = interpolated_grid_.GetCorrespondenceCost(world[0], world[1]);
+      summed_weight += point_weight;
       residual[i] =
           T(point_cloud_.size()) * residual_scaling_factor_ *
           interpolated_grid_.GetCorrespondenceCost(world[0], world[1]) *
-          point_weight;  // new weights from gnc //TODO
-//      LOG(INFO) << gnc_state->get_weights()->at(i);
-//      if (residual[i] > T(0)) residual[i] = residual[i] * residual[i];
-//      else residual[i] = -(residual[i] * residual[i]);
+          point_weight;
 
-//      if (max_residual < residual[i]) {
-//        max_residual = residual[i];
-////        LOG(INFO) << "Residual: " << i << ": " << GetScalarFromJet(residual[i]);
-//      }
-
-      // OLD METHOD:
-//      gnc_state->set_distance(i, abs(GetScalarFromJet(residual[i])));
-      // NEW METHOD:
-//      gnc_state->set_distance(i, abs(GetScalarFromJet(residual[i]) /
-//                                     gnc_state->get_weights()->at(i)));
-
-//      T f = T(0);
-//      functor_->current_pos = i;
-//      (*compute_dist)(&residual[i], &f);
-//      LOG(INFO) << "Residual: " << i << ": " << GetScalarFromJet(residual[i]);
     }
-//    LOG(INFO) << "Residuals: " << GetScalarFromJet(residual[0])
-//              << ", " << GetScalarFromJet(residual[1]) << ", "
-//              << GetScalarFromJet(residual[2]) << ", "
-//              << GetScalarFromJet(residual[3]);
-//    LOG(INFO) << "Weights: " << gnc_state->get_weights()->at(0)
-//              << ", " << gnc_state->get_weights()->at(1) << ", "
-//              << gnc_state->get_weights()->at(2) << ", "
-//              << gnc_state->get_weights()->at(3);
 
-    // OLD METHOD:
-//    gnc_state->set_max_residual(abs(pow(GetScalarFromJet(max_residual), 1)));
-    // NEW:
-//    gnc_state->set_max_residual(abs(pow(GetScalarFromJet(max_residual / summed_weight), 1)));
     if (summed_weight == T(0)) return false;
     for (size_t i = 0; i < point_cloud_.size(); ++i) {
 //      residual[i] /= summed_weight;
-
       residual[i] = residual[i] * gnc_state->get_weights()->at(i) / summed_weight;
       gnc_state->set_distance(i, abs(GetScalarFromJet(residual[i]) /
                                      gnc_state->get_weights()->at(i)));
       if (max_residual < residual[i]) {
         max_residual = residual[i];
-//        LOG(INFO) << "Residual: " << i << ": " << GetScalarFromJet(residual[i]);
       }
 
-      // NEW:
-//      gnc_state->set_distance(i, abs(GetScalarFromJet(residual[i])));
       res_sum += residual[i];
     }
 
     gnc_state->set_max_residual(abs(pow(GetScalarFromJet(max_residual), 1)));
 
-//    LOG(INFO) << "Residual sum: " << res_sum << "PWeight: " << summed_weight;
-//    gnc_state->set_max_residual(abs(pow(GetScalarFromJet(res_sum * summed_weight), 1)));
-
-//    std::cout << summed_weight << " | " << res_sum << std::endl;
-//    gnc_state->get_gm_gnc_shape();
-
-      return true;
+    return true;
   }
 
  private:
@@ -160,10 +95,6 @@ class TSDFMatchGncCostFunction2D {
   double GetScalarFromJet(const double jet) const {
     return double(jet);
   }
-//  template <typename T>
-//  double sgn(T val) {
-//    return (T(0) < val) - (val < T(0));
-//  }
 
   TSDFMatchGncCostFunction2D(const TSDFMatchGncCostFunction2D&) = delete;
   TSDFMatchGncCostFunction2D& operator=(const TSDFMatchGncCostFunction2D&) =
