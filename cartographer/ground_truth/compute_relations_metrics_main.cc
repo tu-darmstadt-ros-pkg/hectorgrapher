@@ -44,9 +44,10 @@ DEFINE_string(relations_filename, "",
 DEFINE_bool(read_text_file_with_unix_timestamps, false,
             "Enable support for the relations text files as in the paper. "
             "Default is to read from a GroundTruth proto file.");
-DEFINE_bool(write_relation_metrics, false,
+DEFINE_bool(write_relation_metrics, true,
             "Enable exporting relation metrics as comma-separated values to "
             "[pose_graph_filename].relation_metrics.csv");
+DEFINE_string(output_filename, "", "Output filename.");
 
 namespace cartographer {
 namespace ground_truth {
@@ -78,6 +79,8 @@ Error ComputeError(const transform::Rigid3d& pose1,
 
 std::string MeanAndStdDevString(const std::vector<double>& values) {
   CHECK_GE(values.size(), 2);
+  const double sum =
+      std::accumulate(values.begin(), values.end(), 0.);
   const double mean =
       std::accumulate(values.begin(), values.end(), 0.) / values.size();
   double sum_of_squared_differences = 0.;
@@ -88,7 +91,7 @@ std::string MeanAndStdDevString(const std::vector<double>& values) {
       std::sqrt(sum_of_squared_differences / (values.size() - 1));
   std::ostringstream out;
   out << std::fixed << std::setprecision(5) << mean << " +/- "
-      << standard_deviation;
+      << standard_deviation << ", Sum: " << sum;
   return std::string(out.str());
 }
 
