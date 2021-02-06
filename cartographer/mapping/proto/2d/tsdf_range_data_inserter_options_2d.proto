@@ -52,4 +52,11 @@ message TSDFRangeDataInserterOptions2D {
   // Kernel bandwith of the weight factor based on the distance between
   // cell and scan observation.
   double min_normal_weight = 10;
+
+  // Factor to scale the truncation distance, grid cells within the scaled
+  // truncation distance are updated too, resulting in a bigger gradient area
+  double truncation_distance_update_factor = 11;
+
+  // If only the free space from origin to first hits should be updated
+  bool update_free_space_only_first_hits = 12;
 }
