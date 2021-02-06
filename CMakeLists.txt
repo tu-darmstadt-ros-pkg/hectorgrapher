@@ -34,9 +34,11 @@ find_package(Boost REQUIRED COMPONENTS iostreams)
 find_package(Ceres REQUIRED COMPONENTS SuiteSparse)
 find_package(Eigen3 REQUIRED)
 find_package(LuaGoogle REQUIRED)
-set(PROTOBUF_INCLUDE_DIRS "/home/kevin/tsdf_ws/external/protobuf3/include")
-set(PROTOBUF_LIBRARY "/home/kevin/tsdf_ws/external/protobuf3/lib/libprotobuf.a")
-set(PROTOBUF_PROTOC_EXECUTABLE "/home/kevin/tsdf_ws/external/protobuf3/bin/protoc")
+set(PROTOBUF_INCLUDE_DIRS "/usr/local/include/google/protobuf")
+set(PROTOBUF_LIBRARY "/usr/local/lib/libprotobuf.a")
+# set(PROTOBUF_INCLUDE_DIRS "/home/kevin/tsdf_ws/external/protobuf3/include")
+# set(PROTOBUF_LIBRARY "/home/kevin/tsdf_ws/external/protobuf3/lib/libprotobuf.a")
+set(PROTOBUF_PROTOC_EXECUTABLE "/usr/local/bin/protoc")
 
 if (${BUILD_GRPC})
   find_package(async_grpc REQUIRED)
@@ -50,6 +52,8 @@ find_package(Sphinx)
 if(SPHINX_FOUND)
   add_subdirectory("docs")
 endif()
+
+# add_subdirectory(googletest)
 
 # Install catkin package.xml
 install(FILES package.xml DESTINATION share/cartographer)
@@ -129,6 +133,7 @@ foreach(ABS_FIL ${ALL_PROTOS})
     COMMAND  ${PROTOBUF_PROTOC_EXECUTABLE}
     ARGS --cpp_out  ${PROJECT_BINARY_DIR} -I
       ${PROJECT_SOURCE_DIR} ${ABS_FIL}
+      --python_out ${PROJECT_BINARY_DIR}
     DEPENDS ${ABS_FIL}
     COMMENT "Running C++ protocol buffer compiler on ${ABS_FIL}"
     VERBATIM
@@ -176,6 +181,11 @@ configure_file(
 google_binary(cartographer_autogenerate_ground_truth
   SRCS
     cartographer/ground_truth/autogenerate_ground_truth_main.cc
+)
+
+google_binary(cartographer_autogenerate_ground_truth_no_lc
+  SRCS
+    cartographer/ground_truth/autogenerate_ground_truth_main_no_lc.cc
 )
 
 google_binary(cartographer_compute_relations_metrics
