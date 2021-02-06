@@ -33,7 +33,7 @@ namespace scan_matching {
 namespace {
 
 class CeresScanMatcherTest : public ::testing::Test {
- protected:
+protected:
   CeresScanMatcherTest()
       : probability_grid_(
             MapLimits(1., Eigen::Vector2d(10., 10.), CellLimits(20, 20)),
@@ -49,6 +49,7 @@ class CeresScanMatcherTest : public ::testing::Test {
           occupied_space_weight = 1.,
           translation_weight = 0.1,
           rotation_weight = 1.5,
+          empty_space_cost = 0.5,
           ceres_solver_options = {
             use_nonmonotonic_steps = true,
             max_num_iterations = 50,
@@ -72,6 +73,8 @@ class CeresScanMatcherTest : public ::testing::Test {
     EXPECT_THAT(pose, transform::IsNearly(expected_pose, 1e-2))
         << "Actual: " << transform::ToProto(pose).DebugString()
         << "\nExpected: " << transform::ToProto(expected_pose).DebugString();
+    LOG(INFO) << pose.translation().y() << expected_pose.translation().y();
+    LOG(INFO) << pose.rotation().angle() << "; " << expected_pose.rotation().angle();
   }
 
   ValueConversionTables conversion_tables_;
@@ -100,3 +103,8 @@ TEST_F(CeresScanMatcherTest, testOptimizeAlongXY) {
 }  // namespace scan_matching
 }  // namespace mapping
 }  // namespace cartographer
+
+int main(int argc, char **argv) {
+    testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
+}

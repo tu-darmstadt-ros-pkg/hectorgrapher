@@ -15,6 +15,7 @@
  */
 
 #include "cartographer/mapping/internal/2d/scan_matching/ceres_scan_matcher_2d.h"
+#include "text_format.h"
 
 #include <utility>
 #include <vector>
@@ -42,12 +43,20 @@ proto::CeresScanMatcherOptions2D CreateCeresScanMatcherOptions2D(
       parameter_dictionary->GetDouble("occupied_space_weight"));
   options.set_translation_weight(
       parameter_dictionary->GetDouble("translation_weight"));
+  options.set_translation_weight_vertical(
+      parameter_dictionary->GetDouble("translation_weight_vertical"));
   options.set_rotation_weight(
       parameter_dictionary->GetDouble("rotation_weight"));
   *options.mutable_ceres_solver_options() =
       common::CreateCeresSolverOptionsProto(
           parameter_dictionary->GetDictionary("ceres_solver_options").get());
   options.set_empty_space_cost(parameter_dictionary->GetDouble("empty_space_cost"));
+  if (parameter_dictionary->HasKey("gnc_options_2d")) {
+    LOG(INFO) << "Creating GNC OPTIONS";
+    *options.mutable_gnc_options_2d() =
+        cartographer::mapping::scan_matching::CreateGncOptions2D(
+        parameter_dictionary->GetDictionary("gnc_options_2d").get());
+  }
   return options;
 }
 
@@ -55,8 +64,31 @@ CeresScanMatcher2D::CeresScanMatcher2D(
     const proto::CeresScanMatcherOptions2D& options)
     : options_(options),
       ceres_solver_options_(
-          common::CreateCeresSolverOptions(options.ceres_solver_options())) {
+          common::CreateCeresSolverOptions(options.ceres_solver_options())),
+      logging_callback() {  // TODO REMOVE
+
+  // TODO remove after eval:
+//  ceres_solver_options_.update_state_every_iteration = true;
+//  LOG(INFO) << "ADDING CALLBACK";
+//  ceres_solver_options_.callbacks.push_back(&logging_callback);
+//  logging_callback.set_gnc(false);
+
+//  std::string a;
+//  google::protobuf::TextFormat::PrintToString(options.ceres_solver_options(), &a);
+//  LOG(INFO) << "Got Solver Options:" << a;
   ceres_solver_options_.linear_solver_type = ceres::DENSE_QR;
+//  ceres_solver_options_.function_tolerance = 1e-12;
+//  ceres_solver_options_.gradient_tolerance = 1e-14;
+//  ceres_solver_options_.parameter_tolerance = 1e-12;
+
+//    LOG(INFO) << "Creating_________";
+//    std::unique_ptr<ceres::IterationCallback> gnc_callback;
+//    gnc_callback.reset(new GncIterationCallback());
+
+//    LOG(INFO) << "inserting__________";
+//    ceres_solver_options_.callbacks.push_back(&gnc_callback);
+//    LOG(INFO) << "inserting done__________";
+
 }
 
 CeresScanMatcher2D::~CeresScanMatcher2D() {}
@@ -71,6 +103,8 @@ void CeresScanMatcher2D::Match(const Eigen::Vector2d& target_translation,
                                    initial_pose_estimate.translation().y(),
                                    initial_pose_estimate.rotation().angle()};
   ceres::Problem problem;
+  // this function is called depending on the Class of the scan matcher at run
+  // time, either GNC or Normal scan matching problem setup
   setupProblem(target_translation, initial_pose_estimate, point_cloud, grid,
                &ceres_pose_estimate[0], &problem);
   ceres::Solve(ceres_solver_options_, &problem, summary);
@@ -99,6 +133,10 @@ void CeresScanMatcher2D::setupProblem(
     const sensor::PointCloud& point_cloud, const Grid2D& grid,
     double* ceres_pose_estimate, ceres::Problem* problem) const {
   CHECK_GT(options_.occupied_space_weight(), 0.);
+
+//  // TODO remove after eval:
+//  logging_callback.set_ceres_pose_estimate_ptr(ceres_pose_estimate);
+
   switch (grid.GetGridType()) {
     case GridType::PROBABILITY_GRID:
       problem->AddResidualBlock(
@@ -121,7 +159,9 @@ void CeresScanMatcher2D::setupProblem(
   CHECK_GE(options_.translation_weight(), 0.);
   problem->AddResidualBlock(
       TranslationDeltaCostFunctor2D::CreateAutoDiffCostFunction(
-          options_.translation_weight(), target_translation),
+          options_.translation_weight(),
+          options_.translation_weight_vertical(),
+          target_translation, ceres_pose_estimate[2]),
       nullptr /* loss function */, ceres_pose_estimate);
   CHECK_GE(options_.rotation_weight(), 0.);
   problem->AddResidualBlock(

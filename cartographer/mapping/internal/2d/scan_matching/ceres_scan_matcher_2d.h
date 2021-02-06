@@ -26,6 +26,9 @@
 #include "cartographer/mapping/proto/scan_matching/ceres_scan_matcher_options_2d.pb.h"
 #include "cartographer/sensor/point_cloud.h"
 #include "ceres/ceres.h"
+#include "cartographer/mapping/internal/2d/scan_matching/gnc_iteration_callback.h"
+
+#include "cartographer/mapping/internal/2d/scan_matching/logging_iteration_callback.h"
 
 namespace cartographer {
 namespace mapping {
@@ -40,32 +43,37 @@ class CeresScanMatcher2D {
   explicit CeresScanMatcher2D(const proto::CeresScanMatcherOptions2D& options);
   virtual ~CeresScanMatcher2D();
 
-  CeresScanMatcher2D(const CeresScanMatcher2D&) = delete;
-  CeresScanMatcher2D& operator=(const CeresScanMatcher2D&) = delete;
+//  CeresScanMatcher2D(const CeresScanMatcher2D&) = delete;
+//  CeresScanMatcher2D& operator=(const CeresScanMatcher2D&) = delete;
 
   // Aligns 'point_cloud' within the 'grid' given an
   // 'initial_pose_estimate' and returns a 'pose_estimate' and the solver
   // 'summary'.
-  void Match(const Eigen::Vector2d& target_translation,
-             const transform::Rigid2d& initial_pose_estimate,
-             const sensor::PointCloud& point_cloud, const Grid2D& grid,
-             transform::Rigid2d* pose_estimate,
-             ceres::Solver::Summary* summary) const;
 
-  void Evaluate(const Eigen::Vector2d& target_translation,
-                const transform::Rigid2d& initial_pose_estimate,
-                const sensor::PointCloud& point_cloud, const Grid2D& grid,
-                double* cost, std::vector<double>* residuals,
-                std::vector<double>* jacobians) const;
+  virtual void Match(const Eigen::Vector2d& target_translation,
+                     const transform::Rigid2d& initial_pose_estimate,
+                     const sensor::PointCloud& point_cloud, const Grid2D& grid,
+                     transform::Rigid2d* pose_estimate,
+                     ceres::Solver::Summary* summary) const;
 
- private:
-  void setupProblem(const Eigen::Vector2d& target_translation,
-                    const transform::Rigid2d& initial_pose_estimate,
-                    const sensor::PointCloud& point_cloud, const Grid2D& grid,
-                    double* ceres_pose_estimate, ceres::Problem* problem) const;
+  virtual void Evaluate(const Eigen::Vector2d& target_translation,
+                        const transform::Rigid2d& initial_pose_estimate,
+                        const sensor::PointCloud& point_cloud,
+                        const Grid2D& grid,
+                        double* cost, std::vector<double>* residuals,
+                        std::vector<double>* jacobians) const;
+
+ protected:
+  virtual void setupProblem(const Eigen::Vector2d& target_translation,
+                            const transform::Rigid2d& initial_pose_estimate,
+                            const sensor::PointCloud& point_cloud,
+                            const Grid2D& grid,
+                            double* ceres_pose_estimate,
+                            ceres::Problem* problem) const;
 
   const proto::CeresScanMatcherOptions2D options_;
   ceres::Solver::Options ceres_solver_options_;
+  mutable LoggingIterationCallback logging_callback;
 };
 
 }  // namespace scan_matching
