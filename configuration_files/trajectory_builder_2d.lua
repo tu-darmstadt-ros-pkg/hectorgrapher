@@ -1,4 +1,4 @@
--- Copyright 2016 The Cartographer Authors
+-- Copyright___ 2016 The Cartographer Authors
 --
 -- Licensed under the Apache License, Version 2.0 (the "License");
 -- you may not use this file except in compliance with the License.
@@ -46,12 +46,22 @@ TRAJECTORY_BUILDER_2D = {
   ceres_scan_matcher = {
     occupied_space_weight = 1.,
     translation_weight = 10.,
+    translation_weight_vertical = 40.,
     rotation_weight = 40.,
     empty_space_cost = 0.,
     ceres_solver_options = {
       use_nonmonotonic_steps = false,
       max_num_iterations = 20,
       num_threads = 1,
+    },
+    gnc_options_2d = {
+      use_gnc = true,
+      max_iterations = 80,
+      non_convexity_stop = 1,
+      gm_shape = 9.35,
+      min_convexity = 100,
+      non_convexity_inc_factor = 1.4,
+      max_retries = 3,
     },
   },
 
@@ -78,6 +88,8 @@ TRAJECTORY_BUILDER_2D = {
       },
       tsdf_range_data_inserter = {
         truncation_distance = 0.3,
+        truncation_distance_update_factor = 1.0,
+        update_free_space_only_first_hits = false,
         maximum_weight = 10.,
         update_free_space = false,
         normal_estimation_options = {

@@ -17,7 +17,7 @@ POSE_GRAPH = {
   constraint_builder = {
     sampling_ratio = 0.3,
     max_constraint_distance = 15.,
-    min_score = 0.55,
+    min_score = 0.15,  -- 0.55
     global_localization_min_score = 0.6,
     loop_closure_translation_weight = 1.1e4,
     loop_closure_rotation_weight = 1e5,
@@ -31,12 +31,22 @@ POSE_GRAPH = {
     ceres_scan_matcher = {
       occupied_space_weight = 20.,
       translation_weight = 10.,
+      translation_weight_vertical = 0.,
       rotation_weight = 1.,
       empty_space_cost = 0.,
       ceres_solver_options = {
         use_nonmonotonic_steps = true,
         max_num_iterations = 10,
         num_threads = 1,
+      },
+      gnc_options_2d = {
+        use_gnc = false,
+        max_iterations = 80,
+        non_convexity_stop = 0.1,
+        gm_shape = 7,
+        min_convexity = 0,
+        non_convexity_inc_factor = 1.2,
+        max_retries = 1,
       },
     },
     fast_correlative_scan_matcher_3d = {
