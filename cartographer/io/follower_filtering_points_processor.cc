@@ -29,16 +29,23 @@ FollowerFiteringPointsProcessor::FromDictionary(
     common::LuaParameterDictionary* const dictionary,
     PointsProcessor* const next) {
   return absl::make_unique<FollowerFiteringPointsProcessor>(
-      dictionary->GetInt("yaw_range"),
+      dictionary->GetDouble("min_yaw_range"),
+      dictionary->GetDouble("max_yaw_range"),
       dictionary->GetDouble("follow_distance"),
-      dictionary->GetDouble("min_height"),
-      dictionary->GetDouble("max_height"),
+      dictionary->GetDouble("min_height"), dictionary->GetDouble("max_height"),
       next);
 }
 
 FollowerFiteringPointsProcessor::FollowerFiteringPointsProcessor(
-    const int yaw_range, const double follow_distance, const double min_height, const double max_height, PointsProcessor* next)
-    : yaw_range_(yaw_range), follow_distance_(follow_distance), min_height_(min_height), max_height_(max_height), next_(next) {}
+    const double min_yaw_range, const double max_yaw_range,
+    const double follow_distance, const double min_height,
+    const double max_height, PointsProcessor* next)
+    : min_yaw_range_(min_yaw_range),
+      max_yaw_range_(max_yaw_range),
+      follow_distance_(follow_distance),
+      min_height_(min_height),
+      max_height_(max_height),
+      next_(next) {}
 
 void FollowerFiteringPointsProcessor::Process(
   std::unique_ptr<PointsBatch> batch) {
@@ -51,8 +58,8 @@ void FollowerFiteringPointsProcessor::Process(
     Eigen::Vector3f point = batch->sensor_to_map.inverse() * batch->points[i].position;
     // we add 180 here because atan2 is calculating angle to x-axis
     // and we want to include points on both sides of the axis
-    float angle = common::RadToDeg(std::atan2(point[1], point[0])) + 180;
-    const bool invalid_yaw = angle < yaw_range_;
+    float angle = common::RadToDeg(std::atan2(point[1], point[0]));
+    const bool invalid_yaw = angle > min_yaw_range_ && angle < max_yaw_range_;
     // 2. inside certain follow distance
     // calculate 2d distance, since z is not interesting here
     const float actual_follow_distance = std::sqrt(pow(batch->points[i].position[0] - batch->origin[0], 2) + pow(batch->points[i].position[1] - batch->origin[1], 2));
