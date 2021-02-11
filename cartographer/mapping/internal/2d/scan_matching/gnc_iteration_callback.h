@@ -76,23 +76,13 @@ public:
 
   ceres::CallbackReturnType
   operator()(const ceres::IterationSummary &summary) {
-//    LOG(INFO) << "Callback #nr executed: " << iteration_counter << std::endl;
-//    LOG(INFO) << "Cost in iteration #" << iteration_counter << " Cost: " << summary.cost << "; Change: " << summary.cost_change << "; MaxNorm" << summary.gradient_max_norm;
-//    if (summary.iteration == 0) LOG(INFO) << "1. Score: " << summary.cost << ", d: " << summary.cost_change;
-
     iteration_counter = summary.iteration + 1;  // + 1 for set_max_distance(...)
-//    if (iteration_counter > 8) {
     float f = non_convexity * pow(gm_gnc_shape, 2);
     for (size_t i = 0; i < gnc_weights.size(); i++) {
       gnc_weights[i] = pow((f / (f + pow(gnc_distances[i], 1))), 2);
 //      log_file << summary.iteration << "," << i << "," << gnc_weights[i] << ","
 //               << gnc_distances[i] << "," << non_convexity << "," << f << "\n";
-//      if (i == 0) LOG(INFO) << "WEIGHT 0: " << gnc_weights[i] << "D: " << gnc_distances[i];
-//      if (gnc_weights[i] < 0.5) gnc_weights[i] = 0.5;
-//      LOG(INFO) << "DIST: " << i << "; " << gnc_distances[i] << " Weight: "
-//                << gnc_weights[i];
     }
-//    }
 
 //    double a = (non_convexity + 1) / non_convexity;
 //    double b = 1 / a;
@@ -107,21 +97,17 @@ public:
 //                         non_convexity;
 //      if (gnc_distances[i] <= b * shape)
 //        gnc_weights[i] = 1;
-
 //    }
-
-//    assert(summary.iteration == iteration_counter);
 
     if (summary.iteration > 1 && summary.step_is_successful && // cost change only after first iteration available
         (summary.iteration > max_iterations ) ||
-        non_convexity <= non_convexity_stop
+        non_convexity <= non_convexity_stop /* TODO > or < depending on cost fct */
 //        summary.cost_change < function_tolerance * 1e-4 ||
 //        summary.gradient_norm < gradient_tolerance)
-        ) {  // TODO > or < depending on cost fct
+        ) {
 //      LOG(INFO) << "Non Convexity unsuccessful for match: #" << scan_counter
 //                << " after iteration: " << iteration_counter
 //                << " and end convexity: " << non_convexity;
-//      return ceres::SOLVER_AB1ORT;
 //      LOG(INFO) << "FUNCTION TOLERANCE: " << function_tolerance << ", " << summary.cost_change;
 //      LOG(INFO) << "GRADIENT TOLERANCE: " << gradient_tolerance << ", " << summary.gradient_norm;
 //      LOG(INFO) << "END NON CONVEXITY: " << non_convexity;
@@ -131,7 +117,6 @@ public:
         non_convexity_increment();
 //      LOG(INFO) << "SUM: " << iteration_counter << ":" <<
 //        std::accumulate(gnc_weights.begin(), gnc_weights.end(), 0.0);
-//      iteration_counter++;
       return ceres::SOLVER_CONTINUE;
     }
   }
@@ -206,7 +191,6 @@ public:
       // GM
       non_convexity = 2 * pow(max_residual, 1) * scaling_factor /  // TODO pow(.., 1 or 2)
                       pow(gm_gnc_shape, 2);
-//      LOG(INFO) << "MAX Residual: "  << max_residual << ", Conv.: " << non_convexity;
       if (non_convexity < min_convexity) non_convexity = min_convexity;
 //      LOG(INFO) << "GM-Gnc Start Convexity: " << non_convexity;
 //      LOG(INFO) << "Increment factor: " << non_convexity_inc_factor << " SHAPE: " << gm_gnc_shape;
@@ -214,8 +198,6 @@ public:
   }
 
   void set_distance(size_t pos, double value) const {
-//    LOG(INFO) << "Size:" << gnc_distances.size() << " Pos:" << pos;
-//    LOG(INFO) << "Dist: " << value << " Pos: " << pos;
     gnc_distances.at(pos) = value * scaling_factor;
   }
 
