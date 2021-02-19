@@ -25,7 +25,7 @@ option(BUILD_GRPC "build Cartographer gRPC support" false)
 set(CARTOGRAPHER_HAS_GRPC ${BUILD_GRPC})
 option(BUILD_PROMETHEUS "build Prometheus monitoring support" false)
 
-option(WITH_OPEN3D "build with open3d support" false)
+option(WITH_OPEN3D "build with open3d support" true)
 option(WITH_PCL "build with pcl support" false)
 option(WITH_RK4_INTEGRATOR "build with rk4 integrator" false)
 option(BUILD_EVALUATION_TOOLS "build with evaluation tool" false)
@@ -88,7 +88,8 @@ endif()
 
 # Open3D
 if(${WITH_OPEN3D})
-  find_package(Open3D HINTS ${CMAKE_INSTALL_PREFIX}/lib/CMake)
+#  find_package(Open3D HINTS ${CMAKE_INSTALL_PREFIX}/lib/CMake)
+  find_package(Open3D REQUIRED)
   list(APPEND Open3D_LIBRARIES dl)
   if (Open3D_FOUND)
    message(STATUS "Found Open3D ${Open3D_VERSION}")
@@ -257,6 +258,13 @@ google_binary(cartographer_trajectory_builder_evaluation
 google_binary(cartographer_mapping_evaluation
         SRCS
         cartographer/evaluation/mapping_evaluation.cc
+        )
+endif()
+
+if(${WITH_OPEN3D})
+google_binary(cartographer_pointcloud_converter
+        SRCS
+        cartographer/io/pointcloud_conversion/pointcloud_converter.cc
         )
 endif()
 
