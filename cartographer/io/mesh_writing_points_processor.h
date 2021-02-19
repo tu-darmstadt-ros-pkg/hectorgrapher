@@ -18,7 +18,7 @@
 #include "cartographer/io/file_writer.h"
 #include "cartographer/io/points_processor.h"
 #ifdef WITH_OPEN3D
-#include "Open3D/Open3D.h"
+#include "open3d/Open3D.h"
 #endif
 
 namespace cartographer {

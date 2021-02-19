@@ -27,7 +27,7 @@
 #include "glog/logging.h"
 
 #ifdef WITH_OPEN3D
-#include "Open3D/Open3D.h"
+#include "open3d/Open3D.h"
 #endif
 
 namespace cartographer {
@@ -84,7 +84,7 @@ namespace cartographer {
 
       if(poisson_depth_ == 0) {
         LOG(INFO) << "Writing point cloud to file: " + name_;
-        open3d::io::WritePointCloudToPLY(name_, *resultpc_);
+        open3d::io::WritePointCloudToPLY(name_, *resultpc_, {});
       } else {
         LOG(INFO) << "Calculating mesh using poisson reconstruction with depth: " + std::to_string(poisson_depth_);
         std::shared_ptr<open3d::geometry::TriangleMesh> mesh_es;
