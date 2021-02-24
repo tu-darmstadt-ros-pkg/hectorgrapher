@@ -5,7 +5,7 @@
 #include "cartographer/transform/transform.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
-#include "mapping/3d/hybrid_grid_tsdf.h"
+#include "cartographer/mapping/3d/hybrid_grid_tsdf.h"
 #include "cartographer/mapping/3d/range_data_inserter_3d.h"
 #include "cartographer/mapping/3d/tsdf_range_data_inserter_3d.h"
 
