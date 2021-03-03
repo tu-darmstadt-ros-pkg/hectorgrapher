@@ -2,6 +2,8 @@
 // Created by ubuntu on 20.02.21.
 //
 #include <cmath>
+#include <chrono>
+#include <thread>
 
 #include "dynamic_object_removal_points_processor.h"
 
@@ -23,6 +25,36 @@ DynamicObjectsRemovalPointsProcessor::DynamicObjectsRemovalPointsProcessor(Point
   sensor_range_limit_ = 100.0f;
 }
 
+void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> batch) {
+  // For debugging: sleep at first iteration
+  if (map_.empty()) {
+    std::this_thread::sleep_for(std::chrono::seconds(10));
+  }
+
+  LOG(INFO) << "Iteration: " << list_of_batches_.size() + 1 << "\tBatch points: " << batch->points.size();
+  // Create wedge for global map and current scan. Only if this isn't the first scan
+  if (!map_.empty()) {
+    wedge_map_t scan_wedge_map = create_wedge_map(batch->points);
+    wedge_map_t global_wedge_map = create_wedge_map(sensor::TransformPointCloud(map_, batch->sensor_to_map.inverse()));
+
+    LOG(INFO) << "Scan wedge map size: " << scan_wedge_map.size() << "\tGlobal wedge map size: " << global_wedge_map.size();
+  }
+
+  // Add the current batch to the list of batches for later sending
+  list_of_batches_.push_back(*batch);
+  LOG(INFO) << "Batch inserted";
+
+  // Add all points from the current scan to the full map
+  for (auto & point : batch->points) {
+    map_.push_back(batch->sensor_to_map * point);
+  }
+
+  LOG(INFO) << "Total Map points: " << map_.size();
+
+  // TODO(bastian.hirschel) we want to process upon completion of the bag
+  next_->Process(std::move(batch));
+}
+
 Eigen::Vector3f DynamicObjectsRemovalPointsProcessor::cartesian_to_polar(Eigen::Vector3f cart_coord) {
   Eigen::Vector3f polar_coord;
 
@@ -35,32 +67,10 @@ Eigen::Vector3f DynamicObjectsRemovalPointsProcessor::cartesian_to_polar(Eigen::
   return polar_coord;
 }
 
-void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> batch) {
-  // Create wedge for global map and current scan. Only if this isn't the first scan
-  if (!map_.empty()) {
-    wedge_map_t scan_wedge_map = create_wedge_map(batch->points);
-    wedge_map_t global_wedge_map = create_wedge_map(sensor::TransformPointCloud(map_, batch->sensor_to_map.inverse()));
-  }
-
-  // Add the current batch to the list of batches for later sending
-  list_of_batches_.push_back(*batch);
-
-  // Add all points from the current scan to the full map
-  for (auto & point : batch->points) {
-    map_.push_back(batch->sensor_to_map * point);
-  }
-
-  // TODO(bastian.hirschel) we want to process upon completion of the bag
-  next_->Process(std::move(batch));
-}
-
-PointsProcessor::FlushResult DynamicObjectsRemovalPointsProcessor::Flush() {
-  return next_->Flush();
-}
-
 uint16_t DynamicObjectsRemovalPointsProcessor::cantor_pairing(uint16_t a, uint16_t b) {
   return ((a + b)*(a + b + 1))/2 + b;
 }
+
 DynamicObjectsRemovalPointsProcessor::wedge_key_t DynamicObjectsRemovalPointsProcessor::get_interval_segment(
     Eigen::Vector3f p) {
   float r, theta, phi;
@@ -71,13 +81,13 @@ DynamicObjectsRemovalPointsProcessor::wedge_key_t DynamicObjectsRemovalPointsPro
   phi = static_cast<float>(fmod(p.z(), 2.0f * M_PI));
 
   // Convert into positive space from 0 to pi or 0 to 2pi, respectively
-  theta = theta < 0 ? theta + M_PI : theta;
-  phi = phi < 0 ? phi + 2.0 * M_PI : phi;
+  theta = theta < 0 ? theta + M_PIf : theta;
+  phi = phi < 0 ? phi + 2.0f * M_PIf : phi;
 
   // Get index of the interval segment it belongs to
-  r_seg = static_cast<uint16_t>(floor(r / (sensor_range_limit_ / r_segments_)));
-  theta_seg = static_cast<uint16_t>(floor(theta / (M_PI / theta_segments_)));
-  phi_seg = static_cast<uint16_t>(floor(phi / ((2.0 * M_PI) / phi_segments_)));
+  r_seg = static_cast<uint16_t>(floorf(r / (sensor_range_limit_ / r_segments_)));
+  theta_seg = static_cast<uint16_t>(floorf(theta / (M_PIf / theta_segments_)));
+  phi_seg = static_cast<uint16_t>(floorf(phi / ((2.0f * M_PIf) / phi_segments_)));
 
   return std::make_tuple(r_seg, theta_seg, phi_seg);
 }
@@ -88,13 +98,19 @@ DynamicObjectsRemovalPointsProcessor::wedge_map_t DynamicObjectsRemovalPointsPro
 
   for (auto & p : cloud) {
     Eigen::Vector3f polar = cartesian_to_polar(p.position);
+
+    // Skip if distance is greater than the sensor range limit
+    if (polar.x() > sensor_range_limit_) {
+      continue;
+    }
+
     wedge_key_t key = get_interval_segment(polar);
     auto search = wedge_map.find(key);
     if (search == wedge_map.end()) {
       // No such element existed before
       sphercial_wedge wedge;
       wedge.wedge_points.push_back(p);
-      search->second = wedge;
+      wedge_map[key] = wedge;
     } else {
       // This wedge already exists, add point to the pointcloud
       search->second.wedge_points.push_back(p);
@@ -102,6 +118,10 @@ DynamicObjectsRemovalPointsProcessor::wedge_map_t DynamicObjectsRemovalPointsPro
   }
 
   return wedge_map;
+}
+
+PointsProcessor::FlushResult DynamicObjectsRemovalPointsProcessor::Flush() {
+  return next_->Flush();
 }
 }
 }

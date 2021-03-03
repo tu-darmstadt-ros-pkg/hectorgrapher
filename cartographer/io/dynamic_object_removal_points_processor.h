@@ -9,6 +9,8 @@
 #include "cartographer/io/points_processor.h"
 #include "cartographer/sensor/point_cloud.h"
 
+#define M_PIf static_cast<float>(M_PI)
+
 namespace cartographer {
 namespace io {
 
@@ -20,6 +22,13 @@ class DynamicObjectsRemovalPointsProcessor : public PointsProcessor {
 
   static std::unique_ptr<DynamicObjectsRemovalPointsProcessor> FromDictionary(
       common::LuaParameterDictionary* dictionary, PointsProcessor* next);
+
+  ~DynamicObjectsRemovalPointsProcessor() override {}
+
+  DynamicObjectsRemovalPointsProcessor(
+      const DynamicObjectsRemovalPointsProcessor&) = delete;
+  DynamicObjectsRemovalPointsProcessor& operator=(
+      const DynamicObjectsRemovalPointsProcessor&) = delete;
 
   Eigen::Vector3f cartesian_to_polar(Eigen::Vector3f cart_coord);
 
