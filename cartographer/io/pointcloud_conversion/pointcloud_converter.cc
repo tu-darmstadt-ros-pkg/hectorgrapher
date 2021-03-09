@@ -36,6 +36,7 @@ namespace cartographer {
             // Initialize an empty Point Cloud in the data format of cartographer
             cartographer::sensor::PointCloud cloud;
 
+            // extra kommentar von arne
             // Fill the Point Cloud with points (shape of a cube)
             cartographer::evaluation::ScanCloudGenerator myScanCloudGenerator;
             myScanCloudGenerator.generateCube(cloud, 3.0, 0.0);
