@@ -3,7 +3,7 @@
 #include <random>
 #include <string>
 
-#include "cairo.h"
+#include <cairo/cairo-svg.h>
 
 #include "cartographer/common/lua_parameter_dictionary.h"
 #include "cartographer/common/lua_parameter_dictionary_test_helpers.h"

@@ -37,7 +37,7 @@
 #include "cartographer/transform/transform.h"
 #include "glog/logging.h"
 
-#include "cairo.h"
+#include <cairo/cairo-svg.h>
 #include "cartographer/evaluation/grid_drawer.h"
 #include "cartographer/evaluation/marching_squares.h"
 #include "cartographer/mapping/2d/tsdf_range_data_inserter_2d.h"

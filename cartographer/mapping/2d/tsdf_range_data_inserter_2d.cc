@@ -20,7 +20,8 @@
 #include "cartographer/mapping/internal/2d/ray_to_pixel_mask.h"
 #include "cartographer/evaluation/marching_squares.h"
 #include "cartographer/evaluation/grid_drawer.h"
-#include "cairo.h"
+
+#include <cairo/cairo-svg.h>
 
 namespace cartographer {
 namespace mapping {

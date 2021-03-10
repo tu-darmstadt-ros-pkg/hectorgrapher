@@ -7,8 +7,9 @@
 #include "cartographer/mapping/2d/tsdf_2d.h"
 #include "cartographer/mapping/internal/2d/scan_matching/fast_esdf_scan_matcher_2d.h"
 
-#include "cairo-svg.h"
-#include "cairo.h"
+#include <cairo/cairo-svg.h>
+//#include "cairo-svg.h"
+//#include "cairo.h"
 
 namespace cartographer {
 namespace evaluation {

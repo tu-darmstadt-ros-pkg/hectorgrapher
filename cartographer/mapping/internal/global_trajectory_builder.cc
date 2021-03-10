@@ -17,6 +17,7 @@
 #include "cartographer/mapping/internal/global_trajectory_builder.h"
 
 #include <memory>
+#include <random>
 
 #include "absl/memory/memory.h"
 #include "cartographer/common/time.h"

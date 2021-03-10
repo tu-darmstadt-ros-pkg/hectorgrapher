@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Copyright 2018 The Cartographer Authors
+# Copyright 2019 The Cartographer Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,14 +17,17 @@
 set -o errexit
 set -o verbose
 
-COMMIT="4e0814ee3f93b796356a51a4795a332568940a72"
-
-git clone https://github.com/jupp0r/prometheus-cpp.git
-cd prometheus-cpp
-git checkout ${COMMIT}
-git submodule update --init
+git clone https://github.com/abseil/abseil-cpp.git
+cd abseil-cpp
+git checkout d902eb869bcfacc1bad14933ed9af4bed006d481
 mkdir build
 cd build
-cmake -DCMAKE_BUILD_TYPE=Release ..
-make
-sudo make install
+cmake -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+  -DCMAKE_INSTALL_PREFIX=/usr/local/stow/absl \
+  ..
+ninja
+sudo ninja install
+cd /usr/local/stow
+sudo stow absl
