@@ -52,8 +52,11 @@ namespace cartographer {
                 cartographer::sensor::PointCloud cartographer_cloud;
 
                 // Fill the Point Cloud with points (shape of a cube)
-                cartographer::evaluation::ScanCloudGenerator myScanCloudGenerator(0.1);
-                myScanCloudGenerator.generateCube(cartographer_cloud, 3.0, 0.0);
+                float distanceBetweenPoints = 0.004;
+                float cubeSideLength = 0.1;
+                float noise = 0.0;
+                cartographer::evaluation::ScanCloudGenerator myScanCloudGenerator(distanceBetweenPoints);
+                myScanCloudGenerator.generateCube(cartographer_cloud, cubeSideLength, noise);
 
                 // Convert the Point Cloud to a Vector of 3D-Eigen-Points.
                 // This data format is more universal than the cartographer Point Cloud
@@ -190,15 +193,16 @@ namespace cartographer {
 
                     Eigen::Vector3f cell_center = tsdf->GetCenterOfCell(update_cell_index);
                     float update_tsd = (cell_center - hit).norm();
+                    if ((cell_center - hit).dot(normal) < 0) {
+                        update_tsd = -update_tsd;
+                    }
 
                     // Ignoriert Gewichte, ändert TSD einfach in den niedrigeren Wert.
                     // Warum brauchen wir überhaupt Gewichte?
-                    if(std::abs(tsdf->GetTSD(update_cell_index)) > std::abs(update_tsd)) {
+                    if (!tsdf->IsKnown(update_cell_index) ||
+                        std::abs(tsdf->GetTSD(update_cell_index)) > std::abs(update_tsd)) {
                         tsdf->SetCell(update_cell_index, update_tsd, tsdf->GetWeight(update_cell_index));
                     }
-
-//                    tsdf->SetCell(update_cell_index, update_tsd, tsdf->GetWeight(update_cell_index));
-
                 }
             }
 
@@ -209,21 +213,25 @@ namespace cartographer {
              * // Todo: Color the voxels by looking at the TSD at this voxel.
              *
              * @param hybridGrid pointer to a filled TSDF to be converted.
-             * @param resolution edge length of the voxels of HybridGridTSDF.
+             * @param voxelSideLength edge length of the voxels of HybridGridTSDF.
              * @return a shared pointer to a VoxelGrid with origin (0,0,0).
              */
-            std::shared_ptr<open3d::geometry::VoxelGrid> convertHybridGridToVoxelGrid(cartographer::mapping::HybridGridTSDF *hybridGrid, float resolution) {
+            std::shared_ptr<open3d::geometry::VoxelGrid>
+            convertHybridGridToVoxelGrid(cartographer::mapping::HybridGridTSDF *hybridGrid, float voxelSideLength) {
 
                 std::shared_ptr<open3d::geometry::VoxelGrid> voxelGrid =
                         std::make_shared<open3d::geometry::VoxelGrid>(open3d::geometry::VoxelGrid());
-                voxelGrid->voxel_size_ = resolution;
+                voxelGrid->voxel_size_ = voxelSideLength;
 
                 for (std::pair<Eigen::Array<int, 3, 1>, TSDFVoxel> nextVoxel : *hybridGrid) {
                     Eigen::Vector3i cellIndex = nextVoxel.first;
 
-//                    Eigen::Vector3d color = {0.0, 0.0, hybridGrid->GetTSD(cellIndex)};
-                    Eigen::Vector3d color = {0.0, 0.0, 1.0};
-
+                    Eigen::Vector3d color;
+                    if (hybridGrid->GetTSD(cellIndex) > 0) {
+                        color = {0.0, 0.0, hybridGrid->GetTSD(cellIndex) * 100};
+                    } else {
+                        color = {hybridGrid->GetTSD(cellIndex) * -100, 0.0, 0.0};
+                    }
 
 //                    std::cout << cellIndex.x() << " " << cellIndex.y() << " " << cellIndex.z() << std::endl;
                     open3d::geometry::Voxel newVoxel = open3d::geometry::Voxel(cellIndex, color);
@@ -250,7 +258,7 @@ namespace cartographer {
                 open3d::io::ReadPointCloud(point_cloud_filename, *myPointCloudPointer, {"auto", true, true, true});
 
                 myPointCloudPointer->EstimateNormals();
-                myPointCloudPointer->OrientNormalsConsistentTangentPlane(10);
+                myPointCloudPointer->OrientNormalsConsistentTangentPlane(9);
                 open3d::visualization::DrawGeometries({myPointCloudPointer});
 
 
@@ -268,8 +276,9 @@ namespace cartographer {
                     }
                 }
                 // Comment the last nine rows to draw a Voxel Grid with no colors.
+                float gridVoxelSideLength = 0.002;
                 std::shared_ptr<open3d::geometry::VoxelGrid> pclVoxelGridPointer =
-                        open3d::geometry::VoxelGrid::CreateFromPointCloud(*myPointCloudPointer, 0.003);
+                        open3d::geometry::VoxelGrid::CreateFromPointCloud(*myPointCloudPointer, gridVoxelSideLength);
 
                 drawTSDF(pclVoxelGridPointer);
 
@@ -277,13 +286,14 @@ namespace cartographer {
 // #################################################################################################################
 
                 // Build a HybridGridTSDF = cartographer's representation of a TSDF
-                // Todo: Sinnvolle Parameter finden. Die sind bis jetzt völliger Zufall.
-                float resolution = 0.002;
-                float truncationDistance = 4.0;
-                float maxWeight = 1000.0;           // Todo: Wird bisher nicht verwendet.
+                float tsdfVoxelSideLength = 0.002;
+                float absoluteTruncationDistance = 0.01;
+                float maxWeight = 10.0;           // Todo: Wird bisher nicht verwendet.
+                float relativeTruncationDistance = absoluteTruncationDistance / tsdfVoxelSideLength;
+
                 cartographer::mapping::ValueConversionTables myValueConversionTable;
                 cartographer::mapping::HybridGridTSDF myHybridGridTSDF(
-                        resolution, truncationDistance, maxWeight, &myValueConversionTable);
+                        tsdfVoxelSideLength, relativeTruncationDistance, maxWeight, &myValueConversionTable);
 
 //                for(int i=0; i<myHybridGrid.grid_size(); i++) {
 //                    for(int j=0; j<myHybridGrid.grid_size(); j++) {
@@ -301,7 +311,7 @@ namespace cartographer {
                     raycastPointWithNormal(
                             myPointCloudPointer->points_.at(i).cast<float>(),
                             myPointCloudPointer->normals_.at(i).cast<float>(),
-                            truncationDistance,
+                            absoluteTruncationDistance,
                             &myHybridGridTSDF);
                 }
 
@@ -310,7 +320,7 @@ namespace cartographer {
 
                 // Show the VoxelGrid of the TSDF
                 std::shared_ptr<open3d::geometry::VoxelGrid> tsdfVoxelGridPointer =
-                        convertHybridGridToVoxelGrid(&myHybridGridTSDF, resolution);
+                        convertHybridGridToVoxelGrid(&myHybridGridTSDF, tsdfVoxelSideLength);
                 drawTSDF(tsdfVoxelGridPointer);
 
             }
