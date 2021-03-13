@@ -11,8 +11,8 @@
 #include "Eigen/Core"
 
 // Classes to generate a TSDF
-//#include "cartographer/mapping/3d/hybrid_grid_tsdf.h"
-//#include "cartographer/mapping/value_conversion_tables.h"
+#include "cartographer/mapping/3d/hybrid_grid_tsdf.h"
+#include "cartographer/mapping/value_conversion_tables.h"
 //#include "cartographer/mapping/3d/range_data_inserter_3d.h"
 //#include "cartographer/mapping/3d/tsdf_range_data_inserter_3d.h"
 
@@ -165,6 +165,73 @@ namespace cartographer {
                 open3d::visualization::DrawGeometriesWithKeyCallbacks({tsdfPointer}, myMap);
             }
 
+
+            // Abgeschrieben von cartographer::mapping:3d::tsdf_range_data_inserter_3d
+            // Sample TSDF Generation in Cartographer --> see evaluation/scan_matching_evaluation.cc
+            // Todo: Macht bis jetzt was sehr komisches... ;)
+
+            void raycastPointWithNormal(const Eigen::Vector3f &hit,
+                                        const Eigen::Vector3f &normal,
+                                        const float truncation_distance,
+                                        HybridGridTSDF *tsdf) const {
+                const Eigen::Vector3f ray_begin = hit - truncation_distance * normal;
+                const Eigen::Vector3f ray_end = hit + truncation_distance * normal;
+
+                const Eigen::Array3i begin_cell = tsdf->GetCellIndex(ray_begin);
+                const Eigen::Array3i end_cell = tsdf->GetCellIndex(ray_end);
+                const Eigen::Array3i delta = end_cell - begin_cell;
+
+                const int num_samples = delta.cwiseAbs().maxCoeff();
+
+                for (int position = 0; position <= num_samples; ++position) {
+                    const Eigen::Array3i update_cell_index =
+                            begin_cell +
+                            (delta.cast<float>() * float(position) / float(num_samples)).round().cast<int>();
+
+                    Eigen::Vector3f cell_center = tsdf->GetCenterOfCell(update_cell_index);
+                    float update_tsd = (cell_center - hit).norm();
+
+                    // Ignoriert Gewichte, ändert TSD einfach in den niedrigeren Wert.
+                    // Warum brauchen wir überhaupt Gewichte?
+                    if(std::abs(tsdf->GetTSD(update_cell_index)) > std::abs(update_tsd)) {
+                        tsdf->SetCell(update_cell_index, update_tsd, tsdf->GetWeight(update_cell_index));
+                    }
+
+//                    tsdf->SetCell(update_cell_index, update_tsd, tsdf->GetWeight(update_cell_index));
+
+                }
+            }
+
+            /**
+             * Prepare the drawing of cartographer's HybridGridTSDF by converting it in open3d's VoxelGrid.
+             *
+             * For every voxel in HybridGridTSDF, the method colors a voxel in VoxelGrid blue.
+             * // Todo: Color the voxels by looking at the TSD at this voxel.
+             *
+             * @param hybridGrid pointer to a filled TSDF to be converted.
+             * @param resolution edge length of the voxels of HybridGridTSDF.
+             * @return a shared pointer to a VoxelGrid with origin (0,0,0).
+             */
+            std::shared_ptr<open3d::geometry::VoxelGrid> convertHybridGridToVoxelGrid(cartographer::mapping::HybridGridTSDF *hybridGrid, float resolution) {
+
+                std::shared_ptr<open3d::geometry::VoxelGrid> voxelGrid =
+                        std::make_shared<open3d::geometry::VoxelGrid>(open3d::geometry::VoxelGrid());
+                voxelGrid->voxel_size_ = resolution;
+
+                for (std::pair<Eigen::Array<int, 3, 1>, TSDFVoxel> nextVoxel : *hybridGrid) {
+                    Eigen::Vector3i cellIndex = nextVoxel.first;
+
+//                    Eigen::Vector3d color = {0.0, 0.0, hybridGrid->GetTSD(cellIndex)};
+                    Eigen::Vector3d color = {0.0, 0.0, 1.0};
+
+
+//                    std::cout << cellIndex.x() << " " << cellIndex.y() << " " << cellIndex.z() << std::endl;
+                    open3d::geometry::Voxel newVoxel = open3d::geometry::Voxel(cellIndex, color);
+                    voxelGrid->AddVoxel(newVoxel);
+                }
+                return voxelGrid;
+            }
+
         public:
             TSDFBuilder() {
                 sliceIndex = 0;
@@ -187,26 +254,10 @@ namespace cartographer {
                 open3d::visualization::DrawGeometries({myPointCloudPointer});
 
 
+// #################################################################################################################
 
 
-
-
-
-//            cartographer::mapping::ValueConversionTables myValueConversionTable;
-//            cartographer::mapping::HybridGridTSDF myHybridGrid(0.1, 1.0, 10.0, &myValueConversionTable);
-//            myHybridGrid.SetCell({0,5,10}, 0.9, 3.0);
-//
-//
-//            // 1. Build a cartographer TSDF.
-//            // 2. Convert it into an Open3D Voxel grid and display this.
-//            // 3. Convert it into a ProtoBuf and output this.
-//
-//
-                // A way to display TSDF Grids is to draw a Voxel Grid.
-                //            std::shared_ptr<open3d::geometry::VoxelGrid> myVoxelGrid = open3d::geometry::VoxelGrid::CreateFromPointCloud(myPointCloud, 0.005);
-                //            open3d::visualization::DrawGeometries({myVoxelGrid}, "Voxel Grid");
-
-                // You can even color the voxels in a certain color
+                // Show the VoxelGrid of the loaded point cloud
                 Eigen::Vector3d maxValues = myPointCloudPointer->GetMaxBound();
                 Eigen::Vector3d minValues = myPointCloudPointer->GetMinBound();
                 Eigen::Vector3d ranges = maxValues - minValues;
@@ -216,54 +267,51 @@ namespace cartographer {
                                 Eigen::Vector3d{(p.x() - minValues.x()) * 1.0 / ranges.x(), 0.0, 0.0});
                     }
                 }
-                std::shared_ptr<open3d::geometry::VoxelGrid> myVoxelGrid =
+                // Comment the last nine rows to draw a Voxel Grid with no colors.
+                std::shared_ptr<open3d::geometry::VoxelGrid> pclVoxelGridPointer =
                         open3d::geometry::VoxelGrid::CreateFromPointCloud(*myPointCloudPointer, 0.003);
-                drawTSDF(myVoxelGrid);
+
+                drawTSDF(pclVoxelGridPointer);
 
 
+// #################################################################################################################
+
+                // Build a HybridGridTSDF = cartographer's representation of a TSDF
+                // Todo: Sinnvolle Parameter finden. Die sind bis jetzt völliger Zufall.
+                float resolution = 0.002;
+                float truncationDistance = 4.0;
+                float maxWeight = 1000.0;           // Todo: Wird bisher nicht verwendet.
+                cartographer::mapping::ValueConversionTables myValueConversionTable;
+                cartographer::mapping::HybridGridTSDF myHybridGridTSDF(
+                        resolution, truncationDistance, maxWeight, &myValueConversionTable);
+
+//                for(int i=0; i<myHybridGrid.grid_size(); i++) {
+//                    for(int j=0; j<myHybridGrid.grid_size(); j++) {
+//                        for(int k=0; k<myHybridGrid.grid_size(); k++) {
+//                            myHybridGrid.SetCell({i,j,k}, 3.0, 0.0);
+//                        }
+//                    }
+//                }
 
 
+// #################################################################################################################
+
+                // Build the TSDF by raytracing every point/normal pair from the point cloud
+                for (long unsigned int i = 0; i < myPointCloudPointer->points_.size(); i++) {
+                    raycastPointWithNormal(
+                            myPointCloudPointer->points_.at(i).cast<float>(),
+                            myPointCloudPointer->normals_.at(i).cast<float>(),
+                            truncationDistance,
+                            &myHybridGridTSDF);
+                }
 
 
+// #################################################################################################################
 
-
-
-//    Sample TSDF Generation in Cartographer --> see evaluation/scan_matching_evaluation.cc
-//    cartographer::mapping::proto::RangeDataInserterOptions3D
-//        range_data_inserter_options;
-//    auto parameter_dictionary_range_data_inserter = common::MakeDictionary(R"text(
-//        return {
-//      range_data_inserter_type = "PROBABILITY_GRID_INSERTER_3D",
-//      probability_grid_range_data_inserter = {
-//        hit_probability = 0.55,
-//        miss_probability = 0.49,
-//        num_free_space_voxels = 2,
-//      },
-//      tsdf_range_data_inserter = {
-//        relative_truncation_distance = 4,
-//        maximum_weight = 1000.,
-//        num_free_space_voxels = 0,
-//        project_sdf_distance_to_scan_normal = true,
-//        weight_function_epsilon = 1,
-//        weight_function_sigma = 4.,
-//        normal_estimate_max_nn = 20.,
-//        normal_estimate_radius = 0.3,
-//      },})text");
-//    range_data_inserter_options =
-//        cartographer::mapping::CreateRangeDataInserterOptions3D(
-//            parameter_dictionary_range_data_inserter.get());
-//
-//    mapping::ValueConversionTables conversion_tables_;
-//    mapping::HybridGridTSDF hybrid_grid_tsdf(
-//        0.05,
-//        range_data_inserter_options.tsdf_range_data_inserter_options_3d()
-//            .relative_truncation_distance(),
-//        range_data_inserter_options.tsdf_range_data_inserter_options_3d()
-//            .maximum_weight(),
-//        &conversion_tables_);
-//    mapping::TSDFRangeDataInserter3D tsdf_range_data_inserter(
-//        range_data_inserter_options);
-//    tsdf_range_data_inserter.Insert(sample.range_data, &hybrid_grid_tsdf);
+                // Show the VoxelGrid of the TSDF
+                std::shared_ptr<open3d::geometry::VoxelGrid> tsdfVoxelGridPointer =
+                        convertHybridGridToVoxelGrid(&myHybridGridTSDF, resolution);
+                drawTSDF(tsdfVoxelGridPointer);
 
             }
         };
