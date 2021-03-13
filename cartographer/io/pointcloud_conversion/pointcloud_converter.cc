@@ -35,6 +35,7 @@ namespace cartographer {
 
             std::shared_ptr<open3d::geometry::VoxelGrid> tsdfPointer;
             int sliceIndex;
+            int sliceOrientation;
 
             /**
              * Generate a point cloud in shape of a cube and convert it into a shared pointer of an open3d point cloud.
@@ -117,12 +118,27 @@ namespace cartographer {
                 slicedVoxelGridPointer->origin_ = tsdfPointer->origin_;
 
                 for (open3d::geometry::Voxel nextVoxel : tsdfPointer->GetVoxels()) {
-                    if (nextVoxel.grid_index_.z() == sliceIndex) {
+                    if (nextVoxel.grid_index_(sliceOrientation) == sliceIndex) {
                         slicedVoxelGridPointer->AddVoxel(nextVoxel);
                     }
                 }
                 visualizer->ClearGeometries();
                 visualizer->AddGeometry(slicedVoxelGridPointer, false);
+                return true;
+            }
+
+            /**
+             * Change the dimension of the displayed slices of a VoxelGrid.
+             *
+             * This method is a callback method for "drawTSDF".
+             *
+             * @param visualizer control class for the open3d window.
+             * @return true in any case.
+             */
+            bool changeOrientation(open3d::visualization::Visualizer *visualizer) {
+                sliceOrientation = (sliceOrientation + 1) % 3;
+                sliceIndex = 1;
+                drawFullView(visualizer);
                 return true;
             }
 
@@ -155,15 +171,19 @@ namespace cartographer {
 
                 std::function<bool(open3d::visualization::Visualizer *)> forwardSlicing =
                         std::bind(&TSDFBuilder::loopForwardThroughSlices, this, std::placeholders::_1);
-                myMap.insert(std::make_pair((int) GLFW_KEY_RIGHT, forwardSlicing));
+                myMap.insert(std::make_pair((int) GLFW_KEY_LEFT, forwardSlicing));
 
                 std::function<bool(open3d::visualization::Visualizer *)> backwardSlicing =
                         std::bind(&TSDFBuilder::loopBackwardThroughSlices, this, std::placeholders::_1);
-                myMap.insert(std::make_pair((int) GLFW_KEY_LEFT, backwardSlicing));
+                myMap.insert(std::make_pair((int) GLFW_KEY_RIGHT, backwardSlicing));
+
+                std::function<bool(open3d::visualization::Visualizer *)> orientationChanging =
+                        std::bind(&TSDFBuilder::changeOrientation, this, std::placeholders::_1);
+                myMap.insert(std::make_pair((int) GLFW_KEY_O, orientationChanging));
 
                 std::function<bool(open3d::visualization::Visualizer *)> fullView =
                         std::bind(&TSDFBuilder::drawFullView, this, std::placeholders::_1);
-                myMap.insert(std::make_pair((int) GLFW_KEY_DOWN, fullView));
+                myMap.insert(std::make_pair((int) GLFW_KEY_F, fullView));
 
                 open3d::visualization::DrawGeometriesWithKeyCallbacks({tsdfPointer}, myMap);
             }
@@ -171,7 +191,8 @@ namespace cartographer {
 
             // Abgeschrieben von cartographer::mapping:3d::tsdf_range_data_inserter_3d
             // Sample TSDF Generation in Cartographer --> see evaluation/scan_matching_evaluation.cc
-            // Todo: Macht bis jetzt was sehr komisches... ;)
+            // Todo: Gewichte werden nicht in die Rechnung einbezogen.
+            //      Betragsmäßig kleinere Werte überschreiben betragsmäßig größere Werte.
 
             void raycastPointWithNormal(const Eigen::Vector3f &hit,
                                         const Eigen::Vector3f &normal,
@@ -209,8 +230,8 @@ namespace cartographer {
             /**
              * Prepare the drawing of cartographer's HybridGridTSDF by converting it in open3d's VoxelGrid.
              *
-             * For every voxel in HybridGridTSDF, the method colors a voxel in VoxelGrid blue.
-             * // Todo: Color the voxels by looking at the TSD at this voxel.
+             * The method colors the voxels blue for positive TSDs and red for negative TSDs.
+             * Voxels with TSD near zero are colored black.
              *
              * @param hybridGrid pointer to a filled TSDF to be converted.
              * @param voxelSideLength edge length of the voxels of HybridGridTSDF.
@@ -242,7 +263,8 @@ namespace cartographer {
 
         public:
             TSDFBuilder() {
-                sliceIndex = 0;
+                sliceIndex = 1;
+                sliceOrientation = 0;
             }
 
 
