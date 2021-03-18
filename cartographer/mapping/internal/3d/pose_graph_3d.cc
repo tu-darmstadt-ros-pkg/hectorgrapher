@@ -1067,7 +1067,8 @@ PoseGraph3D::GetAllSubmapPoses() const {
     submap_poses.Insert(
         submap_id_data.id,
         PoseGraphInterface::SubmapPose{submap_data.submap->num_range_data(),
-                                       submap_data.pose});
+                                       submap_data.pose,
+                                       submap_data.submap->start_time()});
   }
   return submap_poses;
 }
