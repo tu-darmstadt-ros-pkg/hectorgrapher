@@ -159,13 +159,14 @@ OptimizingLocalTrajectoryBuilder::AddRangeData(
   PointCloudSet point_cloud_set;
   point_cloud_set.time = range_data_in_tracking.time;
   point_cloud_set.origin = range_data_in_tracking.origin;
+  point_cloud_set.original_cloud = range_data_in_tracking.ranges;
   for (const auto& hit : range_data_in_tracking.ranges) {
-    point_cloud_set.original_cloud.push_back({hit.position});
+    if (hit.position.hasNaN()) continue;
     const Eigen::Vector3f delta = hit.position - range_data_in_tracking.origin;
     const float range = delta.norm();
     if (range >= options_.min_range()) {
       if (range <= options_.max_range()) {
-        point_cloud_set.points.push_back({hit.position});
+        point_cloud_set.points.push_back(hit);
       }
     }
   }
@@ -348,6 +349,10 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
             common::ToSeconds(point_cloud_set.time -
                               std::prev(next_control_point)->time) /
             duration;
+        if (point_cloud_set.low_resolution_filtered_points.empty() ||
+            point_cloud_set.low_resolution_filtered_points.empty()) {
+          continue;
+        }
         switch (matching_submap->high_resolution_hybrid_grid().GetGridType()) {
           case GridType::PROBABILITY_GRID: {
             problem.AddResidualBlock(

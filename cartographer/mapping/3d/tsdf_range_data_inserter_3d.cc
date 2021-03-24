@@ -509,48 +509,41 @@ void TSDFRangeDataInserter3D::Insert(const sensor::RangeData& range_data,
       break;
     }
     case proto::TSDFRangeDataInserterOptions3D::CLOUD_STRUCTURE: {
-      int NUM_ROWS = 16;
-      int NUM_POINTS_PER_LINE = 1800;
-      int NUM_POINTS_PER_CLOUD = NUM_POINTS_PER_LINE * NUM_ROWS;
-      if (range_data.returns.size() % NUM_POINTS_PER_CLOUD == 0) {
-        int NUM_CLOUDS = range_data.returns.size()/NUM_POINTS_PER_CLOUD;
-        for (int cloud_idx = 0; cloud_idx < NUM_CLOUDS; ++cloud_idx) {
-          for (int relative_point_idx = 0; relative_point_idx < NUM_POINTS_PER_CLOUD; ++relative_point_idx) {
-            int point_idx = relative_point_idx + cloud_idx * NUM_POINTS_PER_CLOUD;
-            if (range_data.returns[point_idx].position.hasNaN()) continue;
-            int i0 = point_idx;
-            int horizontal_stride = 5;
-            int i1 = relative_point_idx + horizontal_stride >= NUM_POINTS_PER_CLOUD
+      int NUM_POINTS_PER_LINE = 16;
+      for (int relative_point_idx = 0;
+           relative_point_idx < range_data.returns.size();
+           ++relative_point_idx) {
+        int point_idx = relative_point_idx;
+        if (range_data.returns[point_idx].position.hasNaN()) continue;
+        int i0 = point_idx;
+        int horizontal_stride = 1;
+        int vertical_stride = 5 * NUM_POINTS_PER_LINE;
+        int i1 = relative_point_idx + horizontal_stride >= NUM_POINTS_PER_LINE
                      ? point_idx - horizontal_stride
                      : point_idx + horizontal_stride;
-            int i2 = relative_point_idx + NUM_POINTS_PER_LINE >= NUM_POINTS_PER_CLOUD
-                     ? point_idx - NUM_POINTS_PER_LINE
-                     : point_idx + NUM_POINTS_PER_LINE;
-            Eigen::Vector3f p0 = range_data.returns[i0].position;
-            Eigen::Vector3f p1 = range_data.returns[i1].position;
-            Eigen::Vector3f p2 = range_data.returns[i2].position;
-            if (p1.hasNaN() || p2.hasNaN()) continue;
-            float r0 = p0.norm();
-            float r1 = p1.norm();
-            float r2 = p2.norm();
-            float max_range_delta = 1.f * tsdf->resolution() / 0.05f;
-            if (std::abs(r0 - r1) > max_range_delta ||
-                std::abs(r0 - r2) > max_range_delta ||
-                std::abs(r1 - r2) > max_range_delta ||
-                (p0 - p1).isZero() ||
-                (p0 - p2).isZero()) {
-              continue;
-            }
-            const Eigen::Vector3f normal = (p0 - p1).cross(p0 - p2).normalized();
-            if (normal.isZero()) {
-              continue;
-            }
-            InsertHitWithNormal(p0, origin, normal, tsdf);
-          }
+        int i2 =
+            relative_point_idx + vertical_stride >= range_data.returns.size()
+                ? point_idx - vertical_stride
+                : point_idx + vertical_stride;
+        Eigen::Vector3f p0 = range_data.returns[i0].position;
+        Eigen::Vector3f p1 = range_data.returns[i1].position;
+        Eigen::Vector3f p2 = range_data.returns[i2].position;
+        if (p1.hasNaN() || p2.hasNaN()) continue;
+        float r0 = p0.norm();
+        float r1 = p1.norm();
+        float r2 = p2.norm();
+        float max_range_delta = 1.f * tsdf->resolution() / 0.05f;
+        if (std::abs(r0 - r1) > max_range_delta ||
+            std::abs(r0 - r2) > max_range_delta ||
+            std::abs(r1 - r2) > max_range_delta || (p0 - p1).isZero() ||
+            (p0 - p2).isZero()) {
+          continue;
         }
-      }
-      else {
-        LOG(WARNING)<<"INVALID CLOUD SIZE "<< range_data.returns.size()<<" - Cloud not inserted!";
+        const Eigen::Vector3f normal = (p0 - p1).cross(p0 - p2).normalized();
+        if (normal.isZero()) {
+          continue;
+        }
+        InsertHitWithNormal(p0, origin, normal, tsdf);
       }
       break;
     }
