@@ -61,23 +61,6 @@ class VoxelFilter {
   absl::flat_hash_set<KeyType> voxel_set_;
 };
 
-proto::AdaptiveVoxelFilterOptions CreateAdaptiveVoxelFilterOptions(
-    common::LuaParameterDictionary* const parameter_dictionary);
-
-class AdaptiveVoxelFilter {
- public:
-  explicit AdaptiveVoxelFilter(
-      const proto::AdaptiveVoxelFilterOptions& options);
-
-  AdaptiveVoxelFilter(const AdaptiveVoxelFilter&) = delete;
-  AdaptiveVoxelFilter& operator=(const AdaptiveVoxelFilter&) = delete;
-
-  PointCloud Filter(const PointCloud& point_cloud) const;
-
- private:
-  const proto::AdaptiveVoxelFilterOptions options_;
-};
-
 }  // namespace sensor
 }  // namespace cartographer
 

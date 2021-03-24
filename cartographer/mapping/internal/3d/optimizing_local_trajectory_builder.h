@@ -28,10 +28,9 @@
 #include "cartographer/mapping/internal/3d/state.h"
 #include "cartographer/mapping/internal/motion_filter.h"
 #include "cartographer/mapping/pose_extrapolator.h"
-
 #include "cartographer/metrics/family_factory.h"
-
 #include "cartographer/sensor/imu_data.h"
+#include "cartographer/sensor/internal/adaptive_voxel_filter.h"
 #include "cartographer/sensor/internal/voxel_filter.h"
 #include "cartographer/sensor/odometry_data.h"
 #include "cartographer/sensor/range_data.h"

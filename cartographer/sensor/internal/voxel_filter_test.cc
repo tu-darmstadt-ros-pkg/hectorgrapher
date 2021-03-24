@@ -18,6 +18,7 @@
 
 #include <cmath>
 
+#include "cartographer/sensor/internal/adaptive_voxel_filter.h"
 #include "gmock/gmock.h"
 
 namespace cartographer {

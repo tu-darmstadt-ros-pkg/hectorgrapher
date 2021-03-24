@@ -34,6 +34,7 @@
 #include "cartographer/mapping/internal/2d/overlapping_submaps_trimmer_2d.h"
 #include "cartographer/mapping/proto/pose_graph/constraint_builder_options.pb.h"
 #include "cartographer/sensor/compressed_point_cloud.h"
+#include "cartographer/sensor/internal/adaptive_voxel_filter.h"
 #include "cartographer/sensor/internal/voxel_filter.h"
 #include "cartographer/transform/transform.h"
 #include "glog/logging.h"
