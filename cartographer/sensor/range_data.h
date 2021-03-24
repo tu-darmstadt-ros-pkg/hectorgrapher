@@ -30,6 +30,13 @@
 namespace cartographer {
 namespace sensor {
 
+// Like 'RangeData', but with 'TimedPointClouds'.
+struct TimedRangeData {
+  Eigen::Vector3f origin;
+  TimedPointCloud returns;
+  TimedPointCloud misses;
+};
+
 // Rays begin at 'origin'. 'returns' are the points where obstructions were
 // detected. 'misses' are points in the direction of rays for which no return
 // was detected, and were inserted at a configured distance. It is assumed that
@@ -41,15 +48,9 @@ struct RangeData {
   RangeData();
   RangeData(const Eigen::Vector3f& origin, const PointCloud& returns,
             const PointCloud& misses);
-};
 
-// Like 'RangeData', but with 'TimedPointClouds'.
-struct TimedRangeData {
-  Eigen::Vector3f origin;
-  TimedPointCloud returns;
-  TimedPointCloud misses;
+  RangeData(const TimedRangeData& timed_range_data);
 };
-
 RangeData TransformRangeData(const RangeData& range_data,
                              const transform::Rigid3f& transform);
 

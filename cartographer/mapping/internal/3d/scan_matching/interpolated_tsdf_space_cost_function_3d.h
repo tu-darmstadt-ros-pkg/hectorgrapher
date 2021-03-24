@@ -32,10 +32,11 @@ namespace scan_matching {
 // Computes a cost for matching the 'point_cloud' to the 'hybrid_grid' with a
 // 'translation' and 'rotation'. The cost increases when points fall into less
 // occupied space, i.e. at voxels with lower values.
+template <typename PointCloudType>
 class InterpolatedTSDFSpaceCostFunction3D {
  public:
   static ceres::CostFunction* CreateAutoDiffCostFunction(
-      const double scaling_factor, const sensor::PointCloud& point_cloud,
+      const double scaling_factor, const PointCloudType& point_cloud,
       const mapping::HybridGridTSDF& hybrid_grid,
       const double interpolation_ratio) {
     if (interpolation_ratio <= 0.0 || interpolation_ratio >= 1.0) {
@@ -69,7 +70,7 @@ class InterpolatedTSDFSpaceCostFunction3D {
 
  private:
   InterpolatedTSDFSpaceCostFunction3D(
-      const double scaling_factor, const sensor::PointCloud& point_cloud,
+      const double scaling_factor, const PointCloudType& point_cloud,
       const mapping::HybridGridTSDF& hybrid_grid,
       const double interpolation_ratio)
       : scaling_factor_(scaling_factor),
@@ -87,7 +88,7 @@ class InterpolatedTSDFSpaceCostFunction3D {
                 T* const residual) const {
     for (size_t i = 0; i < point_cloud_.size(); ++i) {
       const Eigen::Matrix<T, 3, 1> world =
-          transform * point_cloud_[i].position.cast<T>();
+          transform * point_cloud_[i].position.template cast<T>();
       const T tsd = interpolated_grid_.GetTSD(world[0], world[1], world[2]);
       residual[i] = scaling_factor_ * tsd;
     }
@@ -95,7 +96,7 @@ class InterpolatedTSDFSpaceCostFunction3D {
   }
 
   const double scaling_factor_;
-  const sensor::PointCloud& point_cloud_;
+  const PointCloudType& point_cloud_;
   const InterpolatedTSDF interpolated_grid_;
   const double interpolation_ratio_;
 };

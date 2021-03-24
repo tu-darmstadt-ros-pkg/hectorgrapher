@@ -86,10 +86,10 @@ class OptimizingLocalTrajectoryBuilder {
   struct PointCloudSet {
     common::Time time;
     Eigen::Vector3f origin;
-    sensor::PointCloud points;
-    sensor::PointCloud high_resolution_filtered_points;
-    sensor::PointCloud low_resolution_filtered_points;
-    sensor::PointCloud original_cloud;
+    sensor::TimedPointCloud points;
+    sensor::TimedPointCloud high_resolution_filtered_points;
+    sensor::TimedPointCloud low_resolution_filtered_points;
+    sensor::TimedPointCloud original_cloud;
   };
 
   struct ControlPoint {
@@ -112,13 +112,14 @@ class OptimizingLocalTrajectoryBuilder {
 
   std::unique_ptr<MatchingResult> AddAccumulatedRangeData(
       common::Time time, const transform::Rigid3d& pose_observation,
-      const sensor::RangeData& range_data_in_tracking);
+      const sensor::TimedRangeData& range_data_in_tracking);
 
   std::unique_ptr<InsertionResult> InsertIntoSubmap(
-      common::Time time, const sensor::RangeData& filtered_range_data_in_local,
-      const sensor::RangeData& filtered_range_data_in_tracking,
-      const sensor::PointCloud& high_resolution_point_cloud_in_tracking,
-      const sensor::PointCloud& low_resolution_point_cloud_in_tracking,
+      common::Time time,
+      const sensor::TimedRangeData& filtered_range_data_in_local,
+      const sensor::TimedRangeData& filtered_range_data_in_tracking,
+      const sensor::TimedPointCloud& high_resolution_point_cloud_in_tracking,
+      const sensor::TimedPointCloud& low_resolution_point_cloud_in_tracking,
       const transform::Rigid3d& pose_estimate,
       const Eigen::Quaterniond& gravity_alignment);
 

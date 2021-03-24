@@ -199,8 +199,9 @@ TEST_F(TSDFSpaceCostFunction3DTest, MatchEmptyTSDF) {
       evaluation::ScanCloudGenerator(0.025);
   generator.generateCube(matching_cloud, 1.f, 0.f);
   std::unique_ptr<ceres::CostFunction> cost_function(
-      InterpolatedTSDFSpaceCostFunction3D::CreateAutoDiffCostFunction(
-          1.0, matching_cloud, *tsdf_, 0.5));
+      InterpolatedTSDFSpaceCostFunction3D<
+          sensor::PointCloud>::CreateAutoDiffCostFunction(1.0, matching_cloud,
+                                                          *tsdf_, 0.5));
   State state_t0 =
       State(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(),
             Eigen::Vector3d::Zero());
@@ -211,8 +212,9 @@ TEST_F(TSDFSpaceCostFunction3DTest, MatchEmptyTSDF) {
 
   ceres::Problem problem;
   problem.AddResidualBlock(
-      scan_matching::InterpolatedTSDFSpaceCostFunction3D::
-          CreateAutoDiffCostFunction(1.0, matching_cloud, *tsdf_, 0.5),
+      scan_matching::InterpolatedTSDFSpaceCostFunction3D<
+          sensor::PointCloud>::CreateAutoDiffCostFunction(1.0, matching_cloud,
+                                                          *tsdf_, 0.5),
       nullptr, state_t0.translation.data(), state_t0.rotation.data(),
       state_t1.translation.data(), state_t1.rotation.data());
 
@@ -261,8 +263,9 @@ TEST_F(TSDFSpaceCostFunction3DTest, SmallPertubation) {
 
   ceres::Problem problem;
   problem.AddResidualBlock(
-      scan_matching::InterpolatedTSDFSpaceCostFunction3D::
-          CreateAutoDiffCostFunction(1.0, matching_cloud, *tsdf_, 0.5),
+      scan_matching::InterpolatedTSDFSpaceCostFunction3D<
+          sensor::PointCloud>::CreateAutoDiffCostFunction(1.0, matching_cloud,
+                                                          *tsdf_, 0.5),
       nullptr, state_t0.translation.data(), state_t0.rotation.data(),
       state_t1.translation.data(), state_t1.rotation.data());
 
