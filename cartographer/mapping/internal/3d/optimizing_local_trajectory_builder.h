@@ -77,11 +77,15 @@ class OptimizingLocalTrajectoryBuilder {
 
   void SetMapUpdateEnabled(bool map_update_enabled);
 
-  State PredictState(const State& start_state, const common::Time start_time,
-                     const common::Time end_time);
+  State PredictState(const State& start_state, common::Time start_time,
+                     common::Time end_time);
 
  private:
   void AddControlPoint(common::Time t);
+
+  void AddScanMatchingResiduals(ceres::Problem& problem);
+  void AddIMUResiduals(ceres::Problem& problem);
+  void AddOdometryResiduals(ceres::Problem& problem);
 
   struct PointCloudSet {
     common::Time time;
@@ -97,16 +101,12 @@ class OptimizingLocalTrajectoryBuilder {
     State state;
   };
 
-
-  State PredictStateRK4(const State& start_state, const common::Time start_time,
-                        const common::Time end_time);
-
-  State PredictStateEuler(const State& start_state,
-                          const common::Time start_time,
-                          const common::Time end_time);
-  State PredictStateOdom(const State& start_state,
-                          const common::Time start_time,
-                          const common::Time end_time);
+  State PredictStateRK4(const State& start_state, common::Time start_time,
+                        common::Time end_time);
+  State PredictStateEuler(const State& start_state, common::Time start_time,
+                          common::Time end_time);
+  State PredictStateOdom(const State& start_state, common::Time start_time,
+                         common::Time end_time);
 
   void RemoveObsoleteSensorData();
 

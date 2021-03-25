@@ -223,6 +223,315 @@ void OptimizingLocalTrajectoryBuilder::AddControlPoint(common::Time t) {
   }
 }
 
+void OptimizingLocalTrajectoryBuilder::AddScanMatchingResiduals(
+    ceres::Problem& problem) {
+  std::shared_ptr<const Submap3D> matching_submap =
+      active_submaps_.submaps().front();
+  auto next_control_point = control_points_.begin();
+  for (auto& point_cloud_set : point_cloud_data_) {
+    if (point_cloud_set.time <= control_points_.back().time) {
+      while (next_control_point->time <= point_cloud_set.time) {
+        if (std::next(next_control_point) == control_points_.end()) break;
+        next_control_point++;
+      }
+      CHECK(next_control_point != control_points_.begin());
+      CHECK_LE(std::prev(next_control_point)->time, point_cloud_set.time);
+      CHECK_GE(next_control_point->time, point_cloud_set.time);
+      const double duration = common::ToSeconds(
+          next_control_point->time - std::prev(next_control_point)->time);
+      const double interpolation_factor =
+          common::ToSeconds(point_cloud_set.time -
+                            std::prev(next_control_point)->time) /
+          duration;
+      if (point_cloud_set.low_resolution_filtered_points.empty() ||
+          point_cloud_set.low_resolution_filtered_points.empty()) {
+        continue;
+      }
+      switch (matching_submap->high_resolution_hybrid_grid().GetGridType()) {
+        case GridType::PROBABILITY_GRID: {
+          problem.AddResidualBlock(
+              scan_matching::InterpolatedOccupiedSpaceCostFunction3D<
+                  sensor::TimedPointCloud>::
+                  CreateAutoDiffCostFunction(
+                      options_.optimizing_local_trajectory_builder_options()
+                              .high_resolution_grid_weight() /
+                          std::sqrt(static_cast<double>(
+                              point_cloud_set.high_resolution_filtered_points
+                                  .size())),
+                      point_cloud_set.high_resolution_filtered_points,
+                      static_cast<const HybridGrid&>(
+                          matching_submap->high_resolution_hybrid_grid()),
+                      interpolation_factor),
+              nullptr, std::prev(next_control_point)->state.translation.data(),
+              std::prev(next_control_point)->state.rotation.data(),
+              next_control_point->state.translation.data(),
+              next_control_point->state.rotation.data());
+          break;
+        }
+        case GridType::TSDF: {
+          if (options_.optimizing_local_trajectory_builder_options()
+                  .high_resolution_grid_weight() > 0.0) {
+            if (std::prev(next_control_point)->time == point_cloud_set.time) {
+              problem.AddResidualBlock(
+                  scan_matching::TSDFSpaceCostFunction3D<
+                      sensor::TimedPointCloud>::
+                      CreateAutoDiffCostFunction(
+                          options_.optimizing_local_trajectory_builder_options()
+                                  .high_resolution_grid_weight() /
+                              std::sqrt(static_cast<double>(
+                                  point_cloud_set
+                                      .high_resolution_filtered_points.size())),
+                          point_cloud_set.high_resolution_filtered_points,
+                          static_cast<const HybridGridTSDF&>(
+                              matching_submap->high_resolution_hybrid_grid())),
+                  nullptr,
+                  std::prev(next_control_point)->state.translation.data(),
+                  std::prev(next_control_point)->state.rotation.data());
+            } else if (next_control_point->time == point_cloud_set.time) {
+              problem.AddResidualBlock(
+                  scan_matching::TSDFSpaceCostFunction3D<
+                      sensor::TimedPointCloud>::
+                      CreateAutoDiffCostFunction(
+                          options_.optimizing_local_trajectory_builder_options()
+                                  .high_resolution_grid_weight() /
+                              std::sqrt(static_cast<double>(
+                                  point_cloud_set
+                                      .high_resolution_filtered_points.size())),
+                          point_cloud_set.high_resolution_filtered_points,
+                          static_cast<const HybridGridTSDF&>(
+                              matching_submap->high_resolution_hybrid_grid())),
+                  nullptr, next_control_point->state.translation.data(),
+                  next_control_point->state.rotation.data());
+            } else {
+              problem.AddResidualBlock(
+                  scan_matching::InterpolatedTSDFSpaceCostFunction3D<
+                      sensor::TimedPointCloud>::
+                      CreateAutoDiffCostFunction(
+                          options_.optimizing_local_trajectory_builder_options()
+                                  .high_resolution_grid_weight() /
+                              std::sqrt(static_cast<double>(
+                                  point_cloud_set
+                                      .high_resolution_filtered_points.size())),
+                          point_cloud_set.high_resolution_filtered_points,
+                          static_cast<const HybridGridTSDF&>(
+                              matching_submap->high_resolution_hybrid_grid()),
+                          interpolation_factor),
+                  nullptr,
+                  std::prev(next_control_point)->state.translation.data(),
+                  std::prev(next_control_point)->state.rotation.data(),
+                  next_control_point->state.translation.data(),
+                  next_control_point->state.rotation.data());
+            }
+          }
+          if (options_.optimizing_local_trajectory_builder_options()
+                  .low_resolution_grid_weight() > 0.0) {
+            if (std::prev(next_control_point)->time == point_cloud_set.time) {
+              problem.AddResidualBlock(
+                  scan_matching::TSDFSpaceCostFunction3D<
+                      sensor::TimedPointCloud>::
+                      CreateAutoDiffCostFunction(
+                          options_.optimizing_local_trajectory_builder_options()
+                                  .low_resolution_grid_weight() /
+                              std::sqrt(static_cast<double>(
+                                  point_cloud_set.low_resolution_filtered_points
+                                      .size())),
+                          point_cloud_set.low_resolution_filtered_points,
+                          static_cast<const HybridGridTSDF&>(
+                              matching_submap->low_resolution_hybrid_grid())),
+                  nullptr,
+                  std::prev(next_control_point)->state.translation.data(),
+                  std::prev(next_control_point)->state.rotation.data());
+            } else if (next_control_point->time == point_cloud_set.time) {
+              problem.AddResidualBlock(
+                  scan_matching::TSDFSpaceCostFunction3D<
+                      sensor::TimedPointCloud>::
+                      CreateAutoDiffCostFunction(
+                          options_.optimizing_local_trajectory_builder_options()
+                                  .low_resolution_grid_weight() /
+                              std::sqrt(static_cast<double>(
+                                  point_cloud_set.low_resolution_filtered_points
+                                      .size())),
+                          point_cloud_set.low_resolution_filtered_points,
+                          static_cast<const HybridGridTSDF&>(
+                              matching_submap->low_resolution_hybrid_grid())),
+                  nullptr, next_control_point->state.translation.data(),
+                  next_control_point->state.rotation.data());
+            } else {
+              problem.AddResidualBlock(
+                  scan_matching::InterpolatedTSDFSpaceCostFunction3D<
+                      sensor::TimedPointCloud>::
+                      CreateAutoDiffCostFunction(
+                          options_.optimizing_local_trajectory_builder_options()
+                                  .low_resolution_grid_weight() /
+                              std::sqrt(static_cast<double>(
+                                  point_cloud_set.low_resolution_filtered_points
+                                      .size())),
+                          point_cloud_set.low_resolution_filtered_points,
+                          static_cast<const HybridGridTSDF&>(
+                              matching_submap->low_resolution_hybrid_grid()),
+                          interpolation_factor),
+                  nullptr,
+                  std::prev(next_control_point)->state.translation.data(),
+                  std::prev(next_control_point)->state.rotation.data(),
+                  next_control_point->state.translation.data(),
+                  next_control_point->state.rotation.data());
+            }
+          }
+          break;
+        }
+        case GridType::NONE:
+          LOG(FATAL) << "Gridtype not initialized.";
+          break;
+      }
+    }
+  }
+}
+
+void OptimizingLocalTrajectoryBuilder::AddIMUResiduals(
+    ceres::Problem& problem) {
+  Eigen::Vector3d gravity = gravity_constant_ * Eigen::Vector3d::UnitZ();
+  switch (
+      options_.optimizing_local_trajectory_builder_options().imu_cost_term()) {
+    case proto::DIRECT: {
+      for (size_t i = 1; i < control_points_.size(); ++i) {
+        problem.AddResidualBlock(
+            new ceres::AutoDiffCostFunction<
+                PredictionDirectImuIntegrationCostFunctor, 9, 3, 3, 4, 3, 3, 4>(
+                new PredictionDirectImuIntegrationCostFunctor(
+                    options_.optimizing_local_trajectory_builder_options()
+                        .translation_weight(),
+                    options_.optimizing_local_trajectory_builder_options()
+                        .velocity_weight(),
+                    options_.optimizing_local_trajectory_builder_options()
+                        .rotation_weight(),
+                    common::ToSeconds(control_points_[i].time -
+                                      control_points_[i - 1].time),
+                    imu_data_, linear_acceleration_calibration_,
+                    angular_velocity_calibration_, control_points_[i - 1].time,
+                    control_points_[i].time,
+                    options_.optimizing_local_trajectory_builder_options()
+                        .imu_integrator())),
+            nullptr, control_points_[i - 1].state.translation.data(),
+            control_points_[i - 1].state.velocity.data(),
+            control_points_[i - 1].state.rotation.data(),
+            control_points_[i].state.translation.data(),
+            control_points_[i].state.velocity.data(),
+            control_points_[i].state.rotation.data());
+      }
+      break;
+    }
+    case proto::PREINTEGRATION: {
+      auto it = --imu_data_.cend();
+      while (it->time > control_points_.begin()->time) {
+        CHECK(it != imu_data_.cbegin());
+        --it;
+      }
+      for (size_t i = 1; i < control_points_.size(); ++i) {
+        IntegrateImuWithTranslationResult<double> result =
+            imu_integrator_->IntegrateIMU(imu_data_,
+                                          control_points_[i - 1].time,
+                                          control_points_[i].time, &it);
+
+        problem.AddResidualBlock(
+            new ceres::AutoDiffCostFunction<
+                PredictionImuPreintegrationCostFunctor, 9, 3, 3, 4, 3, 3, 4>(
+                new PredictionImuPreintegrationCostFunctor(
+                    options_.optimizing_local_trajectory_builder_options()
+                        .translation_weight(),
+                    options_.optimizing_local_trajectory_builder_options()
+                        .velocity_weight(),
+                    options_.optimizing_local_trajectory_builder_options()
+                        .rotation_weight(),
+                    common::ToSeconds(control_points_[i].time -
+                                      control_points_[i - 1].time),
+                    result, gravity)),
+            nullptr, control_points_[i - 1].state.translation.data(),
+            control_points_[i - 1].state.velocity.data(),
+            control_points_[i - 1].state.rotation.data(),
+            control_points_[i].state.translation.data(),
+            control_points_[i].state.velocity.data(),
+            control_points_[i].state.rotation.data());
+      }
+      break;
+    }
+    default:
+      LOG(FATAL) << "Unknown proto::IMUCostTerm";
+  }
+}
+
+void OptimizingLocalTrajectoryBuilder::AddOdometryResiduals(
+    ceres::Problem& problem) {
+  if (odometer_data_.size() > 1) {
+    transform::TransformInterpolationBuffer interpolation_buffer;
+    for (const auto& odometer_data : odometer_data_) {
+      interpolation_buffer.Push(odometer_data.time, odometer_data.pose);
+    }
+    for (size_t i = 1; i < control_points_.size(); ++i) {
+      // Only add constraints for this range data if  we have bracketing data
+      // from the odometer.
+      if (!(interpolation_buffer.earliest_time() <=
+                control_points_[i - 1].time &&
+            control_points_[i].time <= interpolation_buffer.latest_time())) {
+        continue;
+      }
+      const transform::Rigid3d previous_odometer_pose =
+          interpolation_buffer.Lookup(control_points_[i - 1].time);
+      const transform::Rigid3d current_odometer_pose =
+          interpolation_buffer.Lookup(control_points_[i].time);
+      const transform::Rigid3d delta_pose =
+          current_odometer_pose.inverse() * previous_odometer_pose;
+
+      double residual_translation_weight =
+          options_.optimizing_local_trajectory_builder_options()
+              .odometry_translation_weight();
+      double residual_rotation_weight =
+          options_.optimizing_local_trajectory_builder_options()
+              .odometry_rotation_weight();
+      if (options_.optimizing_local_trajectory_builder_options()
+              .use_adaptive_odometry_weights()) {
+        double delta_translation =
+            (delta_pose.translation()).norm() /
+            options_.optimizing_local_trajectory_builder_options()
+                .weight_odometry_translation_limit();
+        double delta_rotation =
+            std::abs(delta_pose.rotation().angularDistance(
+                Eigen::Quaterniond::Identity())) /
+            options_.optimizing_local_trajectory_builder_options()
+                .weight_odometry_rotation_limit();
+        double delta_time = common::ToSeconds(control_points_[i].time -
+                                              control_points_[i - 1].time);
+        double weight_ratio = common::Clamp(
+            std::max(delta_translation, delta_rotation) / (delta_time), 0.0,
+            1.0);
+        residual_translation_weight =
+            weight_ratio *
+                options_.optimizing_local_trajectory_builder_options()
+                    .odometry_translation_weight() +
+            (1.0 - weight_ratio) *
+                options_.optimizing_local_trajectory_builder_options()
+                    .max_odometry_translation_weight();
+        residual_rotation_weight =
+            weight_ratio *
+                options_.optimizing_local_trajectory_builder_options()
+                    .odometry_rotation_weight() +
+            (1.0 - weight_ratio) *
+                options_.optimizing_local_trajectory_builder_options()
+                    .max_odometry_rotation_weight();
+      }
+      problem.AddResidualBlock(
+          new ceres::AutoDiffCostFunction<RelativeTranslationAndYawCostFunction,
+                                          6, 3, 4, 3, 4>(
+              new RelativeTranslationAndYawCostFunction(
+                  residual_translation_weight, residual_rotation_weight,
+                  delta_pose)),
+          nullptr, control_points_[i - 1].state.translation.data(),
+          control_points_[i - 1].state.rotation.data(),
+          control_points_[i].state.translation.data(),
+          control_points_[i].state.rotation.data());
+    }
+  }
+}
+
 void OptimizingLocalTrajectoryBuilder::RemoveObsoleteSensorData() {
   if (control_points_.empty()) {
     return;
@@ -323,326 +632,15 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
   ) {
     std::shared_ptr<const Submap3D> matching_submap =
         active_submaps_.submaps().front();
-
-
     // We assume the map is always aligned with the direction of gravity
     CHECK(matching_submap->local_pose().inverse().rotation().isApprox(Eigen::Quaterniond::Identity(), 1e-8));
-    Eigen::Vector3d gravity =
-        gravity_constant_ * Eigen::Vector3d::UnitZ();
     // We transform the states in 'control_points_' in place to be in the submap
     // frame as expected by the OccupiedSpaceCostFunctor. This is reverted after
     // solving the optimization problem.
     TransformStates(matching_submap->local_pose().inverse());
-    auto next_control_point = control_points_.begin();
-    for (auto& point_cloud_set : point_cloud_data_) {
-      if (point_cloud_set.time <= control_points_.back().time) {
-        while (next_control_point->time <= point_cloud_set.time) {
-          if(std::next(next_control_point) == control_points_.end()) break;
-          next_control_point++;
-        }
-        CHECK(next_control_point != control_points_.begin());
-        CHECK_LE(std::prev(next_control_point)->time, point_cloud_set.time);
-        CHECK_GE(next_control_point->time, point_cloud_set.time);
-        const double duration = common::ToSeconds(
-            next_control_point->time - std::prev(next_control_point)->time);
-        const double interpolation_factor =
-            common::ToSeconds(point_cloud_set.time -
-                              std::prev(next_control_point)->time) /
-            duration;
-        if (point_cloud_set.low_resolution_filtered_points.empty() ||
-            point_cloud_set.low_resolution_filtered_points.empty()) {
-          continue;
-        }
-        switch (matching_submap->high_resolution_hybrid_grid().GetGridType()) {
-          case GridType::PROBABILITY_GRID: {
-            problem.AddResidualBlock(
-                scan_matching::InterpolatedOccupiedSpaceCostFunction3D<
-                    sensor::TimedPointCloud>::
-                    CreateAutoDiffCostFunction(
-                        options_.optimizing_local_trajectory_builder_options()
-                                .high_resolution_grid_weight() /
-                            std::sqrt(static_cast<double>(
-                                point_cloud_set.high_resolution_filtered_points
-                                    .size())),
-                        point_cloud_set.high_resolution_filtered_points,
-                        static_cast<const HybridGrid&>(
-                            matching_submap->high_resolution_hybrid_grid()),
-                        interpolation_factor),
-                nullptr,
-                std::prev(next_control_point)->state.translation.data(),
-                std::prev(next_control_point)->state.rotation.data(),
-                next_control_point->state.translation.data(),
-                next_control_point->state.rotation.data());
-            break;
-          }
-          case GridType::TSDF: {
-            if (options_.optimizing_local_trajectory_builder_options()
-                    .high_resolution_grid_weight() > 0.0) {
-              if(std::prev(next_control_point)->time == point_cloud_set.time) {
-                problem.AddResidualBlock(
-                    scan_matching::TSDFSpaceCostFunction3D<
-                        sensor::TimedPointCloud>::
-                        CreateAutoDiffCostFunction(
-                            options_.optimizing_local_trajectory_builder_options()
-                                    .high_resolution_grid_weight() /
-                                std::sqrt(static_cast<double>(
-                                    point_cloud_set
-                                        .high_resolution_filtered_points
-                                        .size())),
-                            point_cloud_set.high_resolution_filtered_points,
-                            static_cast<const HybridGridTSDF&>(
-                                matching_submap
-                                    ->high_resolution_hybrid_grid())),
-                    nullptr,
-                    std::prev(next_control_point)->state.translation.data(),
-                    std::prev(next_control_point)->state.rotation.data());
-              }
-              else if(next_control_point->time == point_cloud_set.time) {
-                problem.AddResidualBlock(
-                    scan_matching::TSDFSpaceCostFunction3D<
-                        sensor::TimedPointCloud>::
-                        CreateAutoDiffCostFunction(
-                            options_.optimizing_local_trajectory_builder_options()
-                                    .high_resolution_grid_weight() /
-                                std::sqrt(static_cast<double>(
-                                    point_cloud_set
-                                        .high_resolution_filtered_points
-                                        .size())),
-                            point_cloud_set.high_resolution_filtered_points,
-                            static_cast<const HybridGridTSDF&>(
-                                matching_submap
-                                    ->high_resolution_hybrid_grid())),
-                    nullptr, next_control_point->state.translation.data(),
-                    next_control_point->state.rotation.data());
-              }
-              else {
-                problem.AddResidualBlock(
-                    scan_matching::InterpolatedTSDFSpaceCostFunction3D<
-                        sensor::TimedPointCloud>::
-                        CreateAutoDiffCostFunction(
-                            options_.optimizing_local_trajectory_builder_options()
-                                    .high_resolution_grid_weight() /
-                                std::sqrt(static_cast<double>(
-                                    point_cloud_set
-                                        .high_resolution_filtered_points
-                                        .size())),
-                            point_cloud_set.high_resolution_filtered_points,
-                            static_cast<const HybridGridTSDF&>(
-                                matching_submap->high_resolution_hybrid_grid()),
-                            interpolation_factor),
-                    nullptr,
-                    std::prev(next_control_point)->state.translation.data(),
-                    std::prev(next_control_point)->state.rotation.data(),
-                    next_control_point->state.translation.data(),
-                    next_control_point->state.rotation.data());
-              }
-            }
-            if (options_.optimizing_local_trajectory_builder_options()
-                    .low_resolution_grid_weight() > 0.0) {
-              if(std::prev(next_control_point)->time == point_cloud_set.time) {
-                problem.AddResidualBlock(
-                    scan_matching::TSDFSpaceCostFunction3D<
-                        sensor::TimedPointCloud>::
-                        CreateAutoDiffCostFunction(
-                            options_.optimizing_local_trajectory_builder_options()
-                                    .low_resolution_grid_weight() /
-                                std::sqrt(static_cast<double>(
-                                    point_cloud_set
-                                        .low_resolution_filtered_points
-                                        .size())),
-                            point_cloud_set.low_resolution_filtered_points,
-                            static_cast<const HybridGridTSDF&>(
-                                matching_submap->low_resolution_hybrid_grid())),
-                    nullptr,
-                    std::prev(next_control_point)->state.translation.data(),
-                    std::prev(next_control_point)->state.rotation.data());
-              }
-              else if(next_control_point->time == point_cloud_set.time) {
-                problem.AddResidualBlock(
-                    scan_matching::TSDFSpaceCostFunction3D<
-                        sensor::TimedPointCloud>::
-                        CreateAutoDiffCostFunction(
-                            options_.optimizing_local_trajectory_builder_options()
-                                    .low_resolution_grid_weight() /
-                                std::sqrt(static_cast<double>(
-                                    point_cloud_set
-                                        .low_resolution_filtered_points
-                                        .size())),
-                            point_cloud_set.low_resolution_filtered_points,
-                            static_cast<const HybridGridTSDF&>(
-                                matching_submap->low_resolution_hybrid_grid())),
-                    nullptr, next_control_point->state.translation.data(),
-                    next_control_point->state.rotation.data());
-              }
-              else {
-                problem.AddResidualBlock(
-                    scan_matching::InterpolatedTSDFSpaceCostFunction3D<
-                        sensor::TimedPointCloud>::
-                        CreateAutoDiffCostFunction(
-                            options_.optimizing_local_trajectory_builder_options()
-                                    .low_resolution_grid_weight() /
-                                std::sqrt(static_cast<double>(
-                                    point_cloud_set
-                                        .low_resolution_filtered_points
-                                        .size())),
-                            point_cloud_set.low_resolution_filtered_points,
-                            static_cast<const HybridGridTSDF&>(
-                                matching_submap->low_resolution_hybrid_grid()),
-                            interpolation_factor),
-                    nullptr,
-                    std::prev(next_control_point)->state.translation.data(),
-                    std::prev(next_control_point)->state.rotation.data(),
-                    next_control_point->state.translation.data(),
-                    next_control_point->state.rotation.data());
-            }
-            }
-            break;
-          }
-          case GridType::NONE:
-            LOG(FATAL) << "Gridtype not initialized.";
-            break;
-        }
-      }
-    }
-
-    switch (options_.optimizing_local_trajectory_builder_options()
-                .imu_cost_term()) {
-      case proto::DIRECT: {
-        for (size_t i = 1; i < control_points_.size(); ++i) {
-          problem.AddResidualBlock(
-              new ceres::AutoDiffCostFunction<
-                  PredictionDirectImuIntegrationCostFunctor, 9, 3, 3, 4, 3, 3,
-                  4>(new PredictionDirectImuIntegrationCostFunctor(
-                  options_.optimizing_local_trajectory_builder_options()
-                      .translation_weight(),
-                  options_.optimizing_local_trajectory_builder_options()
-                      .velocity_weight(),
-                  options_.optimizing_local_trajectory_builder_options()
-                      .rotation_weight(),
-                  common::ToSeconds(control_points_[i].time -
-                                    control_points_[i - 1].time),
-                  imu_data_, linear_acceleration_calibration_,
-                  angular_velocity_calibration_, control_points_[i - 1].time,
-                  control_points_[i].time,
-                  options_.optimizing_local_trajectory_builder_options()
-                      .imu_integrator())),
-              nullptr, control_points_[i - 1].state.translation.data(),
-              control_points_[i - 1].state.velocity.data(),
-              control_points_[i - 1].state.rotation.data(),
-              control_points_[i].state.translation.data(),
-              control_points_[i].state.velocity.data(),
-              control_points_[i].state.rotation.data());
-        }
-        break;
-      }
-      case proto::PREINTEGRATION: {
-        auto it = --imu_data_.cend();
-        while (it->time > control_points_.begin()->time) {
-          CHECK(it != imu_data_.cbegin());
-          --it;
-        }
-        for (size_t i = 1; i < control_points_.size(); ++i) {
-          IntegrateImuWithTranslationResult<double> result =
-              imu_integrator_->IntegrateIMU(imu_data_,
-                                            control_points_[i - 1].time,
-                                            control_points_[i].time, &it);
-
-          problem.AddResidualBlock(
-              new ceres::AutoDiffCostFunction<
-                  PredictionImuPreintegrationCostFunctor, 9, 3, 3, 4, 3, 3, 4>(
-                  new PredictionImuPreintegrationCostFunctor(
-                      options_.optimizing_local_trajectory_builder_options()
-                          .translation_weight(),
-                      options_.optimizing_local_trajectory_builder_options()
-                          .velocity_weight(),
-                      options_.optimizing_local_trajectory_builder_options()
-                          .rotation_weight(),
-                      common::ToSeconds(control_points_[i].time -
-                                        control_points_[i - 1].time),
-                      result,
-                      gravity)),
-              nullptr, control_points_[i - 1].state.translation.data(),
-              control_points_[i - 1].state.velocity.data(),
-              control_points_[i - 1].state.rotation.data(),
-              control_points_[i].state.translation.data(),
-              control_points_[i].state.velocity.data(),
-              control_points_[i].state.rotation.data());
-        }
-        break;
-      }
-      default:
-        LOG(FATAL) << "Unknown proto::IMUCostTerm";
-    }
-
-    if (odometer_data_.size() > 1) {
-      transform::TransformInterpolationBuffer interpolation_buffer;
-      for (const auto& odometer_data : odometer_data_) {
-        interpolation_buffer.Push(odometer_data.time, odometer_data.pose);
-      }
-      for (size_t i = 1; i < control_points_.size(); ++i) {
-        // Only add constraints for this range data if  we have bracketing data
-        // from the odometer.
-        if (!(interpolation_buffer.earliest_time() <=
-                  control_points_[i - 1].time &&
-              control_points_[i].time <= interpolation_buffer.latest_time())) {
-          continue;
-        }
-        const transform::Rigid3d previous_odometer_pose =
-            interpolation_buffer.Lookup(control_points_[i - 1].time);
-        const transform::Rigid3d current_odometer_pose =
-            interpolation_buffer.Lookup(control_points_[i].time);
-        const transform::Rigid3d delta_pose =
-            current_odometer_pose.inverse() * previous_odometer_pose;
-
-        double residual_translation_weight =
-            options_.optimizing_local_trajectory_builder_options()
-                .odometry_translation_weight();
-        double residual_rotation_weight =
-            options_.optimizing_local_trajectory_builder_options()
-                .odometry_rotation_weight();
-        if (options_.optimizing_local_trajectory_builder_options()
-                .use_adaptive_odometry_weights()) {
-          double delta_translation =
-              (delta_pose.translation()).norm() /
-              options_.optimizing_local_trajectory_builder_options()
-                  .weight_odometry_translation_limit();
-          double delta_rotation =
-              std::abs(delta_pose.rotation().angularDistance(
-                  Eigen::Quaterniond::Identity())) /
-              options_.optimizing_local_trajectory_builder_options()
-                  .weight_odometry_rotation_limit();
-          double delta_time = common::ToSeconds(control_points_[i].time -
-                                                control_points_[i - 1].time);
-          double weight_ratio = common::Clamp(
-              std::max(delta_translation, delta_rotation) / (delta_time), 0.0,
-              1.0);
-          residual_translation_weight =
-              weight_ratio *
-                  options_.optimizing_local_trajectory_builder_options()
-                      .odometry_translation_weight() +
-              (1.0 - weight_ratio) *
-                  options_.optimizing_local_trajectory_builder_options()
-                      .max_odometry_translation_weight();
-          residual_rotation_weight =
-              weight_ratio *
-                  options_.optimizing_local_trajectory_builder_options()
-                      .odometry_rotation_weight() +
-              (1.0 - weight_ratio) *
-                  options_.optimizing_local_trajectory_builder_options()
-                      .max_odometry_rotation_weight();
-        }
-        problem.AddResidualBlock(
-            new ceres::AutoDiffCostFunction<
-                RelativeTranslationAndYawCostFunction, 6, 3, 4, 3, 4>(
-                new RelativeTranslationAndYawCostFunction(
-                    residual_translation_weight, residual_rotation_weight,
-                    delta_pose)),
-            nullptr, control_points_[i - 1].state.translation.data(),
-            control_points_[i - 1].state.rotation.data(),
-            control_points_[i].state.translation.data(),
-            control_points_[i].state.rotation.data());
-      }
-    }
+    AddScanMatchingResiduals(problem);
+    AddIMUResiduals(problem);
+    AddOdometryResiduals(problem);
 
     problem.SetParameterBlockConstant(
         control_points_.front().state.translation.data());
@@ -654,8 +652,6 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
     for (size_t i = 1; i < control_points_.size(); ++i) {
       problem.SetParameterization(control_points_[i].state.rotation.data(),
                                   new ceres::QuaternionParameterization());
-//      problem.SetParameterBlockConstant(
-//          control_points_[i].state.rotation.data());
     }
     ceres::Solver::Summary summary;
     ceres::Solve(ceres_solver_options_, &problem, &summary);
