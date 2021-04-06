@@ -48,4 +48,6 @@ message OptimizingLocalTrajectoryBuilderOptions {
   double max_odometry_rotation_weight = 20;
   double weight_odometry_translation_limit = 21;
   double weight_odometry_rotation_limit = 22;
+  bool use_per_point_unwarping = 23;
+  bool use_multi_resolution_matching = 24;
 }

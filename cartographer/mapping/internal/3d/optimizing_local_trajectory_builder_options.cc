@@ -74,6 +74,10 @@ CreateOptimizingLocalTrajectoryBuilderOptions(
       parameter_dictionary->GetDouble("weight_odometry_translation_limit"));
   options.set_weight_odometry_rotation_limit(
       parameter_dictionary->GetDouble("weight_odometry_rotation_limit"));
+  options.set_use_per_point_unwarping(
+      parameter_dictionary->GetBool("use_per_point_unwarping"));
+  options.set_use_multi_resolution_matching(
+      parameter_dictionary->GetBool("use_multi_resolution_matching"));
 
   return options;
 }
