@@ -899,6 +899,7 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
   num_accumulated_ = 0;
   const transform::Rigid3d optimized_pose =
       control_points_.front().state.ToRigid();
+  const common::Time time_optimized_pose = control_points_.front().time;
   extrapolator_->AddPose(control_points_.front().time, optimized_pose);
   sensor::TimedRangeData accumulated_range_data_in_tracking = {
       Eigen::Vector3f::Zero(), {}, {}};
@@ -1007,7 +1008,7 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
 
   RemoveObsoleteSensorData();
 
-  return AddAccumulatedRangeData(control_points_.front().time, optimized_pose,
+  return AddAccumulatedRangeData(time_optimized_pose, optimized_pose,
                                  accumulated_range_data_in_tracking);
 }
 
