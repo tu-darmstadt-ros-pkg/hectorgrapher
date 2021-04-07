@@ -50,4 +50,5 @@ message OptimizingLocalTrajectoryBuilderOptions {
   double weight_odometry_rotation_limit = 22;
   bool use_per_point_unwarping = 23;
   bool use_multi_resolution_matching = 24;
+  int32 num_points_per_subdivision = 25;
 }

@@ -78,6 +78,8 @@ CreateOptimizingLocalTrajectoryBuilderOptions(
       parameter_dictionary->GetBool("use_per_point_unwarping"));
   options.set_use_multi_resolution_matching(
       parameter_dictionary->GetBool("use_multi_resolution_matching"));
+  options.set_num_points_per_subdivision(
+      parameter_dictionary->GetInt("num_points_per_subdivision"));
 
   return options;
 }

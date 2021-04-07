@@ -113,5 +113,6 @@ TRAJECTORY_BUILDER_3D = {
       weight_odometry_rotation_limit = 0.05,
       use_per_point_unwarping = false,
       use_multi_resolution_matching = false,
+      num_points_per_subdivision = 4,
   },
 }

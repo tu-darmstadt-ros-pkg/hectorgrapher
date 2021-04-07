@@ -246,14 +246,18 @@ void OptimizingLocalTrajectoryBuilder::AddScanMatchingResiduals(
             &matching_submap->high_resolution_hybrid_grid()),
         static_cast<const HybridGridTSDF*>(
             &matching_submap->low_resolution_hybrid_grid())};
-    int num_points_per_subdivision = 3;
     for (auto& point_cloud_set : point_cloud_data_) {
       for (size_t subdivision_start_idx = 0;
            subdivision_start_idx <
            point_cloud_set.high_resolution_filtered_points.size();
-           subdivision_start_idx += num_points_per_subdivision) {
+           subdivision_start_idx +=
+           options_.optimizing_local_trajectory_builder_options()
+               .num_points_per_subdivision()) {
         size_t subdivision_end_idx = std::min(
-            subdivision_start_idx + num_points_per_subdivision - 1,
+            subdivision_start_idx +
+                options_.optimizing_local_trajectory_builder_options()
+                    .num_points_per_subdivision() -
+                1,
             point_cloud_set.high_resolution_filtered_points.size() - 1);
         const sensor::TimedRangefinderPoint& point =
             point_cloud_set
@@ -918,6 +922,7 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
     }
     ceres::Solver::Summary summary;
     ceres::Solve(ceres_solver_options_, &problem, &summary);
+    LOG(INFO) << summary.FullReport();
     // The optimized states in 'control_points_' are in the submap frame and we
     // transform them in place to be in the local SLAM frame again.
     TransformStates(matching_submap->local_pose());
