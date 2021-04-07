@@ -96,7 +96,7 @@ class InterpolatedTSDFSpaceCostFunction3D {
   }
 
   const double scaling_factor_;
-  const PointCloudType& point_cloud_;
+  const PointCloudType point_cloud_;
   const InterpolatedTSDF interpolated_grid_;
   const double interpolation_ratio_;
 };
