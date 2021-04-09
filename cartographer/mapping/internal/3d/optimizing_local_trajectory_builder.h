@@ -38,6 +38,12 @@
 
 namespace cartographer {
 namespace mapping {
+
+struct ControlPoint {
+  common::Time time;
+  State state;
+};
+
 // Batches up some sensor data and optimizes them in one go to get a locally
 // consistent trajectory.
 class OptimizingLocalTrajectoryBuilder {
@@ -83,7 +89,8 @@ class OptimizingLocalTrajectoryBuilder {
  private:
   void AddControlPoint(common::Time t);
 
-  void AddScanMatchingResiduals(ceres::Problem& problem);
+  void AddPerScanMatchingResiduals(ceres::Problem& problem);
+  void AddPerPointMatchingResiduals(ceres::Problem& problem);
   void AddIMUResiduals(ceres::Problem& problem);
   void AddOdometryResiduals(ceres::Problem& problem);
 
@@ -99,11 +106,6 @@ class OptimizingLocalTrajectoryBuilder {
       CHECK(!original_cloud.empty());
       return time + common::FromSeconds(original_cloud.front().time);
     };
-  };
-
-  struct ControlPoint {
-    common::Time time;
-    State state;
   };
 
   State PredictStateRK4(const State& start_state, common::Time start_time,
@@ -158,6 +160,7 @@ class OptimizingLocalTrajectoryBuilder {
   MotionFilter motion_filter_;
   std::unique_ptr<mapping::PoseExtrapolator> extrapolator_;
   std::unique_ptr<ImuIntegrator> imu_integrator_;
+  std::vector<const mapping::HybridGridTSDF*> tsdf_pyramid_;
   bool map_update_enabled_;
 };
 

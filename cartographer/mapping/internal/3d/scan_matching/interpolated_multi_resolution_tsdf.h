@@ -82,7 +82,6 @@ class InterpolatedMultiResolutionTSDF {
   template <typename T>
   T GetTSD(const T& x, const T& y, const T& z) const {
     double x1, y1, z1, x2, y2, z2;
-
     for (const auto tsdf : tsdf_pyramid_) {
       ComputeInterpolationDataPoints(tsdf, x, y, z, &x1, &y1, &z1, &x2, &y2,
                                      &z2);
@@ -140,7 +139,6 @@ class InterpolatedMultiResolutionTSDF {
   template <typename T>
   T GetWeight(const T& x, const T& y, const T& z) const {
     double x1, y1, z1, x2, y2, z2;
-
     for (const auto tsdf : tsdf_pyramid_) {
       ComputeInterpolationDataPoints(tsdf, x, y, z, &x1, &y1, &z1, &x2, &y2,
                                      &z2);
@@ -169,6 +167,7 @@ class InterpolatedMultiResolutionTSDF {
       LOG_EVERY_N(INFO, 1000) << "TODO(kdaun) weight similar to tsdf";
       return (q2 - q1) * normalized_x + q1;
     }
+    return T(0.0);
   }
 
  private:
@@ -216,7 +215,7 @@ class InterpolatedMultiResolutionTSDF {
     return CenterOfLowerVoxel(jet_x.a, jet_y.a, jet_z.a, tsdf);
   }
 
-  const std::vector<const HybridGridTSDF*> tsdf_pyramid_;
+  const std::vector<const HybridGridTSDF*>& tsdf_pyramid_;
 };
 
 }  // namespace scan_matching
