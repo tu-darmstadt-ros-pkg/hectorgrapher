@@ -83,7 +83,7 @@ void RegisterBuiltInPointsProcessors(
     const std::vector<mapping::proto::Trajectory>& trajectories,
     const FileWriterFactory& file_writer_factory,
     PointsProcessorPipelineBuilder* builder) {
-  RegisterPlainPointsProcessor<DynamicObjectsRemovalPointsProcessor>(builder);
+  RegisterFileWritingPointsProcessor<DynamicObjectsRemovalPointsProcessor>(file_writer_factory, builder);
   RegisterPlainPointsProcessor<CountingPointsProcessor>(builder);
   RegisterPlainPointsProcessor<FixedRatioSamplingPointsProcessor>(builder);
   RegisterPlainPointsProcessor<FrameIdFilteringPointsProcessor>(builder);

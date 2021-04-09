@@ -8,6 +8,7 @@
 #include "cartographer/common/lua_parameter_dictionary.h"
 #include "cartographer/io/points_processor.h"
 #include "cartographer/sensor/point_cloud.h"
+#include "cartographer/io/file_writer.h"
 
 #define M_PIf static_cast<float>(M_PI)
 
@@ -18,9 +19,12 @@ class DynamicObjectsRemovalPointsProcessor : public PointsProcessor {
  public:
   constexpr static const char* kConfigurationFileActionName =
       "dynamic_objects_removal_filter";
-  DynamicObjectsRemovalPointsProcessor(PointsProcessor* next);
+  DynamicObjectsRemovalPointsProcessor(std::unique_ptr<FileWriter> file_writer,
+      int r_segments, int theta_segments, int phi_segments, float sensor_range_limit,
+      PointsProcessor* next);
 
   static std::unique_ptr<DynamicObjectsRemovalPointsProcessor> FromDictionary(
+      const FileWriterFactory& file_writer_factory,
       common::LuaParameterDictionary* dictionary, PointsProcessor* next);
 
   ~DynamicObjectsRemovalPointsProcessor() override {}
@@ -31,15 +35,18 @@ class DynamicObjectsRemovalPointsProcessor : public PointsProcessor {
       const DynamicObjectsRemovalPointsProcessor&) = delete;
 
   Eigen::Vector3f cartesian_to_polar(Eigen::Vector3f cart_coord);
+  Eigen::Vector3f polar_to_cartesian(float r, float theta, float phi);
 
   void Process(std::unique_ptr<PointsBatch> batch) override;
   FlushResult Flush() override;
 
  private:
-  float r_segments_, theta_segments_, phi_segments_, sensor_range_limit_;
+  const int r_segments_, theta_segments_, phi_segments_;
+  const double sensor_range_limit_;
   sensor::PointCloud map_;
   std::vector<PointsBatch> list_of_batches_;
   PointsProcessor* const next_;
+  std::unique_ptr<FileWriter> file_;
 
   static uint16_t cantor_pairing(uint16_t a, uint16_t b);
 
@@ -83,6 +90,14 @@ class DynamicObjectsRemovalPointsProcessor : public PointsProcessor {
   wedge_key_t get_interval_segment(Eigen::Vector3f);
 
   wedge_map_t create_wedge_map(sensor::PointCloud cloud);
+
+  /**
+   * Removes a point from a pointcloud if he is associated to a wedge with the given key
+   * @param key as 3-tuple of wedge_key_t
+   * @param cloud as sensor::PointCloud
+   */
+  void remove_points_from_pointcloud(wedge_key_t key, sensor::PointCloud& cloud);
+  void remove_points_from_batch(wedge_key_t key, PointsBatch &batch);
 };
 
 }  // namespace io
