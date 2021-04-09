@@ -292,8 +292,8 @@ void OptimizingLocalTrajectoryBuilder::AddPerScanMatchingResiduals(
         duration;
     if (options_.optimizing_local_trajectory_builder_options()
             .use_multi_resolution_matching()) {
-      CHECK_EQ(matching_submap->high_resolution_hybrid_grid().GetGridType(),
-               GridType::TSDF);
+      CHECK(matching_submap->high_resolution_hybrid_grid().GetGridType() ==
+               GridType::TSDF) << "Multi resolution matching only available for GridType::TSDF.";
       if (options_.optimizing_local_trajectory_builder_options()
                   .high_resolution_grid_weight() > 0.0 &&
           !point_cloud_set.high_resolution_filtered_points.empty()) {
@@ -327,7 +327,7 @@ void OptimizingLocalTrajectoryBuilder::AddPerScanMatchingResiduals(
                                 point_cloud_set.high_resolution_filtered_points
                                     .size())),
                         point_cloud_set.high_resolution_filtered_points,
-                        static_cast<const HybridGrid&>(
+                        dynamic_cast<const HybridGrid&>(
                             matching_submap->high_resolution_hybrid_grid()),
                         interpolation_factor),
                 nullptr,
@@ -353,7 +353,7 @@ void OptimizingLocalTrajectoryBuilder::AddPerScanMatchingResiduals(
                                   point_cloud_set
                                       .high_resolution_filtered_points.size())),
                           point_cloud_set.high_resolution_filtered_points,
-                          static_cast<const HybridGridTSDF&>(
+                          dynamic_cast<const HybridGridTSDF&>(
                               matching_submap->high_resolution_hybrid_grid())),
                   nullptr,
                   std::prev(next_control_point)->state.translation.data(),
@@ -369,7 +369,7 @@ void OptimizingLocalTrajectoryBuilder::AddPerScanMatchingResiduals(
                                   point_cloud_set
                                       .high_resolution_filtered_points.size())),
                           point_cloud_set.high_resolution_filtered_points,
-                          static_cast<const HybridGridTSDF&>(
+                          dynamic_cast<const HybridGridTSDF&>(
                               matching_submap->high_resolution_hybrid_grid())),
                   nullptr, next_control_point->state.translation.data(),
                   next_control_point->state.rotation.data());
@@ -384,7 +384,7 @@ void OptimizingLocalTrajectoryBuilder::AddPerScanMatchingResiduals(
                                   point_cloud_set
                                       .high_resolution_filtered_points.size())),
                           point_cloud_set.high_resolution_filtered_points,
-                          static_cast<const HybridGridTSDF&>(
+                          dynamic_cast<const HybridGridTSDF&>(
                               matching_submap->high_resolution_hybrid_grid()),
                           interpolation_factor),
                   nullptr,
@@ -408,7 +408,7 @@ void OptimizingLocalTrajectoryBuilder::AddPerScanMatchingResiduals(
                                   point_cloud_set.low_resolution_filtered_points
                                       .size())),
                           point_cloud_set.low_resolution_filtered_points,
-                          static_cast<const HybridGridTSDF&>(
+                          dynamic_cast<const HybridGridTSDF&>(
                               matching_submap->low_resolution_hybrid_grid())),
                   nullptr,
                   std::prev(next_control_point)->state.translation.data(),
@@ -424,7 +424,7 @@ void OptimizingLocalTrajectoryBuilder::AddPerScanMatchingResiduals(
                                   point_cloud_set.low_resolution_filtered_points
                                       .size())),
                           point_cloud_set.low_resolution_filtered_points,
-                          static_cast<const HybridGridTSDF&>(
+                          dynamic_cast<const HybridGridTSDF&>(
                               matching_submap->low_resolution_hybrid_grid())),
                   nullptr, next_control_point->state.translation.data(),
                   next_control_point->state.rotation.data());
@@ -439,7 +439,7 @@ void OptimizingLocalTrajectoryBuilder::AddPerScanMatchingResiduals(
                                   point_cloud_set.low_resolution_filtered_points
                                       .size())),
                           point_cloud_set.low_resolution_filtered_points,
-                          static_cast<const HybridGridTSDF&>(
+                          dynamic_cast<const HybridGridTSDF&>(
                               matching_submap->low_resolution_hybrid_grid()),
                           interpolation_factor),
                   nullptr,
@@ -554,7 +554,7 @@ void OptimizingLocalTrajectoryBuilder::AddPerPointMatchingResiduals(
                             point_cloud_set.high_resolution_filtered_points
                                     .begin() +
                                 subdivision_end_idx + 1),
-                        static_cast<const HybridGridTSDF&>(
+                        dynamic_cast<const HybridGridTSDF&>(
                             matching_submap->high_resolution_hybrid_grid()),
                         interpolation_factor),
                 nullptr,
@@ -620,7 +620,7 @@ void OptimizingLocalTrajectoryBuilder::AddPerPointMatchingResiduals(
                                 point_cloud_set.low_resolution_filtered_points
                                     .size())),
                         point,
-                        static_cast<const HybridGridTSDF&>(
+                        dynamic_cast<const HybridGridTSDF&>(
                             matching_submap->low_resolution_hybrid_grid()),
                         interpolation_factor),
                 nullptr,
@@ -661,9 +661,9 @@ void OptimizingLocalTrajectoryBuilder::AddPerPointMatchingResiduals(
         if (options_.optimizing_local_trajectory_builder_options()
                 .use_multi_resolution_matching()) {
           const std::vector<const HybridGridTSDF*> tsdf_pyramid{
-              static_cast<const HybridGridTSDF*>(
+              dynamic_cast<const HybridGridTSDF*>(
                   &matching_submap->high_resolution_hybrid_grid()),
-              static_cast<const HybridGridTSDF*>(
+              dynamic_cast<const HybridGridTSDF*>(
                   &matching_submap->low_resolution_hybrid_grid())};
           if (options_.optimizing_local_trajectory_builder_options()
                   .high_resolution_grid_weight() > 0.0) {
@@ -729,7 +729,7 @@ void OptimizingLocalTrajectoryBuilder::AddPerPointMatchingResiduals(
                                   point_cloud_set
                                       .high_resolution_filtered_points.size())),
                           point_cloud_set.high_resolution_filtered_points,
-                          static_cast<const HybridGrid&>(
+                          dynamic_cast<const HybridGrid&>(
                               matching_submap->high_resolution_hybrid_grid()),
                           interpolation_factor),
                   nullptr,
@@ -755,7 +755,7 @@ void OptimizingLocalTrajectoryBuilder::AddPerPointMatchingResiduals(
                                           .high_resolution_filtered_points
                                           .size())),
                               point_cloud_set.high_resolution_filtered_points,
-                              static_cast<const HybridGridTSDF&>(
+                              dynamic_cast<const HybridGridTSDF&>(
                                   matching_submap
                                       ->high_resolution_hybrid_grid())),
                       nullptr,
@@ -773,7 +773,7 @@ void OptimizingLocalTrajectoryBuilder::AddPerPointMatchingResiduals(
                                           .high_resolution_filtered_points
                                           .size())),
                               point_cloud_set.high_resolution_filtered_points,
-                              static_cast<const HybridGridTSDF&>(
+                              dynamic_cast<const HybridGridTSDF&>(
                                   matching_submap
                                       ->high_resolution_hybrid_grid())),
                       nullptr, next_control_point->state.translation.data(),
@@ -790,7 +790,7 @@ void OptimizingLocalTrajectoryBuilder::AddPerPointMatchingResiduals(
                                           .high_resolution_filtered_points
                                           .size())),
                               point_cloud_set.high_resolution_filtered_points,
-                              static_cast<const HybridGridTSDF&>(
+                              dynamic_cast<const HybridGridTSDF&>(
                                   matching_submap
                                       ->high_resolution_hybrid_grid()),
                               interpolation_factor),
@@ -816,7 +816,7 @@ void OptimizingLocalTrajectoryBuilder::AddPerPointMatchingResiduals(
                                           .low_resolution_filtered_points
                                           .size())),
                               point_cloud_set.low_resolution_filtered_points,
-                              static_cast<const HybridGridTSDF&>(
+                              dynamic_cast<const HybridGridTSDF&>(
                                   matching_submap
                                       ->low_resolution_hybrid_grid())),
                       nullptr,
@@ -834,7 +834,7 @@ void OptimizingLocalTrajectoryBuilder::AddPerPointMatchingResiduals(
                                           .low_resolution_filtered_points
                                           .size())),
                               point_cloud_set.low_resolution_filtered_points,
-                              static_cast<const HybridGridTSDF&>(
+                              dynamic_cast<const HybridGridTSDF&>(
                                   matching_submap
                                       ->low_resolution_hybrid_grid())),
                       nullptr, next_control_point->state.translation.data(),
@@ -851,7 +851,7 @@ void OptimizingLocalTrajectoryBuilder::AddPerPointMatchingResiduals(
                                           .low_resolution_filtered_points
                                           .size())),
                               point_cloud_set.low_resolution_filtered_points,
-                              static_cast<const HybridGridTSDF&>(
+                              dynamic_cast<const HybridGridTSDF&>(
                                   matching_submap
                                       ->low_resolution_hybrid_grid()),
                               interpolation_factor),
@@ -1128,9 +1128,9 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
 
     if (options_.optimizing_local_trajectory_builder_options()
             .use_multi_resolution_matching()) {
-      tsdf_pyramid_ = {static_cast<const HybridGridTSDF*>(
+      tsdf_pyramid_ = {dynamic_cast<const HybridGridTSDF*>(
                            &matching_submap->high_resolution_hybrid_grid()),
-                       static_cast<const HybridGridTSDF*>(
+                       dynamic_cast<const HybridGridTSDF*>(
                            &matching_submap->low_resolution_hybrid_grid())};
     }
     if (options_.optimizing_local_trajectory_builder_options()
