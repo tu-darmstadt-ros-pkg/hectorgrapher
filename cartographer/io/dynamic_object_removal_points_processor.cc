@@ -61,20 +61,22 @@ std::unique_ptr<DynamicObjectsRemovalPointsProcessor> DynamicObjectsRemovalPoint
       dictionary->GetInt("theta_segments"),
       dictionary->GetInt("phi_segments"),
       dictionary->GetDouble("sensor_range_limit"),
+      dictionary->GetInt("end_of_file"),
       next);
 }
 
 DynamicObjectsRemovalPointsProcessor::DynamicObjectsRemovalPointsProcessor(std::unique_ptr<FileWriter> file_writer,
     const int r_segments, const int theta_segments, const int phi_segments, const float sensor_range_limit,
-    PointsProcessor* next)
+    const int end_of_file, PointsProcessor* next)
     : r_segments_(r_segments), theta_segments_(theta_segments),
-    phi_segments_(phi_segments), sensor_range_limit_(sensor_range_limit), next_(next),
-    file_(std::move(file_writer)) {
+    phi_segments_(phi_segments), end_of_file_(end_of_file), sensor_range_limit_(sensor_range_limit),
+    next_(next), file_(std::move(file_writer)) {
   LOG(INFO) << "Initialized Dynamic objects removal filter with:\n" <<
   "r_segments:         " << r_segments_ << "\n" <<
   "theta_segments:     " << theta_segments_ << "\n" <<
   "phi_segments:       " << phi_segments_ << "\n" <<
-  "sensor_range_limit: " << sensor_range_limit_;
+  "sensor_range_limit: " << sensor_range_limit_ << "\n" <<
+  "end_of_file:        " << end_of_file_;
 }
 
 void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> batch) {
@@ -85,10 +87,6 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
 
   LOG(INFO) << "Iteration: " << list_of_batches_.size() + 1 << "\tBatch points: " << batch->points.size();
   // Create wedge for global map and current scan. Only if this isn't the first scan
-
-  // Add the current batch to the list of batches for later sending
-  list_of_batches_.push_back(*batch);
-  LOG(INFO) << "Batch inserted";
 
   if (!map_.empty()) {
     wedge_map_t scan_wedge_map = create_wedge_map(batch->points);
@@ -161,15 +159,26 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
           // Remove from the global wedge map. Necessary for potential future iterations over this ray in this time segment
           //global_wedge_map.erase(key); // SEGFAULT
           // Remove from the global map
-          remove_points_from_pointcloud(key, map_);
+          remove_points_from_pointcloud(key, map_, batch->sensor_to_map.inverse());
           // Remove from the list of batches
+          // TODO (bhirschel) idea: iterate the list of batches revere because it is observable that
+          // the last batch often is the main contributor of an dynamic objects' remaining
+          // spurious trail. Count the number of points from the global map and break the loop if
+          // this number was removed in total for all the individual batches
           for (auto &batch_iter : list_of_batches_) {
-            remove_points_from_batch(key, batch_iter);
+            transform::Rigid3<float> transformation = batch->sensor_to_map.inverse() * batch_iter.sensor_to_map;  // TODO(bhirschel) verify order of linked transformations
+            LOG(INFO) << "Size before: " << batch_iter.points.size();
+            remove_points_from_batch(key, batch_iter, transformation);
+            LOG(INFO) << "Size after: " << batch_iter.points.size();
           }
         }
       }
     }
   }
+
+  // Add the current batch to the list of batches for later sending
+  list_of_batches_.push_back(*batch);
+  LOG(INFO) << "Batch inserted";
 
   // Add all points from the current scan to the full map
   for (auto & point : batch->points) {
@@ -179,7 +188,13 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
   LOG(INFO) << "Total Map points: " << map_.size();
 
   // TODO(bhirschel) we want to process upon completion of the bag
-  next_->Process(std::move(batch));
+  if (list_of_batches_.size() == end_of_file_) {
+    LOG(INFO) << "Start sending batches through pipeline!";
+    for(auto & this_batch : list_of_batches_) {
+      next_->Process(std::make_unique<PointsBatch>(this_batch));
+    }
+  }
+  //next_->Process(std::move(batch));
 }
 
 Eigen::Vector3f DynamicObjectsRemovalPointsProcessor::cartesian_to_polar(Eigen::Vector3f cart_coord) {
@@ -262,13 +277,13 @@ PointsProcessor::FlushResult DynamicObjectsRemovalPointsProcessor::Flush() {
   return next_->Flush();
 }
 
-void DynamicObjectsRemovalPointsProcessor::remove_points_from_pointcloud(
-    DynamicObjectsRemovalPointsProcessor::wedge_key_t key,
-    sensor::PointCloud& cloud) {
+void DynamicObjectsRemovalPointsProcessor::remove_points_from_pointcloud(wedge_key_t key,
+                                                                         sensor::PointCloud &cloud,
+                                                                         transform::Rigid3<float> transformation) {
   absl::flat_hash_set<int> to_remove;
 
   for (size_t i = 0; i < cloud.size(); ++i) {
-    auto p = cloud[i].position;
+    auto p = transformation * cloud[i].position;
     wedge_key_t local_key = get_interval_segment(cartesian_to_polar(p));
     if (key == local_key) {
       to_remove.insert(i);
@@ -286,15 +301,16 @@ void DynamicObjectsRemovalPointsProcessor::remove_points_from_pointcloud(
   }
   cloud = std::move(points);
 
-  LOG(INFO) << "Removed from global map: " << to_remove.size() << " points";
+//  LOG(INFO) << "Removed from global map: " << to_remove.size() << " points";
 }
-void DynamicObjectsRemovalPointsProcessor::remove_points_from_batch(
-    DynamicObjectsRemovalPointsProcessor::wedge_key_t key,
-    PointsBatch &batch) {
+void DynamicObjectsRemovalPointsProcessor::remove_points_from_batch(wedge_key_t key,
+                                                                    PointsBatch &batch,
+                                                                    transform::Rigid3<float> transformation) {
   absl::flat_hash_set<int> to_remove;
+  size_t batch_size = batch.points.size();
 
   for (size_t i = 0; i < batch.points.size(); ++i) {
-    wedge_key_t local_key = get_interval_segment(cartesian_to_polar(batch.points[i].position));
+    wedge_key_t local_key = get_interval_segment(cartesian_to_polar(transformation * batch.points[i].position));
     if (key == local_key) {
       to_remove.insert(i);
     }
@@ -302,7 +318,11 @@ void DynamicObjectsRemovalPointsProcessor::remove_points_from_batch(
 
   RemovePoints(to_remove, &batch);
 
-  LOG(INFO) << "Removed from local batch: " << to_remove.size() << " points";
+  if (!to_remove.empty()) {
+    LOG(INFO) << "Local batch target removal: " << to_remove.size() << " points, " <<
+      batch_size - batch.points.size() << " points removed";
+  }
+
 }
 }
 }

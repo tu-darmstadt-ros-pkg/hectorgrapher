@@ -21,7 +21,7 @@ class DynamicObjectsRemovalPointsProcessor : public PointsProcessor {
       "dynamic_objects_removal_filter";
   DynamicObjectsRemovalPointsProcessor(std::unique_ptr<FileWriter> file_writer,
       int r_segments, int theta_segments, int phi_segments, float sensor_range_limit,
-      PointsProcessor* next);
+      int end_of_file, PointsProcessor* next);
 
   static std::unique_ptr<DynamicObjectsRemovalPointsProcessor> FromDictionary(
       const FileWriterFactory& file_writer_factory,
@@ -41,7 +41,7 @@ class DynamicObjectsRemovalPointsProcessor : public PointsProcessor {
   FlushResult Flush() override;
 
  private:
-  const int r_segments_, theta_segments_, phi_segments_;
+  const int r_segments_, theta_segments_, phi_segments_, end_of_file_;
   const double sensor_range_limit_;
   sensor::PointCloud map_;
   std::vector<PointsBatch> list_of_batches_;
@@ -96,8 +96,12 @@ class DynamicObjectsRemovalPointsProcessor : public PointsProcessor {
    * @param key as 3-tuple of wedge_key_t
    * @param cloud as sensor::PointCloud
    */
-  void remove_points_from_pointcloud(wedge_key_t key, sensor::PointCloud& cloud);
-  void remove_points_from_batch(wedge_key_t key, PointsBatch &batch);
+  void remove_points_from_pointcloud(wedge_key_t key,
+                                     sensor::PointCloud &cloud,
+                                     transform::Rigid3<float> transformation);
+  void remove_points_from_batch(wedge_key_t key,
+                                PointsBatch &batch,
+                                transform::Rigid3<float> transformation);
 };
 
 }  // namespace io
