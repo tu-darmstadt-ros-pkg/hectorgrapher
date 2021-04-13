@@ -134,6 +134,8 @@ class OptimizingLocalTrajectoryBuilder {
   std::unique_ptr<OptimizingLocalTrajectoryBuilder::MatchingResult>
   MaybeOptimize(common::Time time);
 
+  void PrintLoggingData();
+
   const proto::LocalTrajectoryBuilderOptions3D options_;
   const ceres::Solver::Options ceres_solver_options_;
   mapping::ActiveSubmaps3D active_submaps_;
@@ -162,6 +164,13 @@ class OptimizingLocalTrajectoryBuilder {
   std::unique_ptr<ImuIntegrator> imu_integrator_;
   std::vector<const mapping::HybridGridTSDF*> tsdf_pyramid_;
   bool map_update_enabled_;
+
+  //Logging
+  unsigned int num_insertions;
+  double total_insertion_duration;
+  unsigned int num_optimizations;
+  double total_optimization_duration;
+
 };
 
 }  // namespace mapping

@@ -142,7 +142,11 @@ OptimizingLocalTrajectoryBuilder::OptimizingLocalTrajectoryBuilder(
       angular_velocity_calibration_(
           Eigen::Transform<double, 3, Eigen::Affine>::Identity()),
       motion_filter_(options.motion_filter_options()),
-      map_update_enabled_(true) {
+      map_update_enabled_(true),
+      num_insertions(0),
+      total_insertion_duration(0.0),
+      num_optimizations(0),
+      total_optimization_duration(0.0) {
   imu_integrator_ = absl::make_unique<ImuIntegrator>(
       options.optimizing_local_trajectory_builder_options().imu_integrator());
 }
@@ -293,7 +297,8 @@ void OptimizingLocalTrajectoryBuilder::AddPerScanMatchingResiduals(
     if (options_.optimizing_local_trajectory_builder_options()
             .use_multi_resolution_matching()) {
       CHECK(matching_submap->high_resolution_hybrid_grid().GetGridType() ==
-               GridType::TSDF) << "Multi resolution matching only available for GridType::TSDF.";
+            GridType::TSDF)
+          << "Multi resolution matching only available for GridType::TSDF.";
       if (options_.optimizing_local_trajectory_builder_options()
                   .high_resolution_grid_weight() > 0.0 &&
           !point_cloud_set.high_resolution_filtered_points.empty()) {
@@ -1155,6 +1160,9 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
     }
     ceres::Solver::Summary summary;
     ceres::Solve(ceres_solver_options_, &problem, &summary);
+    ++num_optimizations;
+    total_optimization_duration += summary.total_time_in_seconds;
+    PrintLoggingData();
     //    LOG(INFO) << summary.FullReport();
     // The optimized states in 'control_points_' are in the submap frame and we
     // transform them in place to be in the local SLAM frame again.
@@ -1357,12 +1365,19 @@ OptimizingLocalTrajectoryBuilder::InsertIntoSubmap(
   if (!map_update_enabled_) {
     LOG(WARNING) << "Map Update Disabled!";
   }
+
+
+  double t_before_insert = common::GetThreadCpuTimeSeconds();
   std::vector<std::shared_ptr<const mapping::Submap3D>> insertion_submaps =
       map_update_enabled_
           ? active_submaps_.InsertData(
                 filtered_range_data_in_local, local_from_gravity_aligned,
                 rotational_scan_matcher_histogram_in_gravity, time)
           : active_submaps_.submaps();
+  double t_after_insert = common::GetThreadCpuTimeSeconds();
+  ++num_insertions;
+  total_insertion_duration += t_after_insert - t_before_insert;
+
   return absl::make_unique<InsertionResult>(InsertionResult{
       std::make_shared<const mapping::TrajectoryNode::Data>(
           mapping::TrajectoryNode::Data{
@@ -1490,6 +1505,15 @@ void OptimizingLocalTrajectoryBuilder::RegisterMetrics(
 void OptimizingLocalTrajectoryBuilder::SetMapUpdateEnabled(
     bool map_update_enabled) {
   map_update_enabled_ = map_update_enabled;
+}
+
+void OptimizingLocalTrajectoryBuilder::PrintLoggingData() {
+  if (num_optimizations > 0) {
+    LOG_EVERY_N(INFO, 100) << "Optimization - Avg: "<<total_optimization_duration/num_optimizations<<"\t total: "<<total_optimization_duration;
+  }
+  if (num_insertions > 0) {
+    LOG_EVERY_N(INFO, 100) << "Insertion - Avg: "<<total_insertion_duration/num_insertions<<"\t total: "<<total_insertion_duration;
+  }
 }
 
 }  // namespace mapping
