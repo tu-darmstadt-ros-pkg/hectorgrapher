@@ -7,6 +7,8 @@
 #include <iomanip>
 #include <cstdlib>
 #include <ctime>
+#include <algorithm>
+#include <vector>
 
 #include "dynamic_object_removal_points_processor.h"
 
@@ -126,54 +128,69 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
     }*/
 
     // Dynamic objects detection
-    for (auto &global_wedge : global_wedge_map) {
-      wedge_key_t key = global_wedge.first;
-      bool any_obj_detected = false;
-      bool dyn_obj_detected = false;
+    size_t total_number_removed_points = 0;
+    std::vector<wedge_key_t> keys_to_delete;
+    size_t total_to_be_removed, already_removed;
 
-      if (std::get<0>(key) + 1 < r_segments_) {
-        // Iterate over all scan wedges with same theta and phi but increasing distance r starting at 0
+    total_to_be_removed = 0;
+    already_removed = 0;
+
+    for (uint16_t new_theta = 0; new_theta < theta_segments_; ++new_theta) {
+      for (uint16_t new_phi = 0; new_phi < phi_segments_; ++new_phi) {
+        // Iterate over all scan wedges with same theta and phi but increasing distance r starting
+        // at 0 to determine wedge with greatest cardinality
+        std::pair<int, int> max_cardinality = std::make_pair(-1, -1);
+
         for (uint16_t new_r = 0; new_r < r_segments_; ++new_r) {
-          wedge_key_t new_key = std::make_tuple(new_r, std::get<1>(key), std::get<2>(key));
+          wedge_key_t new_key = std::make_tuple(new_r, new_theta, new_phi);
 
           auto search = scan_wedge_map.find(new_key);
           if (search != scan_wedge_map.end()) {
             // Wedge exists
-            any_obj_detected = true;
-            // TODO(bhirschel) do a cardinality check, eg check how many points are in there
-            if (new_r > std::get<0>(key)) {
-              dyn_obj_detected = true;
-              /* this means that the points belonging to key in the global wedge map are no longer
-               * there in the current scan and therefore belong to an dynamic object that has moved
-               */
+            // Cardinality check: find wedge with greatest cardinality
+            if (max_cardinality.first < 0 || max_cardinality.second < 0 ||
+                max_cardinality.second < search->second.wedge_points.size()) {
+              max_cardinality = std::make_pair(new_r, search->second.wedge_points.size());
             }
-            break; // no need to continue searching as there cannot be more detections behind this
           }
         }
-        // sensor range limit reached but no detection so far -> same as above
-        if (!any_obj_detected) {
-          dyn_obj_detected = true;
-        }
+        if (max_cardinality.first >= 0 && max_cardinality.second >= 0) {
+          // TODO(bhirschel) maybe set a minimum number of detections to make it significant
+          // Significant detection perceived. Check if dynamic object
+          uint16_t r_scan_detection = max_cardinality.first;
 
-        if (dyn_obj_detected) {
-          // Remove from the global wedge map. Necessary for potential future iterations over this ray in this time segment
-          //global_wedge_map.erase(key); // SEGFAULT
-          // Remove from the global map
-          remove_points_from_pointcloud(key, map_, batch->sensor_to_map.inverse());
-          // Remove from the list of batches
-          // TODO (bhirschel) idea: iterate the list of batches revere because it is observable that
-          // the last batch often is the main contributor of an dynamic objects' remaining
-          // spurious trail. Count the number of points from the global map and break the loop if
-          // this number was removed in total for all the individual batches
-          for (auto &batch_iter : list_of_batches_) {
-            transform::Rigid3<float> transformation = batch->sensor_to_map.inverse() * batch_iter.sensor_to_map;  // TODO(bhirschel) verify order of linked transformations
-            LOG(INFO) << "Size before: " << batch_iter.points.size();
-            remove_points_from_batch(key, batch_iter, transformation);
-            LOG(INFO) << "Size after: " << batch_iter.points.size();
+          for (uint16_t r_to_delete = 0; r_to_delete < r_scan_detection; ++r_to_delete) {
+            wedge_key_t new_key = std::make_tuple(r_to_delete, new_theta, new_phi);
+            keys_to_delete.push_back(new_key);
+            total_to_be_removed += global_wedge_map[new_key].wedge_points.size();
+
+            // Remove from the global wedge map. Necessary for potential future iterations over this ray in this time segment
+            global_wedge_map.erase(new_key);
           }
         }
       }
     }
+    // Remove the points from the global map and from all local batches
+    // Remove from the global map
+    remove_points_from_pointcloud(keys_to_delete, map_, batch->sensor_to_map.inverse());
+    // Remove from the list of batches
+    // iterate the list of batches revere because it is observable that
+    // the last batch often is the main contributor of an dynamic objects' remaining
+    // spurious trail. Count the number of points from the global map and break the loop if
+    // this number was removed in total for all the individual batches
+    for (auto batch_iter = list_of_batches_.rbegin(); batch_iter != list_of_batches_.rend(); ++batch_iter) {
+      transform::Rigid3<float> transformation = batch->sensor_to_map.inverse() * batch_iter->sensor_to_map;  // TODO(bhirschel) verify order of linked transformations
+//            LOG(INFO) << "Size before: " << batch_iter.points.size();
+      already_removed += remove_points_from_batch(keys_to_delete, *batch_iter, transformation);
+//            LOG(INFO) << "Size after: " << batch_iter.points.size();
+
+      if (already_removed >= total_to_be_removed) {
+        //LOG(INFO) << "Removal cancelled early";
+        break;
+      }
+    }
+    total_number_removed_points += already_removed;
+    LOG(INFO) << "Total number of removed points: " << total_number_removed_points;
   }
 
   // Add the current batch to the list of batches for later sending
@@ -189,8 +206,9 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
 
   // TODO(bhirschel) we want to process upon completion of the bag
   if (list_of_batches_.size() == end_of_file_) {
-    LOG(INFO) << "Start sending batches through pipeline!";
+    LOG(INFO) << "Start sending batches through pipeline! No.: " << list_of_batches_.size();
     for(auto & this_batch : list_of_batches_) {
+      LOG(INFO) << "Batch sent. Size: " << this_batch.points.size();
       next_->Process(std::make_unique<PointsBatch>(this_batch));
     }
   }
@@ -277,7 +295,7 @@ PointsProcessor::FlushResult DynamicObjectsRemovalPointsProcessor::Flush() {
   return next_->Flush();
 }
 
-void DynamicObjectsRemovalPointsProcessor::remove_points_from_pointcloud(wedge_key_t key,
+void DynamicObjectsRemovalPointsProcessor::remove_points_from_pointcloud(std::vector<wedge_key_t> keys_to_delete,
                                                                          sensor::PointCloud &cloud,
                                                                          transform::Rigid3<float> transformation) {
   absl::flat_hash_set<int> to_remove;
@@ -285,7 +303,7 @@ void DynamicObjectsRemovalPointsProcessor::remove_points_from_pointcloud(wedge_k
   for (size_t i = 0; i < cloud.size(); ++i) {
     auto p = transformation * cloud[i].position;
     wedge_key_t local_key = get_interval_segment(cartesian_to_polar(p));
-    if (key == local_key) {
+    if (std::find(keys_to_delete.begin(), keys_to_delete.end(), local_key) != keys_to_delete.end()) {
       to_remove.insert(i);
     }
   }
@@ -303,7 +321,7 @@ void DynamicObjectsRemovalPointsProcessor::remove_points_from_pointcloud(wedge_k
 
 //  LOG(INFO) << "Removed from global map: " << to_remove.size() << " points";
 }
-void DynamicObjectsRemovalPointsProcessor::remove_points_from_batch(wedge_key_t key,
+size_t DynamicObjectsRemovalPointsProcessor::remove_points_from_batch(std::vector<wedge_key_t> keys_to_delete,
                                                                     PointsBatch &batch,
                                                                     transform::Rigid3<float> transformation) {
   absl::flat_hash_set<int> to_remove;
@@ -311,18 +329,17 @@ void DynamicObjectsRemovalPointsProcessor::remove_points_from_batch(wedge_key_t 
 
   for (size_t i = 0; i < batch.points.size(); ++i) {
     wedge_key_t local_key = get_interval_segment(cartesian_to_polar(transformation * batch.points[i].position));
-    if (key == local_key) {
+    if (std::find(keys_to_delete.begin(), keys_to_delete.end(), local_key) != keys_to_delete.end()) {
       to_remove.insert(i);
     }
   }
 
-  RemovePoints(to_remove, &batch);
-
   if (!to_remove.empty()) {
-    LOG(INFO) << "Local batch target removal: " << to_remove.size() << " points, " <<
-      batch_size - batch.points.size() << " points removed";
+    RemovePoints(to_remove, &batch);
+//    LOG(INFO) << "Local batch target removal: " << to_remove.size() << " points, " <<
+//      batch_size - batch.points.size() << " points removed";
   }
-
+  return to_remove.size();
 }
 }
 }

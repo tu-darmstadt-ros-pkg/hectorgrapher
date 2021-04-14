@@ -96,10 +96,10 @@ class DynamicObjectsRemovalPointsProcessor : public PointsProcessor {
    * @param key as 3-tuple of wedge_key_t
    * @param cloud as sensor::PointCloud
    */
-  void remove_points_from_pointcloud(wedge_key_t key,
+  void remove_points_from_pointcloud(std::vector<wedge_key_t> keys_to_delete,
                                      sensor::PointCloud &cloud,
                                      transform::Rigid3<float> transformation);
-  void remove_points_from_batch(wedge_key_t key,
+  size_t remove_points_from_batch(std::vector<wedge_key_t> keys_to_delete,
                                 PointsBatch &batch,
                                 transform::Rigid3<float> transformation);
 };

@@ -124,6 +124,7 @@ void PlyWritingPointsProcessor::Process(std::unique_ptr<PointsBatch> batch) {
     next_->Process(std::move(batch));
     return;
   }
+  LOG(INFO) << "ply_writing_points_processor: Writing batch";
 
   if (num_points_ == 0) {
     has_colors_ = !batch->colors.empty();
