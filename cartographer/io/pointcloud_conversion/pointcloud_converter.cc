@@ -18,6 +18,8 @@
 
 //#include "cartographer/common/lua_parameter_dictionary.h"
 //#include "cartographer/common/lua_parameter_dictionary_test_helpers.h"
+#include "cartographer/common/configuration_file_resolver.h"
+
 
 #ifdef WITH_OPEN3D
 
@@ -25,7 +27,7 @@
 
 #endif
 
-DEFINE_string(pointcloud_file, "", "File containing the point-cloud input.");
+DEFINE_string(config_file, "", "LUA-file containing the configuration options");
 
 #ifdef WITH_OPEN3D
 namespace cartographer {
@@ -36,6 +38,8 @@ namespace cartographer {
             std::shared_ptr<open3d::geometry::VoxelGrid> tsdfPointer;
             int sliceIndex;
             int sliceOrientation;
+
+            cartographer::common::LuaParameterDictionary* luaParameterDictionary;
 
             /**
              * Generate a point cloud in shape of a cube and convert it into a shared pointer of an open3d point cloud.
@@ -48,14 +52,13 @@ namespace cartographer {
              *
              * @return open3d's representation of a point cloud inn shape of a cube.
              */
-            std::shared_ptr<open3d::geometry::PointCloud> generateCubicPointCloud() {
+            std::shared_ptr<open3d::geometry::PointCloud> generateCubicPointCloud(
+                    float cubeSideLength, float distanceBetweenPoints, float noise = 0.0) {
                 // Initialize an empty Point Cloud in the data format of cartographer
                 cartographer::sensor::PointCloud cartographer_cloud;
 
                 // Fill the Point Cloud with points (shape of a cube)
-                float distanceBetweenPoints = 0.004;
-                float cubeSideLength = 0.1;
-                float noise = 0.0;
+                // Todo: Change scan_cloud_generator.cc to add noise on the z-dimension as well. Maybe an error?
                 cartographer::evaluation::ScanCloudGenerator myScanCloudGenerator(distanceBetweenPoints);
                 myScanCloudGenerator.generateCube(cartographer_cloud, cubeSideLength, noise);
 
@@ -205,7 +208,10 @@ namespace cartographer {
                 const Eigen::Array3i end_cell = tsdf->GetCellIndex(ray_end);
                 const Eigen::Array3i delta = end_cell - begin_cell;
 
+                CHECK(!(delta.x() == 0 && delta.y() == 0 && delta.z() == 0));
+
                 const int num_samples = delta.cwiseAbs().maxCoeff();
+
 
                 for (int position = 0; position <= num_samples; ++position) {
                     const Eigen::Array3i update_cell_index =
@@ -213,17 +219,24 @@ namespace cartographer {
                             (delta.cast<float>() * float(position) / float(num_samples)).round().cast<int>();
 
                     Eigen::Vector3f cell_center = tsdf->GetCenterOfCell(update_cell_index);
-                    float update_tsd = (cell_center - hit).norm();
+                    float newTSD = (cell_center - hit).norm();
                     if ((cell_center - hit).dot(normal) < 0) {
-                        update_tsd = -update_tsd;
+                        newTSD = -newTSD;
                     }
 
-                    // Ignoriert Gewichte, ändert TSD einfach in den niedrigeren Wert.
-                    // Warum brauchen wir überhaupt Gewichte?
+                    // Todo: Welche Methode macht mehr Sinn? Ist die eine schneller als die andere?
+                    // Only change the voxel TSD, if the new absolute value is lower than the old one.
                     if (!tsdf->IsKnown(update_cell_index) ||
-                        std::abs(tsdf->GetTSD(update_cell_index)) > std::abs(update_tsd)) {
-                        tsdf->SetCell(update_cell_index, update_tsd, tsdf->GetWeight(update_cell_index));
+                        std::abs(tsdf->GetTSD(update_cell_index)) > std::abs(newTSD)) {
+//                        std::cout << update_cell_index << newTSD << std::endl;
+                        tsdf->SetCell(update_cell_index, newTSD, 0.0f);
                     }
+
+                    // Combine the new and old TSD by calculating the weighted average.
+//                    float updatedWeight = 1.0f + tsdf->GetWeight(update_cell_index);
+//                    float updatedTSD = (tsdf->GetTSD(update_cell_index) * tsdf->GetWeight(update_cell_index)
+//                            + newTSD * 1.0f) / updatedWeight;
+//                    tsdf->SetCell(update_cell_index, updatedTSD, updatedWeight);
                 }
             }
 
@@ -237,8 +250,8 @@ namespace cartographer {
              * @param voxelSideLength edge length of the voxels of HybridGridTSDF.
              * @return a shared pointer to a VoxelGrid with origin (0,0,0).
              */
-            std::shared_ptr<open3d::geometry::VoxelGrid>
-            convertHybridGridToVoxelGrid(cartographer::mapping::HybridGridTSDF *hybridGrid, float voxelSideLength) {
+            std::shared_ptr<open3d::geometry::VoxelGrid> convertHybridGridToVoxelGrid(
+                    cartographer::mapping::HybridGridTSDF *hybridGrid, float voxelSideLength, float maxTSD) {
 
                 std::shared_ptr<open3d::geometry::VoxelGrid> voxelGrid =
                         std::make_shared<open3d::geometry::VoxelGrid>(open3d::geometry::VoxelGrid());
@@ -247,11 +260,12 @@ namespace cartographer {
                 for (std::pair<Eigen::Array<int, 3, 1>, TSDFVoxel> nextVoxel : *hybridGrid) {
                     Eigen::Vector3i cellIndex = nextVoxel.first;
 
+                    // Todo: Bessere, allgemeinere Farbcodierung, abhängig von der truncation distance anstatt "* 100"
                     Eigen::Vector3d color;
                     if (hybridGrid->GetTSD(cellIndex) > 0) {
-                        color = {0.0, 0.0, hybridGrid->GetTSD(cellIndex) * 100};
+                        color = {0.0, 0.0, hybridGrid->GetTSD(cellIndex) / maxTSD};
                     } else {
-                        color = {hybridGrid->GetTSD(cellIndex) * -100, 0.0, 0.0};
+                        color = {hybridGrid->GetTSD(cellIndex) / -maxTSD, 0.0, 0.0};
                     }
 
 //                    std::cout << cellIndex.x() << " " << cellIndex.y() << " " << cellIndex.z() << std::endl;
@@ -262,32 +276,82 @@ namespace cartographer {
             }
 
         public:
-            TSDFBuilder() {
+            TSDFBuilder(const std::string &config_directory, const std::string &config_filename) {
+                auto file_resolver =
+                        absl::make_unique<cartographer::common::ConfigurationFileResolver>(
+                                std::vector<std::string>{config_directory});
+                const std::string code = file_resolver->GetFileContentOrDie(config_filename);
+                luaParameterDictionary = new cartographer::common::LuaParameterDictionary(code, std::move(file_resolver));
+//                std::cout << luaParameterDictionary->GetInt("testvalue") << std::endl;
+
                 sliceIndex = 1;
-                sliceOrientation = 0;
+                sliceOrientation = 2;       // The z-dimension is the default slice direction
             }
 
 
-            void run(const std::string &point_cloud_filename) {
+            void run() {
 
                 std::shared_ptr<open3d::geometry::PointCloud> myPointCloudPointer =
                         std::make_shared<open3d::geometry::PointCloud>();
 
                 // Generate a cloud in shape of a cube. Don't show the input from the .ply-file.
-//                myPointCloudPointer = generateCubicPointCloud();
+                if(luaParameterDictionary->GetBool("generateCubicPointcloud")) {
+                    myPointCloudPointer = generateCubicPointCloud(
+                            luaParameterDictionary->GetDouble("sidelengthCubicPointcloud"),
+                            luaParameterDictionary->GetDouble("distancePointsCubicPointcloud"),
+                            luaParameterDictionary->GetDouble("noiseCubicPointcloud")   );
+                }
+                else {
+                    // Read and show the input from the .ply-file.
+                    std::string point_cloud_filename = luaParameterDictionary->GetString("pointcloudPath");
+                    open3d::io::ReadPointCloud(point_cloud_filename, *myPointCloudPointer, {"auto", true, true, true});
+                    std::cout << "Loaded point cloud with " << myPointCloudPointer->points_.size() << " points."
+                              << std::endl;
+                }
 
-                // Read and show the input from the .ply-file.
-                open3d::io::ReadPointCloud(point_cloud_filename, *myPointCloudPointer, {"auto", true, true, true});
+                if(luaParameterDictionary->GetBool("uniformDownSample")) {
+                    int sampleRate = luaParameterDictionary->GetInt("sampleRateUniformDownSample");
+                    myPointCloudPointer = myPointCloudPointer->UniformDownSample(sampleRate);
+                    std::cout << "Downsampled to " << myPointCloudPointer->points_.size() << " points."
+                              << std::endl;
+                }
+
+                if(luaParameterDictionary->GetBool("removeRadiusOutliers")) {
+                    myPointCloudPointer = std::get<0>(myPointCloudPointer->RemoveRadiusOutliers(
+                            luaParameterDictionary->GetInt("neighborsInSphereRadiusOutlier"),
+                            luaParameterDictionary->GetDouble("neighborsInSphereRadiusOutlier") ));
+                    std::cout << "Removed outliers to " << myPointCloudPointer->points_.size() << " points."
+                              << std::endl;
+                }
+
+                if(luaParameterDictionary->GetBool("cutRoofZAxis")) {
+                    double cutoff = luaParameterDictionary->GetDouble("cutoffSize");
+                    open3d::geometry::AxisAlignedBoundingBox myBoundingBox(myPointCloudPointer->GetMinBound(),
+                                                                           myPointCloudPointer->GetMaxBound() -
+                                                                           Eigen::Vector3d{0.0, 0.0, cutoff});
+                    myPointCloudPointer = myPointCloudPointer->Crop(myBoundingBox);
+                    std::cout << "Cropped point cloud to " << myPointCloudPointer->points_.size() << " points."
+                              << std::endl;
+                }
+
 
                 myPointCloudPointer->EstimateNormals();
-                myPointCloudPointer->OrientNormalsConsistentTangentPlane(9);
+                std::cout << "Estimated all normals for the point cloud." << std::endl;
+
+                myPointCloudPointer->OrientNormalsConsistentTangentPlane(
+                        luaParameterDictionary->GetInt("normalOrientationNearestNeighbours")    );
+                std::cout << "Oriented all normals by using the tangent plane." << std::endl;
+
+
+                // Draw all points of the filtered point cloud
                 open3d::visualization::DrawGeometries({myPointCloudPointer});
 
 
 // #################################################################################################################
-
-
                 // Show the VoxelGrid of the loaded point cloud
+
+
+                // Apply colors to the points
                 Eigen::Vector3d maxValues = myPointCloudPointer->GetMaxBound();
                 Eigen::Vector3d minValues = myPointCloudPointer->GetMinBound();
                 Eigen::Vector3d ranges = maxValues - minValues;
@@ -297,25 +361,33 @@ namespace cartographer {
                                 Eigen::Vector3d{(p.x() - minValues.x()) * 1.0 / ranges.x(), 0.0, 0.0});
                     }
                 }
-                // Comment the last nine rows to draw a Voxel Grid with no colors.
-                float gridVoxelSideLength = 0.002;
+
+//                float gridVoxelSideLength = 0.002;
+//                float gridVoxelSideLength = 0.2;
+                float gridVoxelSideLength = luaParameterDictionary->GetDouble("absoluteVoxelSize");
+                int numberOfVoxels = (int) (ranges.x() * ranges.y() * ranges.z() / pow(gridVoxelSideLength, 3));
+                std::cout << "Created VoxelGrid with " << numberOfVoxels << " possible voxels." << std::endl;
+
                 std::shared_ptr<open3d::geometry::VoxelGrid> pclVoxelGridPointer =
                         open3d::geometry::VoxelGrid::CreateFromPointCloud(*myPointCloudPointer, gridVoxelSideLength);
 
                 drawTSDF(pclVoxelGridPointer);
 
 
-// #################################################################################################################
 
+// #################################################################################################################
                 // Build a HybridGridTSDF = cartographer's representation of a TSDF
-                float tsdfVoxelSideLength = 0.002;
-                float absoluteTruncationDistance = 0.01;
-                float maxWeight = 10.0;           // Todo: Wird bisher nicht verwendet.
-                float relativeTruncationDistance = absoluteTruncationDistance / tsdfVoxelSideLength;
+
+
+//                float absoluteTruncationDistance = 0.025;
+//                float absoluteTruncationDistance = 4.0;
+                float absoluteTruncationDistance = luaParameterDictionary->GetDouble("absoluteTruncationDistance");
+                float maxWeight = luaParameterDictionary->GetDouble("maxTSDFWeight");  // Todo: Was sollte das maximale Gewicht sein?
+                float relativeTruncationDistance = absoluteTruncationDistance / gridVoxelSideLength;
 
                 cartographer::mapping::ValueConversionTables myValueConversionTable;
                 cartographer::mapping::HybridGridTSDF myHybridGridTSDF(
-                        tsdfVoxelSideLength, relativeTruncationDistance, maxWeight, &myValueConversionTable);
+                        gridVoxelSideLength, relativeTruncationDistance, maxWeight, &myValueConversionTable);
 
 //                for(int i=0; i<myHybridGrid.grid_size(); i++) {
 //                    for(int j=0; j<myHybridGrid.grid_size(); j++) {
@@ -325,8 +397,6 @@ namespace cartographer {
 //                    }
 //                }
 
-
-// #################################################################################################################
 
                 // Build the TSDF by raytracing every point/normal pair from the point cloud
                 for (long unsigned int i = 0; i < myPointCloudPointer->points_.size(); i++) {
@@ -338,14 +408,18 @@ namespace cartographer {
                 }
 
 
-// #################################################################################################################
+                std::cout << "Press the left/right keys to slice through the voxel grid!" << std::endl;
+                std::cout << "Press the key >o< to change the slicing orientation." << std::endl;
 
                 // Show the VoxelGrid of the TSDF
-                std::shared_ptr<open3d::geometry::VoxelGrid> tsdfVoxelGridPointer =
-                        convertHybridGridToVoxelGrid(&myHybridGridTSDF, tsdfVoxelSideLength);
+                std::shared_ptr<open3d::geometry::VoxelGrid> tsdfVoxelGridPointer = convertHybridGridToVoxelGrid(
+                        &myHybridGridTSDF, gridVoxelSideLength, absoluteTruncationDistance);
                 drawTSDF(tsdfVoxelGridPointer);
 
+//                myHybridGridTSDF.ToProto();
+
             }
+
         };
     }  // namespace mapping
 }   // namespace cartographer
@@ -356,13 +430,15 @@ int main(int argc, char **argv) {
     FLAGS_logtostderr = true;
     google::ParseCommandLineFlags(&argc, &argv, true);
 
-    if (FLAGS_pointcloud_file.empty()) {
+    if (FLAGS_config_file.empty()) {
         google::ShowUsageWithFlagsRestrict(argv[0], "pointcloud_converter");
         return EXIT_FAILURE;
     }
 #ifdef WITH_OPEN3D
-    cartographer::mapping::TSDFBuilder myTSDFBuilder;
-    myTSDFBuilder.run(FLAGS_pointcloud_file);
+    cartographer::mapping::TSDFBuilder myTSDFBuilder(
+            "/home/leo/hector/src/cartographer/cartographer/io/pointcloud_conversion/configurations",
+            FLAGS_config_file);
+    myTSDFBuilder.run();
 #endif
 }
 
@@ -370,4 +446,3 @@ int main(int argc, char **argv) {
 
 // Possible Program Arguments
 // -pointcloud_file "/home/leo/Downloads/Halle-DRZ-Modell-innen-Flug1-2020-12-09.ply"
-// -pointcloud_file "/home/leo/Downloads/bunny/reconstruction/bun_zipper_res4.ply"
