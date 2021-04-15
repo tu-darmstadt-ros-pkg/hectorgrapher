@@ -83,11 +83,13 @@ DynamicObjectsRemovalPointsProcessor::DynamicObjectsRemovalPointsProcessor(std::
 
 void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> batch) {
   // For debugging: sleep at first iteration
-  if (map_.empty()) {
-    std::this_thread::sleep_for(std::chrono::seconds(10));
-  }
+//  if (map_.empty()) {
+//    std::this_thread::sleep_for(std::chrono::seconds(10));
+//  }
 
   LOG(INFO) << "Iteration: " << list_of_batches_.size() + 1 << "\tBatch points: " << batch->points.size();
+  LOG(INFO) << "Batch origin:      x: " << batch->origin.x() << "\ty: " << batch->origin.y() << "\tz: " << batch->origin.z();
+  LOG(INFO) << "Batch transformation: " << batch->sensor_to_map.DebugString();
   // Create wedge for global map and current scan. Only if this isn't the first scan
 
   if (!map_.empty()) {
@@ -97,15 +99,18 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
     LOG(INFO) << "Scan wedge map size: " << scan_wedge_map.size() << "\tGlobal wedge map size: " << global_wedge_map.size();
 
     // Test writing of points
-    /*if (list_of_batches_.size() == 1) {
+    if (list_of_batches_.size() == 444) {
       std::srand(std::time(nullptr));
       sphercial_wedge wedge;
-      float r_min = 0.0f;
-      float r_max = r_min + sensor_range_limit_ / r_segments_;
-      float theta_min = 0.0f;
-      float theta_max = theta_min + M_PI / theta_segments_;
-      float phi_min = 0.0f;
-      float phi_max = phi_min + (2.0f * M_PI) / phi_segments_;
+      float r_step = sensor_range_limit_ / r_segments_;
+      float r_min = 2.0f * r_step;
+      float r_max = r_min + r_step;
+      float theta_step = M_PIf / theta_segments_;
+      float theta_min = 5.0f * theta_step;
+      float theta_max = theta_min + theta_step;
+      float phi_step = (2.0f * M_PIf) / phi_segments_;
+      float phi_min = 6.0f * phi_step;
+      float phi_max = phi_min + phi_step;
 
       for (int i = 0; i < 1000; ++i) {
         float r = r_min + static_cast<float>(rand()) / (static_cast <float> (RAND_MAX/(r_max-r_min)));
@@ -119,13 +124,19 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
       std::vector<std::string> comments;
 
       WriteBinaryPlyHeader(false, false, comments, 0, file_.get());
-      for (size_t i = 0; i < wedge.wedge_points.size(); ++i) {
+      /*for (size_t i = 0; i < wedge.wedge_points.size(); ++i) {
         WriteBinaryPlyPointCoordinate(wedge.wedge_points[i].position, file_.get());
+      }*/
+      /*for (size_t i = 0; i < batch->points.size(); ++i) {
+        WriteBinaryPlyPointCoordinate(batch->points[i].position, file_.get());
+      }*/
+      for (size_t i = 0; i < map_.size(); ++i) {
+        WriteBinaryPlyPointCoordinate(map_[i].position, file_.get());
       }
-      WriteBinaryPlyHeader(false, false, comments, wedge.wedge_points.size(),
+      WriteBinaryPlyHeader(false, false, comments, map_.size(),
                            file_.get());
       CHECK(file_->Close()) << "Closing PLY file_writer failed.";
-    }*/
+    }
 
     // Dynamic objects detection
     size_t total_number_removed_points = 0;
@@ -154,7 +165,7 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
             }
           }
         }
-        if (max_cardinality.first >= 0 && max_cardinality.second >= 0) {
+        if (max_cardinality.first >= 0 && max_cardinality.second >= 5) {
           // TODO(bhirschel) maybe set a minimum number of detections to make it significant
           // Significant detection perceived. Check if dynamic object
           uint16_t r_scan_detection = max_cardinality.first;
@@ -231,8 +242,8 @@ Eigen::Vector3f DynamicObjectsRemovalPointsProcessor::polar_to_cartesian(float r
                                                                          float phi) {
   Eigen::Vector3f cart;
 
-  cart.x() = r*sin(theta)*cos(phi);
-  cart.y() = r*sin(theta)*sin(phi);
+  cart.x() = r*sin(theta)*cos(phi - M_PIf);
+  cart.y() = r*sin(theta)*sin(phi - M_PIf);
   cart.z() = r*cos(theta);
 
   return cart;
@@ -248,8 +259,8 @@ DynamicObjectsRemovalPointsProcessor::wedge_key_t DynamicObjectsRemovalPointsPro
   uint16_t r_seg, theta_seg, phi_seg;
 
   r = p.x();
-  theta = static_cast<float>(fmod(p.y(), M_PI));
-  phi = static_cast<float>(fmod(p.z(), 2.0f * M_PI));
+  theta = static_cast<float>(fmod(p.y(), M_PIf));
+  phi = static_cast<float>(fmod(p.z(), 2.0f * M_PIf));
 
   // Convert into positive space from 0 to pi or 0 to 2pi, respectively
   theta = theta < 0 ? theta + M_PIf : theta;

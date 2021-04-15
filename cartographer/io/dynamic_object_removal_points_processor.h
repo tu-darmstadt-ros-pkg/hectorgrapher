@@ -15,6 +15,7 @@
 namespace cartographer {
 namespace io {
 
+//TODO(bhirschel) here objectS different to filename
 class DynamicObjectsRemovalPointsProcessor : public PointsProcessor {
  public:
   constexpr static const char* kConfigurationFileActionName =
@@ -102,6 +103,8 @@ class DynamicObjectsRemovalPointsProcessor : public PointsProcessor {
   size_t remove_points_from_batch(std::vector<wedge_key_t> keys_to_delete,
                                 PointsBatch &batch,
                                 transform::Rigid3<float> transformation);
+
+  //void write_random_wedge_to_file(float r, float theta, float phi);
 };
 
 }  // namespace io
