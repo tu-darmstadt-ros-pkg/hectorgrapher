@@ -13,16 +13,16 @@
 #include "cartographer/mapping/3d/hybrid_grid_tsdf.h"
 #include "cartographer/mapping/value_conversion_tables.h"
 
+// Classes for the lua dictionary
 #include "cartographer/common/configuration_file_resolver.h"
 
+// Classes for the ProtoBuffer
 #include "cartographer/io/internal/mapping_state_serialization.cc"  //Todo: Das lässt uns CreateHeader() benutzen. Muss irgendwann weg!
-
 #include "cartographer/io/proto_stream.h"
 #include "cartographer/io/internal/mapping_state_serialization.h"
-//#include "cartographer/io/proto_stream_deserializer.h"
-//#include "cartographer/io/serialization_format_migration.h"
 
-#include "cairo/cairo.h"
+// Header file
+#include "cartographer/io/pointcloud_conversion/tsdf_drawer.h"
 
 
 #ifdef WITH_OPEN3D
@@ -38,10 +38,6 @@ namespace cartographer {
     namespace mapping {
 
         class TSDFBuilder {
-
-            std::shared_ptr<open3d::geometry::VoxelGrid> tsdfPointer;
-            int sliceIndex;
-            int sliceOrientation;
 
             cartographer::common::LuaParameterDictionary* luaParameterDictionary;
 
@@ -77,122 +73,6 @@ namespace cartographer {
                 // Construct a Point Cloud in the data format of Open3D and fill it with the known points.
                 open3d::geometry::PointCloud myPointCloud(listOfPoints);
                 return std::make_shared<open3d::geometry::PointCloud>(myPointCloud);
-            }
-
-            /**
-             * Show every voxel of a voxel grid with a z-index one higher than already seen.
-             *
-             * This method is a callback method for "drawTSDF".
-             *
-             * @param visualizer control class for the open3d window.
-             * @return true.
-             */
-            bool loopForwardThroughSlices(open3d::visualization::Visualizer *visualizer) {
-                return loopThroughSlices(visualizer, -1);
-            }
-
-            /**
-             * Show every voxel of a voxel grid with a z-index one lower than already seen.
-             *
-             * This method is a callback method for "drawTSDF".
-             *
-             * @param visualizer control class for the open3d window.
-             * @return true.
-             */
-            bool loopBackwardThroughSlices(open3d::visualization::Visualizer *visualizer) {
-                return loopThroughSlices(visualizer, 1);
-            }
-
-            /**
-             * Show every voxel of a voxel grid with a certain z-index. As a result, produce a "slice" of a grid.
-             *
-             * By copying the voxel size and origin point of the original voxel grid, the slice doesn't change position.
-             * Since every call of this method includes an iteration of all voxels, this method could take a lot of
-             * time when confronted with large areas or small voxels.
-             *
-             * @param visualizer control class for the open3d window.
-             * @param velocity controls how the position of the slice is changed. Useful numbers are "1" or "-1".
-             * @return true in any case.
-             */
-            bool loopThroughSlices(open3d::visualization::Visualizer *visualizer, int velocity) {
-                sliceIndex += velocity;
-//                std::cout << "Show slice " << sliceIndex << std::endl;
-
-                std::shared_ptr<open3d::geometry::VoxelGrid> slicedVoxelGridPointer =
-                        std::make_shared<open3d::geometry::VoxelGrid>(open3d::geometry::VoxelGrid());
-
-                slicedVoxelGridPointer->voxel_size_ = tsdfPointer->voxel_size_;
-                slicedVoxelGridPointer->origin_ = tsdfPointer->origin_;
-
-                for (open3d::geometry::Voxel nextVoxel : tsdfPointer->GetVoxels()) {
-                    if (nextVoxel.grid_index_(sliceOrientation) == sliceIndex) {
-                        slicedVoxelGridPointer->AddVoxel(nextVoxel);
-                    }
-                }
-                visualizer->ClearGeometries();
-                visualizer->AddGeometry(slicedVoxelGridPointer, false);
-                return true;
-            }
-
-            /**
-             * Change the dimension of the displayed slices of a VoxelGrid.
-             *
-             * This method is a callback method for "drawTSDF".
-             *
-             * @param visualizer control class for the open3d window.
-             * @return true in any case.
-             */
-            bool changeOrientation(open3d::visualization::Visualizer *visualizer) {
-                sliceOrientation = (sliceOrientation + 1) % 3;
-                sliceIndex = 1;
-                drawFullView(visualizer);
-                return true;
-            }
-
-            /**
-             * Show a whole voxel grid.
-             *
-             * This method is a callback method for "drawTSDF".
-             *
-             * @param visualizer control class for the open3d window.
-             * @return true in any case.
-             */
-            bool drawFullView(open3d::visualization::Visualizer *visualizer) {
-                visualizer->ClearGeometries();
-                visualizer->AddGeometry(tsdfPointer, false);
-                return true;
-            }
-
-            /**
-             * Draw a whole voxel grid in an open3d window and control the display of slices of the grid.
-             *
-             * The left and right arrow move the slice forward and backward.
-             * The down arrow resets the view to the whole grid.
-             *
-             * @param voxelGridPointer pointer to an open3d's representation of a voxel grid to be displayed.
-             */
-            void drawTSDF(const std::shared_ptr<open3d::geometry::VoxelGrid> &voxelGridPointer) {
-                tsdfPointer = voxelGridPointer;
-
-                std::map<int, std::function<bool(open3d::visualization::Visualizer *)>> myMap;
-
-                std::function<bool(open3d::visualization::Visualizer *)> forwardSlicing =
-                        std::bind(&TSDFBuilder::loopForwardThroughSlices, this, std::placeholders::_1);
-                myMap.insert(std::make_pair((int) GLFW_KEY_LEFT, forwardSlicing));
-
-                std::function<bool(open3d::visualization::Visualizer *)> backwardSlicing =
-                        std::bind(&TSDFBuilder::loopBackwardThroughSlices, this, std::placeholders::_1);
-                myMap.insert(std::make_pair((int) GLFW_KEY_RIGHT, backwardSlicing));
-
-                std::function<bool(open3d::visualization::Visualizer *)> orientationChanging =
-                        std::bind(&TSDFBuilder::changeOrientation, this, std::placeholders::_1);
-                myMap.insert(std::make_pair((int) GLFW_KEY_O, orientationChanging));
-
-                std::function<bool(open3d::visualization::Visualizer *)> fullView =
-                        std::bind(&TSDFBuilder::drawFullView, this, std::placeholders::_1);
-                myMap.insert(std::make_pair((int) GLFW_KEY_F, fullView));
-
-                open3d::visualization::DrawGeometriesWithKeyCallbacks({tsdfPointer}, myMap);
             }
 
 
@@ -279,64 +159,6 @@ namespace cartographer {
                 return voxelGrid;
             }
 
-            /**
-             * Save a slice of the already built tsdf as an image.
-             * A slice is an object of class VoxelGrid of Open3D, but only consists of voxels with a given z-value.
-             * Slices can be viewed as "layers" of the tsdf.
-             *
-             * The PNGs are built using cairo.
-             *
-             * The method first creates the slice by iterating through the tsdf.
-             * Then, it calculates the size of the slice and initializes the image with a white background.
-             * Last, all voxels are painted as 10x10 rectangles with their colors unchanged.
-             *
-             * @param imageSliceIndex index of the slice to be drawn
-             * @param filename where to save the PNG image
-             */
-            void saveSliceAsPNG(const int imageSliceIndex, const char* filename) {
-
-                // Build slice from full TSDF
-                std::shared_ptr<open3d::geometry::VoxelGrid> slicedVoxelGridPointer =
-                        std::make_shared<open3d::geometry::VoxelGrid>(open3d::geometry::VoxelGrid());
-
-                slicedVoxelGridPointer->voxel_size_ = tsdfPointer->voxel_size_;
-                slicedVoxelGridPointer->origin_ = tsdfPointer->origin_;
-
-                for (open3d::geometry::Voxel nextVoxel : tsdfPointer->GetVoxels()) {
-                    if (nextVoxel.grid_index_(2) == imageSliceIndex) {
-                        slicedVoxelGridPointer->AddVoxel(nextVoxel);
-                    }
-                }
-
-                // Initialize image as cairo surface. It has to be big enough for all voxels in the slice.
-                Eigen::Vector3i maxIndices = slicedVoxelGridPointer->GetVoxel(slicedVoxelGridPointer->GetMaxBound());
-                Eigen::Vector3i minIndices = slicedVoxelGridPointer->GetVoxel(slicedVoxelGridPointer->GetMinBound());
-                int imageWidth = (maxIndices - minIndices).x();
-                int imageHeight = (maxIndices - minIndices).y();
-
-                cairo_surface_t *surface;
-                surface = cairo_image_surface_create(CAIRO_FORMAT_RGB24, 10*imageWidth, 10*imageHeight);
-                cairo_t *cr;
-                cr = cairo_create(surface);
-
-                // Draw background white
-                cairo_rectangle(cr, 0.0, 0.0, 10.0*imageWidth, 10.0*imageHeight);
-                cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
-                cairo_fill(cr);
-
-                // Draw all voxels as rectangles
-                for (open3d::geometry::Voxel nextVoxel : slicedVoxelGridPointer->GetVoxels()) {
-                    double xVoxel = (nextVoxel.grid_index_ - minIndices).x();
-                    double yVoxel = (nextVoxel.grid_index_ - minIndices).y();
-
-                    cairo_rectangle(cr, 10*xVoxel, 10*yVoxel, 10.0, 10.0);
-                    cairo_set_source_rgb(cr, nextVoxel.color_.x(), nextVoxel.color_.y(), nextVoxel.color_.z());
-                    cairo_fill(cr);
-                }
-
-                cairo_surface_write_to_png(surface, filename);
-            }
-
 
         public:
             TSDFBuilder(const std::string &config_directory, const std::string &config_filename) {
@@ -345,13 +167,12 @@ namespace cartographer {
                                 std::vector<std::string>{config_directory});
                 const std::string code = file_resolver->GetFileContentOrDie(config_filename);
                 luaParameterDictionary = new cartographer::common::LuaParameterDictionary(code, std::move(file_resolver));
-
-                sliceIndex = 1;
-                sliceOrientation = 2;       // The z-dimension is the default slice direction
             }
 
 
             void run() {
+
+                cartographer::mapping::TSDFDrawer myTSDFDrawer;
 
                 std::shared_ptr<open3d::geometry::PointCloud> myPointCloudPointer =
                         std::make_shared<open3d::geometry::PointCloud>();
@@ -379,11 +200,11 @@ namespace cartographer {
                 }
 
                 if(luaParameterDictionary->GetBool("voxelDownSample")) {
-                        double voxelSize = luaParameterDictionary->GetDouble("voxelSizeVoxelDownSample");
-                        myPointCloudPointer = myPointCloudPointer->VoxelDownSample(voxelSize);
-                        std::cout << "Voxel downsampling to " << myPointCloudPointer->points_.size() << " points."
-                                  << std::endl;
-                    }
+                    double voxelSize = luaParameterDictionary->GetDouble("voxelSizeVoxelDownSample");
+                    myPointCloudPointer = myPointCloudPointer->VoxelDownSample(voxelSize);
+                    std::cout << "Voxel downsampling to " << myPointCloudPointer->points_.size() << " points."
+                              << std::endl;
+                }
 
                 if(luaParameterDictionary->GetBool("removeRadiusOutliers")) {
                     myPointCloudPointer = std::get<0>(myPointCloudPointer->RemoveRadiusOutliers(
@@ -438,7 +259,7 @@ namespace cartographer {
                 std::shared_ptr<open3d::geometry::VoxelGrid> pclVoxelGridPointer =
                         open3d::geometry::VoxelGrid::CreateFromPointCloud(*myPointCloudPointer, gridVoxelSideLength);
 
-                drawTSDF(pclVoxelGridPointer);
+                myTSDFDrawer.drawTSDF(pclVoxelGridPointer);
 
 
 
@@ -454,14 +275,6 @@ namespace cartographer {
                 cartographer::mapping::ValueConversionTables myValueConversionTable;
                 cartographer::mapping::HybridGridTSDF myHybridGridTSDF(
                         gridVoxelSideLength, relativeTruncationDistance, maxWeight, &myValueConversionTable);
-
-//                for(int i=0; i<myHybridGrid.grid_size(); i++) {
-//                    for(int j=0; j<myHybridGrid.grid_size(); j++) {
-//                        for(int k=0; k<myHybridGrid.grid_size(); k++) {
-//                            myHybridGrid.SetCell({i,j,k}, 3.0, 0.0);
-//                        }
-//                    }
-//                }
 
 
                 // Build the TSDF by raytracing every point/normal pair from the point cloud
@@ -480,27 +293,27 @@ namespace cartographer {
                 // Show the VoxelGrid of the TSDF
                 std::shared_ptr<open3d::geometry::VoxelGrid> tsdfVoxelGridPointer = convertHybridGridToVoxelGrid(
                         &myHybridGridTSDF, gridVoxelSideLength, absoluteTruncationDistance);
-                drawTSDF(tsdfVoxelGridPointer);
+                myTSDFDrawer.drawTSDF(tsdfVoxelGridPointer);
 
 
 // #################################################################################################################
                 // Save some slices as png
 
-                saveSliceAsPNG(0.0, "../cartographer/io/pointcloud_conversion/images/testimage.png");
+                myTSDFDrawer.saveSliceAsPNG(0.0, "../cartographer/io/pointcloud_conversion/images/testimage.png");
 
 
 // #################################################################################################################
                 // Build a ProtoBuffer
-                cartographer::io::ProtoStreamWriter writer(
-                        "../cartographer/io/pointcloud_conversion/ProtoBuffers/TSDFProtoBufferTest.proto");
-
-                mapping::proto::SerializationHeader myHeader = cartographer::io::CreateHeader();
-                writer.WriteProto(myHeader);
-
-                proto::HybridGridTSDF myProtoTSDF = myHybridGridTSDF.ToProto();
-                writer.WriteProto(myProtoTSDF);
-
-                writer.Close();
+//                cartographer::io::ProtoStreamWriter writer(
+//                        "../cartographer/io/pointcloud_conversion/ProtoBuffers/LeosTSDFProtoBufferTest.proto");
+//
+//                mapping::proto::SerializationHeader myHeader = cartographer::io::CreateHeader();
+//                writer.WriteProto(myHeader);
+//
+//                proto::HybridGridTSDF myProtoTSDF = myHybridGridTSDF.ToProto();
+//                writer.WriteProto(myProtoTSDF);
+//
+//                writer.Close();
             }
 
         };
