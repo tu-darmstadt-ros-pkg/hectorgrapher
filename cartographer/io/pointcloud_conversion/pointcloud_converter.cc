@@ -282,7 +282,6 @@ namespace cartographer {
                                 std::vector<std::string>{config_directory});
                 const std::string code = file_resolver->GetFileContentOrDie(config_filename);
                 luaParameterDictionary = new cartographer::common::LuaParameterDictionary(code, std::move(file_resolver));
-//                std::cout << luaParameterDictionary->GetInt("testvalue") << std::endl;
 
                 sliceIndex = 1;
                 sliceOrientation = 2;       // The z-dimension is the default slice direction
@@ -297,9 +296,9 @@ namespace cartographer {
                 // Generate a cloud in shape of a cube. Don't show the input from the .ply-file.
                 if(luaParameterDictionary->GetBool("generateCubicPointcloud")) {
                     myPointCloudPointer = generateCubicPointCloud(
-                            luaParameterDictionary->GetDouble("sidelengthCubicPointcloud"),
-                            luaParameterDictionary->GetDouble("distancePointsCubicPointcloud"),
-                            luaParameterDictionary->GetDouble("noiseCubicPointcloud")   );
+                            (float) luaParameterDictionary->GetDouble("sidelengthCubicPointcloud"),
+                            (float) luaParameterDictionary->GetDouble("distancePointsCubicPointcloud"),
+                            (float) luaParameterDictionary->GetDouble("noiseCubicPointcloud")   );
                 }
                 else {
                     // Read and show the input from the .ply-file.
@@ -312,9 +311,16 @@ namespace cartographer {
                 if(luaParameterDictionary->GetBool("uniformDownSample")) {
                     int sampleRate = luaParameterDictionary->GetInt("sampleRateUniformDownSample");
                     myPointCloudPointer = myPointCloudPointer->UniformDownSample(sampleRate);
-                    std::cout << "Downsampled to " << myPointCloudPointer->points_.size() << " points."
+                    std::cout << "Uniform downsampling to " << myPointCloudPointer->points_.size() << " points."
                               << std::endl;
                 }
+
+                if(luaParameterDictionary->GetBool("voxelDownSample")) {
+                        double voxelSize = luaParameterDictionary->GetDouble("voxelSizeVoxelDownSample");
+                        myPointCloudPointer = myPointCloudPointer->VoxelDownSample(voxelSize);
+                        std::cout << "Voxel downsampling to " << myPointCloudPointer->points_.size() << " points."
+                                  << std::endl;
+                    }
 
                 if(luaParameterDictionary->GetBool("removeRadiusOutliers")) {
                     myPointCloudPointer = std::get<0>(myPointCloudPointer->RemoveRadiusOutliers(
@@ -362,9 +368,7 @@ namespace cartographer {
                     }
                 }
 
-//                float gridVoxelSideLength = 0.002;
-//                float gridVoxelSideLength = 0.2;
-                float gridVoxelSideLength = luaParameterDictionary->GetDouble("absoluteVoxelSize");
+                float gridVoxelSideLength = (float) luaParameterDictionary->GetDouble("absoluteVoxelSize");
                 int numberOfVoxels = (int) (ranges.x() * ranges.y() * ranges.z() / pow(gridVoxelSideLength, 3));
                 std::cout << "Created VoxelGrid with " << numberOfVoxels << " possible voxels." << std::endl;
 
@@ -379,10 +383,9 @@ namespace cartographer {
                 // Build a HybridGridTSDF = cartographer's representation of a TSDF
 
 
-//                float absoluteTruncationDistance = 0.025;
-//                float absoluteTruncationDistance = 4.0;
-                float absoluteTruncationDistance = luaParameterDictionary->GetDouble("absoluteTruncationDistance");
-                float maxWeight = luaParameterDictionary->GetDouble("maxTSDFWeight");  // Todo: Was sollte das maximale Gewicht sein?
+                float absoluteTruncationDistance =
+                        (float) luaParameterDictionary->GetDouble("absoluteTruncationDistance");
+                float maxWeight = (float) luaParameterDictionary->GetDouble("maxTSDFWeight");  // Todo: Was sollte das maximale Gewicht sein?
                 float relativeTruncationDistance = absoluteTruncationDistance / gridVoxelSideLength;
 
                 cartographer::mapping::ValueConversionTables myValueConversionTable;
@@ -441,8 +444,3 @@ int main(int argc, char **argv) {
     myTSDFBuilder.run();
 #endif
 }
-
-
-
-// Possible Program Arguments
-// -pointcloud_file "/home/leo/Downloads/Halle-DRZ-Modell-innen-Flug1-2020-12-09.ply"

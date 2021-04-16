@@ -11,6 +11,9 @@ options = {
     uniformDownSample = false,
     sampleRateUniformDownSample = 100,
 
+    voxelDownSample = false,
+    voxelSizeVoxelDownSample = 0.1,
+
     removeRadiusOutliers = false,
     sphereSizeRadiusOutliers = 1.0,
     neighborsInSphereRadiusOutlier = 3,
