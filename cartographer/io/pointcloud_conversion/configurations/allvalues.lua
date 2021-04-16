@@ -6,7 +6,7 @@ options = {
     distancePointsCubicPointcloud = 0.004,
     noiseCubicPointcloud = 0.0,
 
-    pointcloudPath = "/home/leo/Downloads/Halle-DRZ-Modell-innen-Flug1-2020-12-09.ply",
+    pointcloudPath = "../../../../Downloads/Halle-DRZ-Modell-innen-Flug1-2020-12-09.ply",
 
     uniformDownSample = false,
     sampleRateUniformDownSample = 100,

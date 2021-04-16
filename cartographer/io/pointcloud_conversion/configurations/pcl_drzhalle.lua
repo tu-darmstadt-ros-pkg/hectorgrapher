@@ -3,7 +3,7 @@
 options = {
     generateCubicPointcloud = false,
 
-    pointcloudPath = "/home/leo/Downloads/Halle-DRZ-Modell-innen-Flug1-2020-12-09.ply",
+    pointcloudPath = "../../../../Downloads/Halle-DRZ-Modell-innen-Flug1-2020-12-09.ply",
 
     uniformDownSample = true,
     sampleRateUniformDownSample = 100,
@@ -13,11 +13,11 @@ options = {
     neighborsInSphereRadiusOutlier = 3,
 
     cutRoofZAxis = true,
-    cutoffSize = 5.0,
+    cutoffSize = 3.0,
 
     normalOrientationNearestNeighbours = 40,
 
-    absoluteVoxelSize = 1.0,
+    absoluteVoxelSize = 0.5,
     absoluteTruncationDistance = 1.0,
     maxTSDFWeight = 10.0,
 

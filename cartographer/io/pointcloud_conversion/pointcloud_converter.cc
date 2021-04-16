@@ -436,7 +436,7 @@ int main(int argc, char **argv) {
     }
 #ifdef WITH_OPEN3D
     cartographer::mapping::TSDFBuilder myTSDFBuilder(
-            "/home/leo/hector/src/cartographer/cartographer/io/pointcloud_conversion/configurations",
+            "../cartographer/io/pointcloud_conversion/configurations",
             FLAGS_config_file);
     myTSDFBuilder.run();
 #endif

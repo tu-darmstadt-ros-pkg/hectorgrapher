@@ -3,7 +3,7 @@
 options = {
     generateCubicPointcloud = false,
 
-    pointcloudPath = "/home/leo/Downloads/bunny/reconstruction/bun_zipper_res2.ply",
+    pointcloudPath = "../../../../Downloads/bunny/reconstruction/bun_zipper_res2.ply",
 
     uniformDownSample = false,
 
