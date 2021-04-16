@@ -2,7 +2,6 @@
 #include <fstream>
 #include <string>
 
-//#include "cartographer/transform/transform.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
 
@@ -13,12 +12,17 @@
 // Classes to generate a TSDF
 #include "cartographer/mapping/3d/hybrid_grid_tsdf.h"
 #include "cartographer/mapping/value_conversion_tables.h"
-//#include "cartographer/mapping/3d/range_data_inserter_3d.h"
-//#include "cartographer/mapping/3d/tsdf_range_data_inserter_3d.h"
 
-//#include "cartographer/common/lua_parameter_dictionary.h"
-//#include "cartographer/common/lua_parameter_dictionary_test_helpers.h"
 #include "cartographer/common/configuration_file_resolver.h"
+
+#include "cartographer/io/internal/mapping_state_serialization.cc"  //Todo: Das lässt uns CreateHeader() benutzen. Muss irgendwann weg!
+
+#include "cartographer/io/proto_stream.h"
+#include "cartographer/io/internal/mapping_state_serialization.h"
+//#include "cartographer/io/proto_stream_deserializer.h"
+//#include "cartographer/io/serialization_format_migration.h"
+
+#include "cairo/cairo.h"
 
 
 #ifdef WITH_OPEN3D
@@ -275,6 +279,65 @@ namespace cartographer {
                 return voxelGrid;
             }
 
+            /**
+             * Save a slice of the already built tsdf as an image.
+             * A slice is an object of class VoxelGrid of Open3D, but only consists of voxels with a given z-value.
+             * Slices can be viewed as "layers" of the tsdf.
+             *
+             * The PNGs are built using cairo.
+             *
+             * The method first creates the slice by iterating through the tsdf.
+             * Then, it calculates the size of the slice and initializes the image with a white background.
+             * Last, all voxels are painted as 10x10 rectangles with their colors unchanged.
+             *
+             * @param imageSliceIndex index of the slice to be drawn
+             * @param filename where to save the PNG image
+             */
+            void saveSliceAsPNG(const int imageSliceIndex, const char* filename) {
+
+                // Build slice from full TSDF
+                std::shared_ptr<open3d::geometry::VoxelGrid> slicedVoxelGridPointer =
+                        std::make_shared<open3d::geometry::VoxelGrid>(open3d::geometry::VoxelGrid());
+
+                slicedVoxelGridPointer->voxel_size_ = tsdfPointer->voxel_size_;
+                slicedVoxelGridPointer->origin_ = tsdfPointer->origin_;
+
+                for (open3d::geometry::Voxel nextVoxel : tsdfPointer->GetVoxels()) {
+                    if (nextVoxel.grid_index_(2) == imageSliceIndex) {
+                        slicedVoxelGridPointer->AddVoxel(nextVoxel);
+                    }
+                }
+
+                // Initialize image as cairo surface. It has to be big enough for all voxels in the slice.
+                Eigen::Vector3i maxIndices = slicedVoxelGridPointer->GetVoxel(slicedVoxelGridPointer->GetMaxBound());
+                Eigen::Vector3i minIndices = slicedVoxelGridPointer->GetVoxel(slicedVoxelGridPointer->GetMinBound());
+                int imageWidth = (maxIndices - minIndices).x();
+                int imageHeight = (maxIndices - minIndices).y();
+
+                cairo_surface_t *surface;
+                surface = cairo_image_surface_create(CAIRO_FORMAT_RGB24, 10*imageWidth, 10*imageHeight);
+                cairo_t *cr;
+                cr = cairo_create(surface);
+
+                // Draw background white
+                cairo_rectangle(cr, 0.0, 0.0, 10.0*imageWidth, 10.0*imageHeight);
+                cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+                cairo_fill(cr);
+
+                // Draw all voxels as rectangles
+                for (open3d::geometry::Voxel nextVoxel : slicedVoxelGridPointer->GetVoxels()) {
+                    double xVoxel = (nextVoxel.grid_index_ - minIndices).x();
+                    double yVoxel = (nextVoxel.grid_index_ - minIndices).y();
+
+                    cairo_rectangle(cr, 10*xVoxel, 10*yVoxel, 10.0, 10.0);
+                    cairo_set_source_rgb(cr, nextVoxel.color_.x(), nextVoxel.color_.y(), nextVoxel.color_.z());
+                    cairo_fill(cr);
+                }
+
+                cairo_surface_write_to_png(surface, filename);
+            }
+
+
         public:
             TSDFBuilder(const std::string &config_directory, const std::string &config_filename) {
                 auto file_resolver =
@@ -419,8 +482,25 @@ namespace cartographer {
                         &myHybridGridTSDF, gridVoxelSideLength, absoluteTruncationDistance);
                 drawTSDF(tsdfVoxelGridPointer);
 
-//                myHybridGridTSDF.ToProto();
 
+// #################################################################################################################
+                // Save some slices as png
+
+                saveSliceAsPNG(0.0, "../cartographer/io/pointcloud_conversion/images/testimage.png");
+
+
+// #################################################################################################################
+                // Build a ProtoBuffer
+                cartographer::io::ProtoStreamWriter writer(
+                        "../cartographer/io/pointcloud_conversion/ProtoBuffers/TSDFProtoBufferTest.proto");
+
+                mapping::proto::SerializationHeader myHeader = cartographer::io::CreateHeader();
+                writer.WriteProto(myHeader);
+
+                proto::HybridGridTSDF myProtoTSDF = myHybridGridTSDF.ToProto();
+                writer.WriteProto(myProtoTSDF);
+
+                writer.Close();
             }
 
         };

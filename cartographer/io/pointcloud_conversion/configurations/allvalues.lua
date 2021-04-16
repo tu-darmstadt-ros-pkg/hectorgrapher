@@ -27,6 +27,9 @@ options = {
     absoluteTruncationDistance = 1.0,
     maxTSDFWeight = 10.0,
 
+    saveSlicesAsPNG = false,
+
+
 
 
 
