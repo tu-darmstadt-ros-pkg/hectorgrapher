@@ -44,10 +44,6 @@ message OptimizingLocalTrajectoryBuilderOptions {
   bool sync_control_points_with_range_data = 16;
   double initialization_duration = 17;
   bool use_adaptive_odometry_weights = 18;
-  double max_odometry_translation_weight = 19;
-  double max_odometry_rotation_weight = 20;
-  double weight_odometry_translation_limit = 21;
-  double weight_odometry_rotation_limit = 22;
   bool use_per_point_unwarping = 23;
   bool use_multi_resolution_matching = 24;
   int32 num_points_per_subdivision = 25;
