@@ -351,7 +351,11 @@ void OptimizationProblem3D::Solve(
                            &problem, options_.huber_scale());
   // Add constraints based on IMU observations of angular velocities and
   // linear acceleration.
-  if (!options_.fix_z_in_3d()) {
+  bool use_imu =
+      options_.rotation_weight() > 0.0 || options_.acceleration_weight() > 0.0;
+  LOG_FIRST_N(INFO, 1) << "IMU residuals for pose graph optimization are "
+                       << (use_imu ? "enabled" : "disabled");
+  if (!options_.fix_z_in_3d() && use_imu) {
     for (auto node_it = node_data_.begin(); node_it != node_data_.end();) {
       const int trajectory_id = node_it->id.trajectory_id;
       const auto trajectory_end = node_data_.EndOfTrajectory(trajectory_id);
