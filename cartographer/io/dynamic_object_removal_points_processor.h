@@ -20,6 +20,12 @@ class DynamicObjectsRemovalPointsProcessor : public PointsProcessor {
  public:
   constexpr static const char* kConfigurationFileActionName =
       "dynamic_objects_removal_filter";
+  enum class RunState {
+    kInitialRun,
+    kSecondRun,
+  };
+  static RunState run_state_;
+
   DynamicObjectsRemovalPointsProcessor(std::unique_ptr<FileWriter> file_writer,
       int r_segments, int theta_segments, int phi_segments, float sensor_range_limit,
       int end_of_file, PointsProcessor* next);
