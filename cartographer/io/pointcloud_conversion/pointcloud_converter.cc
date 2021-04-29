@@ -20,6 +20,10 @@
 #include "cartographer/io/internal/mapping_state_serialization.cc"  //Todo: Das lässt uns CreateHeader() benutzen. Muss irgendwann weg!
 #include "cartographer/io/proto_stream.h"
 #include "cartographer/io/internal/mapping_state_serialization.h"
+#include "cartographer/mapping/internal/3d/pose_graph_3d.h"
+#include "cartographer/mapping/proto/map_builder_options.pb.h"
+#include "cartographer/mapping/map_builder.h"
+#include "cartographer/mapping/internal/testing/test_helpers.h"
 
 // Header file
 #include "cartographer/io/pointcloud_conversion/tsdf_drawer.h"
@@ -39,7 +43,7 @@ namespace cartographer {
 
         class TSDFBuilder {
 
-            cartographer::common::LuaParameterDictionary* luaParameterDictionary;
+            cartographer::common::LuaParameterDictionary *luaParameterDictionary;
 
             /**
              * Generate a point cloud in shape of a cube and convert it into a shared pointer of an open3d point cloud.
@@ -166,7 +170,8 @@ namespace cartographer {
                         absl::make_unique<cartographer::common::ConfigurationFileResolver>(
                                 std::vector<std::string>{config_directory});
                 const std::string code = file_resolver->GetFileContentOrDie(config_filename);
-                luaParameterDictionary = new cartographer::common::LuaParameterDictionary(code, std::move(file_resolver));
+                luaParameterDictionary = new cartographer::common::LuaParameterDictionary(code,
+                                                                                          std::move(file_resolver));
             }
 
 
@@ -178,13 +183,12 @@ namespace cartographer {
                         std::make_shared<open3d::geometry::PointCloud>();
 
                 // Generate a cloud in shape of a cube. Don't show the input from the .ply-file.
-                if(luaParameterDictionary->GetBool("generateCubicPointcloud")) {
+                if (luaParameterDictionary->GetBool("generateCubicPointcloud")) {
                     myPointCloudPointer = generateCubicPointCloud(
                             (float) luaParameterDictionary->GetDouble("sidelengthCubicPointcloud"),
                             (float) luaParameterDictionary->GetDouble("distancePointsCubicPointcloud"),
-                            (float) luaParameterDictionary->GetDouble("noiseCubicPointcloud")   );
-                }
-                else {
+                            (float) luaParameterDictionary->GetDouble("noiseCubicPointcloud"));
+                } else {
                     // Read and show the input from the .ply-file.
                     std::string point_cloud_filename = luaParameterDictionary->GetString("pointcloudPath");
                     open3d::io::ReadPointCloud(point_cloud_filename, *myPointCloudPointer, {"auto", true, true, true});
@@ -192,29 +196,29 @@ namespace cartographer {
                               << std::endl;
                 }
 
-                if(luaParameterDictionary->GetBool("uniformDownSample")) {
+                if (luaParameterDictionary->GetBool("uniformDownSample")) {
                     int sampleRate = luaParameterDictionary->GetInt("sampleRateUniformDownSample");
                     myPointCloudPointer = myPointCloudPointer->UniformDownSample(sampleRate);
                     std::cout << "Uniform downsampling to " << myPointCloudPointer->points_.size() << " points."
                               << std::endl;
                 }
 
-                if(luaParameterDictionary->GetBool("voxelDownSample")) {
+                if (luaParameterDictionary->GetBool("voxelDownSample")) {
                     double voxelSize = luaParameterDictionary->GetDouble("voxelSizeVoxelDownSample");
                     myPointCloudPointer = myPointCloudPointer->VoxelDownSample(voxelSize);
                     std::cout << "Voxel downsampling to " << myPointCloudPointer->points_.size() << " points."
                               << std::endl;
                 }
 
-                if(luaParameterDictionary->GetBool("removeRadiusOutliers")) {
+                if (luaParameterDictionary->GetBool("removeRadiusOutliers")) {
                     myPointCloudPointer = std::get<0>(myPointCloudPointer->RemoveRadiusOutliers(
                             luaParameterDictionary->GetInt("neighborsInSphereRadiusOutlier"),
-                            luaParameterDictionary->GetDouble("neighborsInSphereRadiusOutlier") ));
+                            luaParameterDictionary->GetDouble("neighborsInSphereRadiusOutlier")));
                     std::cout << "Removed outliers to " << myPointCloudPointer->points_.size() << " points."
                               << std::endl;
                 }
 
-                if(luaParameterDictionary->GetBool("cutRoofZAxis")) {
+                if (luaParameterDictionary->GetBool("cutRoofZAxis")) {
                     double cutoff = luaParameterDictionary->GetDouble("cutoffSize");
                     open3d::geometry::AxisAlignedBoundingBox myBoundingBox(myPointCloudPointer->GetMinBound(),
                                                                            myPointCloudPointer->GetMaxBound() -
@@ -229,7 +233,7 @@ namespace cartographer {
                 std::cout << "Estimated all normals for the point cloud." << std::endl;
 
                 myPointCloudPointer->OrientNormalsConsistentTangentPlane(
-                        luaParameterDictionary->GetInt("normalOrientationNearestNeighbours")    );
+                        luaParameterDictionary->GetInt("normalOrientationNearestNeighbours"));
                 std::cout << "Oriented all normals by using the tangent plane." << std::endl;
 
 
@@ -269,7 +273,8 @@ namespace cartographer {
 
                 float absoluteTruncationDistance =
                         (float) luaParameterDictionary->GetDouble("absoluteTruncationDistance");
-                float maxWeight = (float) luaParameterDictionary->GetDouble("maxTSDFWeight");  // Todo: Was sollte das maximale Gewicht sein?
+                float maxWeight = (float) luaParameterDictionary->GetDouble(
+                        "maxTSDFWeight");  // Todo: Was sollte das maximale Gewicht sein?
                 float relativeTruncationDistance = absoluteTruncationDistance / gridVoxelSideLength;
 
                 cartographer::mapping::ValueConversionTables myValueConversionTable;
@@ -304,16 +309,60 @@ namespace cartographer {
 
 // #################################################################################################################
                 // Build a ProtoBuffer
-//                cartographer::io::ProtoStreamWriter writer(
-//                        "../cartographer/io/pointcloud_conversion/ProtoBuffers/LeosTSDFProtoBufferTest.proto");
-//
+                cartographer::io::ProtoStreamWriter writer(
+                        "../cartographer/io/pointcloud_conversion/ProtoBuffers/TSDFProtoBufferTest.pbstream");
+
+                // Das kann bald weg hoffentlich v
 //                mapping::proto::SerializationHeader myHeader = cartographer::io::CreateHeader();
 //                writer.WriteProto(myHeader);
-//
-//                proto::HybridGridTSDF myProtoTSDF = myHybridGridTSDF.ToProto();
-//                writer.WriteProto(myProtoTSDF);
-//
-//                writer.Close();
+                // Das hier ^
+
+                const std::string kMapBuilderLua = R"text(
+                    include "map_builder.lua"
+                    MAP_BUILDER.use_trajectory_builder_2d = true
+                    MAP_BUILDER.pose_graph.optimize_every_n_nodes = 0
+                    MAP_BUILDER.pose_graph.global_sampling_ratio = 0.05
+                    MAP_BUILDER.pose_graph.global_constraint_search_after_n_seconds = 0
+                    return MAP_BUILDER)text";
+
+                auto file_resolver =
+                        absl::make_unique<cartographer::common::ConfigurationFileResolver>(
+                                std::vector<std::string>{"/home/leo/hector/src/cartographer/configuration_files"});
+                cartographer::common::LuaParameterDictionary poseGraphDict(kMapBuilderLua, std::move(file_resolver));
+
+                cartographer::mapping::proto::MapBuilderOptions options;
+                options = cartographer::mapping::CreateMapBuilderOptions(&poseGraphDict);
+
+                cartographer::common::ThreadPool thread_pool(options.num_background_threads());
+
+                std::unique_ptr<cartographer::mapping::PoseGraph> posegraph =
+                        absl::make_unique<cartographer::mapping::PoseGraph3D>(
+                                options.pose_graph_options(),
+                                absl::make_unique<cartographer::mapping::optimization::OptimizationProblem3D>(
+                                        options.pose_graph_options().optimization_problem_options()),
+                                &thread_pool);
+
+//                writer.WriteProto(cartographer::io::SerializePoseGraph(*posegraph, false));
+
+
+
+                std::vector<proto::TrajectoryBuilderOptionsWithSensorIds> all_trajectory_builder_options;
+
+                // This has to hold (will be tested in deserialzation!)
+//                CHECK_EQ(
+//                        cartographer::io::SerializePoseGraph(*posegraph, false).pose_graph().trajectory_size(),
+//                        cartographer::io::SerializeTrajectoryBuilderOptions(
+//                                all_trajectory_builder_options,
+//                                cartographer::io::GetValidTrajectoryIds(posegraph->GetTrajectoryStates())
+//                        ).all_trajectory_builder_options().options_with_sensor_ids_size());
+
+
+                cartographer::io::WritePbStream(*posegraph, all_trajectory_builder_options, &writer, false);
+
+                proto::HybridGridTSDF myProtoTSDF = myHybridGridTSDF.ToProto();
+                writer.WriteProto(myProtoTSDF);
+
+                writer.Close();
             }
 
         };
