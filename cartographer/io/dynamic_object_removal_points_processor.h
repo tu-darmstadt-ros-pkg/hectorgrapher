@@ -54,6 +54,7 @@ class DynamicObjectsRemovalPointsProcessor : public PointsProcessor {
   std::vector<PointsBatch> list_of_batches_;
   PointsProcessor* const next_;
   std::unique_ptr<FileWriter> file_;
+  transform::Rigid3<float> sensor_height_adjustment_;
 
   static uint16_t cantor_pairing(uint16_t a, uint16_t b);
 
