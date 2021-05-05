@@ -55,7 +55,7 @@ void ScanCloudGenerator::generateCuboid(cartographer::sensor::PointCloud& cloud,
   std::uniform_real_distribution<double> error_translation_direction(-M_PI,
                                                                      M_PI);
   double e_orientation;
-//  double e_scale = noise_std_dev == 0.0 ? 0.0 : noise_std_dev;
+  //  double e_scale = noise_std_dev == 0.0 ? 0.0 : noise_std_dev;
   double e_x;
   double e_y;
 

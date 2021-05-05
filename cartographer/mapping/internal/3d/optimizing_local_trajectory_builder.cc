@@ -484,9 +484,9 @@ void OptimizingLocalTrajectoryBuilder::AddPerPointMatchingResiduals(
                     .num_points_per_subdivision() -
                 1,
             point_cloud_set.high_resolution_filtered_points.size() - 1);
-//        const sensor::TimedRangefinderPoint& point =
-//            point_cloud_set
-//                .high_resolution_filtered_points[subdivision_start_idx];
+        //        const sensor::TimedRangefinderPoint& point =
+        //            point_cloud_set
+        //                .high_resolution_filtered_points[subdivision_start_idx];
 
         double center_timestamp =
             0.5 * (point_cloud_set
