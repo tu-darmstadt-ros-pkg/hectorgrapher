@@ -126,8 +126,8 @@ void TSDFRangeDataInserter3D::RasterTriangle(
           .relative_truncation_distance() *
       tsdf->resolution();
 
-  Eigen::Vector3f v01 = v1 - v0;
-  Eigen::Vector3f v02 = v2 - v0;
+//  Eigen::Vector3f v01 = v1 - v0;
+//  Eigen::Vector3f v02 = v2 - v0;
 //  CHECK_LE(v01.cwiseAbs().maxCoeff(), v02.cwiseAbs().maxCoeff());
 
   const Eigen::Array3i i_0 = tsdf->GetCellIndex(v0);
@@ -204,9 +204,9 @@ void TSDFRangeDataInserter3D::InsertHitWithNormal(const Eigen::Vector3f& hit,
           .relative_truncation_distance() *
       tsdf->resolution();
   if (range < truncation_distance) return;
-  bool update_free_space =
-      options_.tsdf_range_data_inserter_options_3d().num_free_space_voxels() >
-      0;  // todo(kdaun) use num free space
+//  bool update_free_space =
+//      options_.tsdf_range_data_inserter_options_3d().num_free_space_voxels() >
+//      0;  // todo(kdaun) use num free space
   // cells value instead of bool
   float normal_direction = 1.f;
   if (normal.dot(ray) > 0.f) normal_direction = -1.f;
@@ -252,7 +252,7 @@ void TSDFRangeDataInserter3D::InsertHitWithNormal(const Eigen::Vector3f& hit,
     int step_y = update_cell[1] <= end_cell[1] ? 1 : -1;
     int step_z = update_cell[2] <= end_cell[2] ? 1 : -1;
 
-    const Eigen::Vector3f step_direction({step_x, step_y, step_z});
+    const Eigen::Vector3f step_direction({float(step_x), float(step_y), float(step_z)});
     Eigen::Vector3f t_max = begin_cell_center - ray_begin +
                             0.5f * float(tsdf->resolution()) *
                                 step_direction.cwiseQuotient(ray_begin_to_end);
@@ -357,7 +357,7 @@ void TSDFRangeDataInserter3D::InsertHit(const Eigen::Vector3f& hit,
     int step_y = update_cell[1] <= end_cell[1] ? 1 : -1;
     int step_z = update_cell[2] <= end_cell[2] ? 1 : -1;
 
-    const Eigen::Vector3f step_direction({step_x, step_y, step_z});
+    const Eigen::Vector3f step_direction({float(step_x), float(step_y), float(step_z)});
     Eigen::Vector3f t_max = begin_cell_center - ray_begin +
                             0.5f * float(tsdf->resolution()) *
                                 step_direction.cwiseQuotient(ray_begin_to_end);
@@ -509,19 +509,19 @@ void TSDFRangeDataInserter3D::Insert(const sensor::RangeData& range_data,
       break;
     }
     case proto::TSDFRangeDataInserterOptions3D::CLOUD_STRUCTURE: {
-      int NUM_POINTS_PER_LINE = 16;
-      for (int relative_point_idx = 0;
+      size_t NUM_POINTS_PER_LINE = 16;
+      for (size_t relative_point_idx = 0;
            relative_point_idx < range_data.returns.size();
            ++relative_point_idx) {
-        int point_idx = relative_point_idx;
+        size_t point_idx = relative_point_idx;
         if (range_data.returns[point_idx].position.hasNaN()) continue;
-        int i0 = point_idx;
-        int horizontal_stride = 1;
-        int vertical_stride = 5 * NUM_POINTS_PER_LINE;
-        int i1 = relative_point_idx + horizontal_stride >= NUM_POINTS_PER_LINE
+        size_t i0 = point_idx;
+        size_t horizontal_stride = 1;
+        size_t vertical_stride = 5 * NUM_POINTS_PER_LINE;
+        size_t i1 = relative_point_idx + horizontal_stride >= NUM_POINTS_PER_LINE
                      ? point_idx - horizontal_stride
                      : point_idx + horizontal_stride;
-        int i2 =
+        size_t i2 =
             relative_point_idx + vertical_stride >= range_data.returns.size()
                 ? point_idx - vertical_stride
                 : point_idx + vertical_stride;
@@ -549,20 +549,20 @@ void TSDFRangeDataInserter3D::Insert(const sensor::RangeData& range_data,
     }
     case proto::TSDFRangeDataInserterOptions3D::TRIANGLE_FILL_IN: {
       if (range_data.returns.size() % 28800 == 0) {
-        const int num_pointclouds = range_data.returns.size() /28800;
-        const int NUM_ROWS = 16;
-        const int NUM_POINTS_PER_LINE = 1800;
-        const int NUM_POINTS_PER_CLOUD = NUM_POINTS_PER_LINE * NUM_ROWS;
-        for(int pointcloud_idx = 0; pointcloud_idx < num_pointclouds; ++pointcloud_idx) {
-          int pointcloud_offset = pointcloud_idx * NUM_POINTS_PER_CLOUD;
-          for (int point_idx = pointcloud_offset; point_idx < NUM_POINTS_PER_CLOUD + pointcloud_offset; ++point_idx) {
+        const size_t num_pointclouds = range_data.returns.size() /28800;
+        const size_t NUM_ROWS = 16;
+        const size_t NUM_POINTS_PER_LINE = 1800;
+        const size_t NUM_POINTS_PER_CLOUD = NUM_POINTS_PER_LINE * NUM_ROWS;
+        for(size_t pointcloud_idx = 0; pointcloud_idx < num_pointclouds; ++pointcloud_idx) {
+          size_t pointcloud_offset = pointcloud_idx * NUM_POINTS_PER_CLOUD;
+          for (size_t point_idx = pointcloud_offset; point_idx < NUM_POINTS_PER_CLOUD + pointcloud_offset; ++point_idx) {
             if (range_data.returns[point_idx].position.isZero()) continue;
-            int i0 = point_idx;
-            int horizontal_stride = 5;
-            int i1 = point_idx + horizontal_stride >= NUM_POINTS_PER_CLOUD
+            size_t i0 = point_idx;
+            size_t horizontal_stride = 5;
+            size_t i1 = point_idx + horizontal_stride >= NUM_POINTS_PER_CLOUD
                      ? point_idx - horizontal_stride
                      : point_idx + horizontal_stride;
-            int i2 = point_idx + NUM_POINTS_PER_LINE >= NUM_POINTS_PER_CLOUD
+            size_t i2 = point_idx + NUM_POINTS_PER_LINE >= NUM_POINTS_PER_CLOUD
                      ? point_idx - NUM_POINTS_PER_LINE
                      : point_idx + NUM_POINTS_PER_LINE;
             Eigen::Vector3f p0 = range_data.returns[i0].position;
