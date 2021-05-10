@@ -304,7 +304,8 @@ namespace cartographer {
 // #################################################################################################################
                 // Save some slices as png
 
-                myTSDFDrawer.saveSliceAsPNG(0.0, "../cartographer/io/pointcloud_conversion/images/testimage.png");
+                // Tipp: Choose a number between -14 and 9
+                myTSDFDrawer.saveSliceAsPNG(2, "../cartographer/io/pointcloud_conversion/images/testimage.png");
 
 
 // #################################################################################################################
@@ -327,7 +328,7 @@ namespace cartographer {
 
                 auto file_resolver =
                         absl::make_unique<cartographer::common::ConfigurationFileResolver>(
-                                std::vector<std::string>{"/home/leo/hector/src/cartographer/configuration_files"});
+                                std::vector<std::string>{"../configuration_files"});
                 cartographer::common::LuaParameterDictionary poseGraphDict(kMapBuilderLua, std::move(file_resolver));
 
                 cartographer::mapping::proto::MapBuilderOptions options;
@@ -360,7 +361,9 @@ namespace cartographer {
                 cartographer::io::WritePbStream(*posegraph, all_trajectory_builder_options, &writer, false);
 
                 proto::HybridGridTSDF myProtoTSDF = myHybridGridTSDF.ToProto();
-                writer.WriteProto(myProtoTSDF);
+
+//                Todo: Why does this not work?
+//                writer.WriteProto(myProtoTSDF);
 
                 writer.Close();
             }
