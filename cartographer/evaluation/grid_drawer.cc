@@ -18,7 +18,8 @@ GridDrawer::GridDrawer() : scale_(4.0) {
   grid_surface_ =
       cairo_image_surface_create(CAIRO_FORMAT_ARGB32, scaled_num_cells_[axis0_],
                                  scaled_num_cells_[axis1_]);
-  cairo_pattern_t* pattern = cairo_pattern_create_for_surface(grid_surface_);
+  //  cairo_pattern_t* pattern =
+  //  cairo_pattern_create_for_surface(grid_surface_);
   grid_surface_context_ = cairo_create(grid_surface_);
   //  cairo_set_antialias(grid_surface_context_, CAIRO_ANTIALIAS_NONE);
   //  cairo_pattern_set_filter (cairo_get_source (grid_surface_context_),
@@ -42,7 +43,8 @@ GridDrawer::GridDrawer(const cartographer::mapping::HybridGridTSDF& grid)
   grid_surface_ =
       cairo_image_surface_create(CAIRO_FORMAT_ARGB32, scaled_num_cells_[axis0_],
                                  scaled_num_cells_[axis1_]);
-  cairo_pattern_t* pattern = cairo_pattern_create_for_surface(grid_surface_);
+  //  cairo_pattern_t* pattern =
+  //  cairo_pattern_create_for_surface(grid_surface_);
   grid_surface_context_ = cairo_create(grid_surface_);
   //  cairo_set_antialias(grid_surface_context_, CAIRO_ANTIALIAS_NONE);
   //  cairo_pattern_set_filter (cairo_get_source (grid_surface_context_),
@@ -54,8 +56,9 @@ GridDrawer::GridDrawer(const cartographer::mapping::HybridGridTSDF& grid)
 
 void GridDrawer::DrawTSD(const cartographer::mapping::HybridGridTSDF& grid,
                          double z) {
-  Eigen::Array3i zero_index = grid.GetCellIndex(
-      {min_limits_[axis0_], min_limits_[axis1_], min_limits_[axis2_]});
+  Eigen::Array3i zero_index =
+      grid.GetCellIndex({float(min_limits_[axis0_]), float(min_limits_[axis1_]),
+                         float(min_limits_[axis2_])});
   for (int ix = 0; ix < scaled_num_cells_[axis0_]; ++ix) {
     for (int iy = 0; iy < scaled_num_cells_[axis1_]; ++iy) {
       float r = 1.f;
@@ -197,13 +200,13 @@ void GridDrawer::DrawPose(const cartographer::transform::Rigid3d& transform, flo
 
 
   cairo_set_source_rgb(grid_surface_context_, r, g, b);
-  float z_range = 0.6;
-      float x = (transform.translation()[axis0_] - min_limits_[axis0_]) *
-          scaled_num_cells_[axis0_] /
-          (max_limits_[axis0_] - min_limits_[axis0_]);
-      float y = (transform.translation()[axis1_] - min_limits_[axis1_]) *
-          scaled_num_cells_[axis1_] /
-          (max_limits_[axis1_] - min_limits_[axis1_]);
+  //  float z_range = 0.6;
+  float x = (transform.translation()[axis0_] - min_limits_[axis0_]) *
+            scaled_num_cells_[axis0_] /
+            (max_limits_[axis0_] - min_limits_[axis0_]);
+  float y = (transform.translation()[axis1_] - min_limits_[axis1_]) *
+            scaled_num_cells_[axis1_] /
+            (max_limits_[axis1_] - min_limits_[axis1_]);
 
   float point_size = 0.5f * scale_;
   cairo_rectangle(grid_surface_context_, (x - 0.5 * point_size),

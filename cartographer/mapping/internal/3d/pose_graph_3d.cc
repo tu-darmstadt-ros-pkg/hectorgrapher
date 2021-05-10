@@ -32,6 +32,7 @@
 #include "cartographer/common/math.h"
 #include "cartographer/mapping/proto/pose_graph/constraint_builder_options.pb.h"
 #include "cartographer/sensor/compressed_point_cloud.h"
+#include "cartographer/sensor/internal/adaptive_voxel_filter.h"
 #include "cartographer/sensor/internal/voxel_filter.h"
 #include "cartographer/transform/transform.h"
 #include "glog/logging.h"
@@ -1067,7 +1068,8 @@ PoseGraph3D::GetAllSubmapPoses() const {
     submap_poses.Insert(
         submap_id_data.id,
         PoseGraphInterface::SubmapPose{submap_data.submap->num_range_data(),
-                                       submap_data.pose});
+                                       submap_data.pose,
+                                       submap_data.submap->start_time()});
   }
   return submap_poses;
 }

@@ -40,6 +40,7 @@
 #include "cartographer/mapping/trajectory_node.h"
 #include "cartographer/metrics/family_factory.h"
 #include "cartographer/sensor/compressed_point_cloud.h"
+#include "cartographer/sensor/internal/adaptive_voxel_filter.h"
 #include "cartographer/sensor/internal/voxel_filter.h"
 #include "cartographer/sensor/point_cloud.h"
 

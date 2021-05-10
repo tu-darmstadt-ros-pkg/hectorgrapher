@@ -100,5 +100,18 @@ RangeData::RangeData() : origin(Eigen::Vector3f::Zero()) {}
 RangeData::RangeData(const Eigen::Vector3f& origin, const PointCloud& returns,
                      const PointCloud& misses)
     : origin(origin), returns(returns), misses(misses) {}
+
+RangeData::RangeData(const TimedRangeData& timed_range_data)
+    : origin(timed_range_data.origin) {
+  returns.reserve(timed_range_data.returns.size());
+  for (const auto& timed_return : timed_range_data.returns) {
+    returns.push_back({timed_return.position});
+  }
+  misses.reserve(timed_range_data.misses.size());
+  for (const auto& timed_miss : timed_range_data.misses) {
+    misses.push_back({timed_miss.position});
+  }
+}
+
 }  // namespace sensor
 }  // namespace cartographer

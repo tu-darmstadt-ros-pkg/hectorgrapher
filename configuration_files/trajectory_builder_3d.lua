@@ -107,9 +107,8 @@ TRAJECTORY_BUILDER_3D = {
       sync_control_points_with_range_data = true,
       initialization_duration = 3.0,
       use_adaptive_odometry_weights = true,
-      max_odometry_translation_weight = 5e3,
-      max_odometry_rotation_weight = 5e3,
-      weight_odometry_translation_limit = 0.05,
-      weight_odometry_rotation_limit = 0.05,
+      use_per_point_unwarping = false,
+      use_multi_resolution_matching = false,
+      num_points_per_subdivision = 4,
   },
 }

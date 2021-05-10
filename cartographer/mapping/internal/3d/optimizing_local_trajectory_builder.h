@@ -28,10 +28,9 @@
 #include "cartographer/mapping/internal/3d/state.h"
 #include "cartographer/mapping/internal/motion_filter.h"
 #include "cartographer/mapping/pose_extrapolator.h"
-
 #include "cartographer/metrics/family_factory.h"
-
 #include "cartographer/sensor/imu_data.h"
+#include "cartographer/sensor/internal/adaptive_voxel_filter.h"
 #include "cartographer/sensor/internal/voxel_filter.h"
 #include "cartographer/sensor/odometry_data.h"
 #include "cartographer/sensor/range_data.h"
@@ -39,6 +38,12 @@
 
 namespace cartographer {
 namespace mapping {
+
+struct ControlPoint {
+  common::Time time;
+  State state;
+};
+
 // Batches up some sensor data and optimizes them in one go to get a locally
 // consistent trajectory.
 class OptimizingLocalTrajectoryBuilder {
@@ -78,54 +83,58 @@ class OptimizingLocalTrajectoryBuilder {
 
   void SetMapUpdateEnabled(bool map_update_enabled);
 
-  State PredictState(const State& start_state, const common::Time start_time,
-                     const common::Time end_time);
+  State PredictState(const State& start_state, common::Time start_time,
+                     common::Time end_time);
 
  private:
   void AddControlPoint(common::Time t);
 
+  void AddPerScanMatchingResiduals(ceres::Problem& problem);
+  void AddPerPointMatchingResiduals(ceres::Problem& problem);
+  void AddIMUResiduals(ceres::Problem& problem);
+  void AddOdometryResiduals(ceres::Problem& problem);
+
   struct PointCloudSet {
     common::Time time;
     Eigen::Vector3f origin;
-    sensor::PointCloud points;
-    sensor::PointCloud high_resolution_filtered_points;
-    sensor::PointCloud low_resolution_filtered_points;
-    sensor::PointCloud original_cloud;
+    sensor::TimedPointCloud points;
+    sensor::TimedPointCloud high_resolution_filtered_points;
+    sensor::TimedPointCloud low_resolution_filtered_points;
+    sensor::TimedPointCloud original_cloud;
+
+    common::Time StartTime() {
+      CHECK(!original_cloud.empty());
+      return time + common::FromSeconds(original_cloud.front().time);
+    };
   };
 
-  struct ControlPoint {
-    common::Time time;
-    State state;
-  };
-
-
-  State PredictStateRK4(const State& start_state, const common::Time start_time,
-                        const common::Time end_time);
-
-  State PredictStateEuler(const State& start_state,
-                          const common::Time start_time,
-                          const common::Time end_time);
-  State PredictStateOdom(const State& start_state,
-                          const common::Time start_time,
-                          const common::Time end_time);
+  State PredictStateRK4(const State& start_state, common::Time start_time,
+                        common::Time end_time);
+  State PredictStateEuler(const State& start_state, common::Time start_time,
+                          common::Time end_time);
+  State PredictStateOdom(const State& start_state, common::Time start_time,
+                         common::Time end_time);
 
   void RemoveObsoleteSensorData();
 
   std::unique_ptr<MatchingResult> AddAccumulatedRangeData(
       common::Time time, const transform::Rigid3d& pose_observation,
-      const sensor::RangeData& range_data_in_tracking);
+      const sensor::TimedRangeData& range_data_in_tracking);
 
   std::unique_ptr<InsertionResult> InsertIntoSubmap(
-      common::Time time, const sensor::RangeData& filtered_range_data_in_local,
-      const sensor::RangeData& filtered_range_data_in_tracking,
-      const sensor::PointCloud& high_resolution_point_cloud_in_tracking,
-      const sensor::PointCloud& low_resolution_point_cloud_in_tracking,
+      common::Time time,
+      const sensor::TimedRangeData& filtered_range_data_in_local,
+      const sensor::TimedRangeData& filtered_range_data_in_tracking,
+      const sensor::TimedPointCloud& high_resolution_point_cloud_in_tracking,
+      const sensor::TimedPointCloud& low_resolution_point_cloud_in_tracking,
       const transform::Rigid3d& pose_estimate,
       const Eigen::Quaterniond& gravity_alignment);
 
   void TransformStates(const transform::Rigid3d& transform);
   std::unique_ptr<OptimizingLocalTrajectoryBuilder::MatchingResult>
   MaybeOptimize(common::Time time);
+
+  void PrintLoggingData();
 
   const proto::LocalTrajectoryBuilderOptions3D options_;
   const ceres::Solver::Options ceres_solver_options_;
@@ -153,7 +162,15 @@ class OptimizingLocalTrajectoryBuilder {
   MotionFilter motion_filter_;
   std::unique_ptr<mapping::PoseExtrapolator> extrapolator_;
   std::unique_ptr<ImuIntegrator> imu_integrator_;
+  std::vector<const mapping::HybridGridTSDF*> tsdf_pyramid_;
   bool map_update_enabled_;
+
+  //Logging
+  unsigned int num_insertions;
+  double total_insertion_duration;
+  unsigned int num_optimizations;
+  double total_optimization_duration;
+
 };
 
 }  // namespace mapping

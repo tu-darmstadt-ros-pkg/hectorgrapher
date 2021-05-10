@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef CARTOGRAPHER_MAPPING_INTERNAL_3D_SCAN_MATCHING_INTERPOLATED_TSDF_SPACE_COST_FUNCTION_3D_H_
-#define CARTOGRAPHER_MAPPING_INTERNAL_3D_SCAN_MATCHING_INTERPOLATED_TSDF_SPACE_COST_FUNCTION_3D_H_
+#ifndef CARTOGRAPHER_MAPPING_INTERNAL_3D_SCAN_MATCHING_INTERPOLATED_TSDF_PER_POINT_SPACE_COST_FUNCTION_3D_H_
+#define CARTOGRAPHER_MAPPING_INTERNAL_3D_SCAN_MATCHING_INTERPOLATED_TSDF_PER_POINT_SPACE_COST_FUNCTION_3D_H_
 
 #include "Eigen/Core"
 #include "cartographer/mapping/3d/hybrid_grid_tsdf.h"
@@ -29,26 +29,27 @@ namespace cartographer {
 namespace mapping {
 namespace scan_matching {
 
-// Computes a cost for matching the 'point_cloud' to the 'hybrid_grid' with a
+// Computes a cost for matching the 'point' to the 'hybrid_grid' with a
 // 'translation' and 'rotation'. The cost increases when points fall into less
 // occupied space, i.e. at voxels with lower values.
-template <typename PointCloudType>
-class InterpolatedTSDFSpaceCostFunction3D {
+template <typename PointType>
+class InterpolatedTSDFPerPointSpaceCostFunction3D {
  public:
   static ceres::CostFunction* CreateAutoDiffCostFunction(
-      const double scaling_factor, const PointCloudType& point_cloud,
+      const double scaling_factor, const PointType& point,
       const mapping::HybridGridTSDF& hybrid_grid,
       const double interpolation_ratio) {
     if (interpolation_ratio <= 0.0 || interpolation_ratio >= 1.0) {
       LOG(WARNING) << "Extrapolating to: " << interpolation_ratio;
     }
     return new ceres::AutoDiffCostFunction<
-        InterpolatedTSDFSpaceCostFunction3D, ceres::DYNAMIC /* residuals */,
-        3 /* translation variables */, 4 /* rotation variables */,
-        3 /* translation variables */, 4 /* rotation variables */>(
-        new InterpolatedTSDFSpaceCostFunction3D(
-            scaling_factor, point_cloud, hybrid_grid, interpolation_ratio),
-        point_cloud.size());
+        InterpolatedTSDFPerPointSpaceCostFunction3D,
+        ceres::DYNAMIC /* residuals */, 3 /* translation variables */,
+        4 /* rotation variables */, 3 /* translation variables */,
+        4 /* rotation variables */>(
+        new InterpolatedTSDFPerPointSpaceCostFunction3D(
+            scaling_factor, point, hybrid_grid, interpolation_ratio),
+        1);
   }
 
   template <typename T>
@@ -63,40 +64,32 @@ class InterpolatedTSDFSpaceCostFunction3D {
         Eigen::Map<const Eigen::Matrix<T, 3, 1>>(translation_1),
         Eigen::Quaternion<T>(rotation_1[0], rotation_1[1], rotation_1[2],
                              rotation_1[3]));
-    return Evaluate(
-        InterpolateTransform(transform_0, transform_1, interpolation_ratio_),
-        residual);
-  }
-
- private:
-  InterpolatedTSDFSpaceCostFunction3D(
-      const double scaling_factor, const PointCloudType& point_cloud,
-      const mapping::HybridGridTSDF& hybrid_grid,
-      const double interpolation_ratio)
-      : scaling_factor_(scaling_factor),
-        point_cloud_(point_cloud),
-        interpolated_grid_(hybrid_grid),
-        interpolation_ratio_(interpolation_ratio) {}
-
-  InterpolatedTSDFSpaceCostFunction3D(
-      const InterpolatedTSDFSpaceCostFunction3D&) = delete;
-  InterpolatedTSDFSpaceCostFunction3D& operator=(
-      const InterpolatedTSDFSpaceCostFunction3D&) = delete;
-
-  template <typename T>
-  bool Evaluate(const transform::Rigid3<T>& transform,
-                T* const residual) const {
-    for (size_t i = 0; i < point_cloud_.size(); ++i) {
-      const Eigen::Matrix<T, 3, 1> world =
-          transform * point_cloud_[i].position.template cast<T>();
-      const T tsd = interpolated_grid_.GetTSD(world[0], world[1], world[2]);
-      residual[i] = scaling_factor_ * tsd;
-    }
+    const transform::Rigid3<T> transform =
+        InterpolateTransform(transform_0, transform_1, interpolation_ratio_);
+    const Eigen::Matrix<T, 3, 1> world =
+        transform * point_.position.template cast<T>();
+    const T tsd = interpolated_grid_.GetTSD(world[0], world[1], world[2]);
+    residual[0] = scaling_factor_ * tsd;
     return true;
   }
 
+ private:
+  InterpolatedTSDFPerPointSpaceCostFunction3D(
+      const double scaling_factor, const PointType& point,
+      const mapping::HybridGridTSDF& hybrid_grid,
+      const double interpolation_ratio)
+      : scaling_factor_(scaling_factor),
+        point_(point),
+        interpolated_grid_(hybrid_grid),
+        interpolation_ratio_(interpolation_ratio) {}
+
+  InterpolatedTSDFPerPointSpaceCostFunction3D(
+      const InterpolatedTSDFPerPointSpaceCostFunction3D&) = delete;
+  InterpolatedTSDFPerPointSpaceCostFunction3D& operator=(
+      const InterpolatedTSDFPerPointSpaceCostFunction3D&) = delete;
+
   const double scaling_factor_;
-  const PointCloudType point_cloud_;
+  const PointType& point_;
   const InterpolatedTSDF interpolated_grid_;
   const double interpolation_ratio_;
 };
@@ -105,4 +98,4 @@ class InterpolatedTSDFSpaceCostFunction3D {
 }  // namespace mapping
 }  // namespace cartographer
 
-#endif  // CARTOGRAPHER_MAPPING_INTERNAL_3D_SCAN_MATCHING_INTERPOLATED_TSDF_SPACE_COST_FUNCTION_3D_H_
+#endif  // CARTOGRAPHER_MAPPING_INTERNAL_3D_SCAN_MATCHING_INTERPOLATED_TSDF_PER_POINT_SPACE_COST_FUNCTION_3D_H_

@@ -66,14 +66,12 @@ CreateOptimizingLocalTrajectoryBuilderOptions(
       parameter_dictionary->GetBool("sync_control_points_with_range_data"));
   options.set_use_adaptive_odometry_weights(
       parameter_dictionary->GetBool("use_adaptive_odometry_weights"));
-  options.set_max_odometry_translation_weight(
-      parameter_dictionary->GetDouble("max_odometry_translation_weight"));
-  options.set_max_odometry_rotation_weight(
-      parameter_dictionary->GetDouble("max_odometry_rotation_weight"));
-  options.set_weight_odometry_translation_limit(
-      parameter_dictionary->GetDouble("weight_odometry_translation_limit"));
-  options.set_weight_odometry_rotation_limit(
-      parameter_dictionary->GetDouble("weight_odometry_rotation_limit"));
+  options.set_use_per_point_unwarping(
+      parameter_dictionary->GetBool("use_per_point_unwarping"));
+  options.set_use_multi_resolution_matching(
+      parameter_dictionary->GetBool("use_multi_resolution_matching"));
+  options.set_num_points_per_subdivision(
+      parameter_dictionary->GetInt("num_points_per_subdivision"));
 
   return options;
 }

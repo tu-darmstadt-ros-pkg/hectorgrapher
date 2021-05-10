@@ -302,8 +302,9 @@ Submap3D::Submap3D(const transform::Rigid3d& local_submap_pose,
                    std::unique_ptr<GridInterface> low_resolution_grid,
                    std::unique_ptr<GridInterface> high_resolution_grid,
                    const Eigen::VectorXf& rotational_scan_matcher_histogram,
-                   ValueConversionTables* conversion_tables)
-    : Submap(local_submap_pose),
+                   ValueConversionTables* conversion_tables,
+                   const common::Time& start_time)
+    : Submap(local_submap_pose, start_time),
       rotational_scan_matcher_histogram_(rotational_scan_matcher_histogram),
       conversion_tables_(conversion_tables) {
   low_resolution_grid_ = std::move(low_resolution_grid);
@@ -477,12 +478,13 @@ std::vector<std::shared_ptr<const Submap3D>> ActiveSubmaps3D::submaps() const {
 std::vector<std::shared_ptr<const Submap3D>> ActiveSubmaps3D::InsertData(
     const sensor::RangeData& range_data,
     const Eigen::Quaterniond& local_from_gravity_aligned,
-    const Eigen::VectorXf& rotational_scan_matcher_histogram_in_gravity) {
+    const Eigen::VectorXf& rotational_scan_matcher_histogram_in_gravity,
+    const common::Time& time) {
   if (submaps_.empty() ||
       submaps_.back()->num_range_data() == options_.num_range_data()) {
     AddSubmap(transform::Rigid3d(range_data.origin.cast<double>(),
                                  local_from_gravity_aligned),
-              rotational_scan_matcher_histogram_in_gravity.size());
+              rotational_scan_matcher_histogram_in_gravity.size(), time);
   }
   for (auto& submap : submaps_) {
     submap->InsertData(range_data, range_data_inserter_.get(),
@@ -519,7 +521,8 @@ std::unique_ptr<GridInterface> ActiveSubmaps3D::CreateGrid(float resolution) {
 
 void ActiveSubmaps3D::AddSubmap(
     const transform::Rigid3d& local_submap_pose,
-    const int rotational_scan_matcher_histogram_size) {
+    const int rotational_scan_matcher_histogram_size,
+    const common::Time& time) {
   if (submaps_.size() >= 2) {
     // This will crop the finished Submap before inserting a new Submap to
     // reduce peak memory usage a bit.
@@ -531,10 +534,10 @@ void ActiveSubmaps3D::AddSubmap(
   submaps_.emplace_back(new Submap3D(
       local_submap_pose,
       std::unique_ptr<GridInterface>(static_cast<GridInterface*>(
-                                         CreateGrid(options_.low_resolution()).release())),
+          CreateGrid(options_.low_resolution()).release())),
       std::unique_ptr<GridInterface>(static_cast<GridInterface*>(
           CreateGrid(options_.high_resolution()).release())),
-      initial_rotational_scan_matcher_histogram, &conversion_tables_));
+      initial_rotational_scan_matcher_histogram, &conversion_tables_, time));
 }
 
 }  // namespace mapping
