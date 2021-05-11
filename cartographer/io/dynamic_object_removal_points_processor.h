@@ -20,6 +20,7 @@ class DynamicObjectsRemovalPointsProcessor : public PointsProcessor {
  public:
   constexpr static const char* kConfigurationFileActionName =
       "dynamic_objects_removal_filter";
+  sensor::PointCloud map_;
   enum class RunState {
     kInitialRun,
     kSecondRun,
@@ -50,11 +51,12 @@ class DynamicObjectsRemovalPointsProcessor : public PointsProcessor {
  private:
   const int r_segments_, theta_segments_, phi_segments_, end_of_file_;
   const double sensor_range_limit_;
-  sensor::PointCloud map_;
   std::vector<PointsBatch> list_of_batches_;
   PointsProcessor* const next_;
   std::unique_ptr<FileWriter> file_;
   transform::Rigid3<float> sensor_height_adjustment_;
+
+  void initialize_probabilities(PointsBatch &batch);
 
   static uint16_t cantor_pairing(uint16_t a, uint16_t b);
 

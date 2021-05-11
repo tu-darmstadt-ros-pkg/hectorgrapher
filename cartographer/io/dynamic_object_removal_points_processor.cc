@@ -80,7 +80,7 @@ DynamicObjectsRemovalPointsProcessor::DynamicObjectsRemovalPointsProcessor(std::
   "phi_segments:       " << phi_segments_ << "\n" <<
   "sensor_range_limit: " << sensor_range_limit_ << "\n" <<
   "end_of_file:        " << end_of_file_;
-  sensor_height_adjustment_ = transform::Rigid3<float>::Translation(Eigen::Vector3f(0, 0, -0.5));
+  sensor_height_adjustment_ = transform::Rigid3<float>::Translation(Eigen::Vector3f(0, 0, 0));
 }
 
 void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> batch) {
@@ -94,6 +94,8 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
       LOG(INFO) << "Iteration: " << list_of_batches_.size() + 1 << "\tBatch points: " << batch->points.size();
       LOG(INFO) << "Batch origin:      x: " << batch->origin.x() << "\ty: " << batch->origin.y() << "\tz: " << batch->origin.z();
       LOG(INFO) << "Batch transformation: " << batch->sensor_to_map.DebugString();
+
+      initialize_probabilities(*batch);
 
 //      if (list_of_batches_.size() == end_of_file_-1) {
 //        std::vector<std::string> comments;
@@ -224,7 +226,13 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
         }
         // Remove the points from the global map and from all local batches
         // Remove from the global map
-        remove_points_from_pointcloud(keys_to_delete, map_, batch->sensor_to_map.inverse());
+        //remove_points_from_pointcloud(keys_to_delete, map_, batch->sensor_to_map.inverse());
+        map_.clear();
+        for (auto & wedge : global_wedge_map) {
+          for (auto & p : wedge.second.wedge_points) {
+            map_.push_back(p);
+          }
+        }
         // Remove from the list of batches
         // iterate the list of batches revere because it is observable that
         // the last batch often is the main contributor of an dynamic objects' remaining
@@ -251,8 +259,11 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
       LOG(INFO) << "Batch inserted";
 
       // Add all points from the current scan to the full map
+      // IMPORTANT: First clear the full map and add all points from the global wedge map since
+      // there the dynamic points have been removed while they are still in map_ ! This is done at
+      // the deletion step above
       for (auto & point : batch->points) {
-        map_.push_back(/*batch->sensor_to_map * */ sensor_height_adjustment_ * point);
+        map_.push_back(sensor_height_adjustment_ * point);
       }
 
       LOG(INFO) << "Total Map points: " << map_.size();
@@ -410,6 +421,11 @@ size_t DynamicObjectsRemovalPointsProcessor::remove_points_from_batch(std::vecto
 //      batch_size - batch.points.size() << " points removed";
   }
   return to_remove.size();
+}
+void DynamicObjectsRemovalPointsProcessor::initialize_probabilities(PointsBatch &batch) {
+  for (int i = 0; i < batch.points.size(); ++i) {
+    batch.probabilities.push_back(1.0);
+  }
 }
 }
 }

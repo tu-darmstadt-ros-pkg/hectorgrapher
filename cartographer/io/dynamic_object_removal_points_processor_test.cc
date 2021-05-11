@@ -18,14 +18,26 @@ namespace cartographer {
 namespace io {
 namespace {
 
-std::unique_ptr<PointsBatch> CreatePointsBatch() {
+std::unique_ptr<PointsBatch> CreatePointsBatch1() {
   auto points_batch = ::absl::make_unique<PointsBatch>();
   points_batch->origin = Eigen::Vector3f(0, 0, 0);
-  points_batch->points.push_back({Eigen::Vector3f{0.0f, 0.0f, 0.0f}});
-  points_batch->points.push_back({Eigen::Vector3f{0.0f, 1.0f, 2.0f}});
-  points_batch->points.push_back({Eigen::Vector3f{1.0f, 2.0f, 4.0f}});
-  points_batch->points.push_back({Eigen::Vector3f{0.0f, 3.0f, 5.0f}});
-  points_batch->points.push_back({Eigen::Vector3f{3.0f, 0.0f, 6.0f}});
+  points_batch->points.push_back({Eigen::Vector3f{-1.0f, 2.0f, 0.0f}});
+  points_batch->points.push_back({Eigen::Vector3f{-0.5f, 2.0f, 0.0f}});
+  points_batch->points.push_back({Eigen::Vector3f{0.0f, 2.0f, 0.0f}});
+  points_batch->points.push_back({Eigen::Vector3f{0.5f, 2.0f, 0.0f}});
+  points_batch->points.push_back({Eigen::Vector3f{1.0f, 2.0f, 0.0f}});
+  points_batch->points.push_back({Eigen::Vector3f{0.0f, 1.0f, 0.0f}}); // dynamic point in front
+  return points_batch;
+}
+
+std::unique_ptr<PointsBatch> CreatePointsBatch2() {
+  auto points_batch = ::absl::make_unique<PointsBatch>();
+  points_batch->origin = Eigen::Vector3f(0, 0, 0);
+  points_batch->points.push_back({Eigen::Vector3f{-1.01f, 2.0f, 0.0f}});
+  points_batch->points.push_back({Eigen::Vector3f{-0.5f, 2.01f, 0.0f}});
+  points_batch->points.push_back({Eigen::Vector3f{0.01f, 2.01f, 0.0f}});
+  points_batch->points.push_back({Eigen::Vector3f{0.51f, 2.0f, 0.0f}});
+  points_batch->points.push_back({Eigen::Vector3f{1.01f, 2.0f, 0.0f}});
   return points_batch;
 }
 
@@ -67,9 +79,9 @@ std::unique_ptr<common::LuaParameterDictionary> CreateParameterDictionary() {
               action = "dynamic_objects_removal_filter",
               filename = "test_wedge.ply",
               r_segments = 150, -- 15000
-              theta_segments = 48, -- 64
-              phi_segments = 96, -- 128
-              sensor_range_limit = 15, -- 150
+              theta_segments = 63, -- 64
+              phi_segments = 127, -- 128
+              sensor_range_limit = 5, -- 150
               end_of_file = 445
             }
           }
@@ -92,22 +104,24 @@ class DynamicObjectRemovalPointsProcessorTest : public ::testing::Test {
     EXPECT_TRUE(pipeline.size() > 0);
 
     do {
-      pipeline.back()->Process(CreatePointsBatch());
-    } while (pipeline.back()->Flush() ==
-        cartographer::io::PointsProcessor::FlushResult::kRestartStream);
+      pipeline.back()->Process(CreatePointsBatch1());
+      pipeline.back()->Process(CreatePointsBatch2());
+    } while (pipeline.back()->Flush() == cartographer::io::PointsProcessor::FlushResult::kRestartStream);
+
+    map_ = dynamic_cast<DynamicObjectsRemovalPointsProcessor*>(pipeline.back().get())->map_;
   }
 
   std::shared_ptr<std::vector<char>> fake_file_writer_output_ =
       std::make_shared<std::vector<char>>();
   std::unique_ptr<cartographer::common::LuaParameterDictionary>
       pipeline_dictionary_;
+  sensor::PointCloud map_;
 };
 
-TEST_F(DynamicObjectRemovalPointsProcessorTest, WriteProto) {
-  Run("map.pb");
-  const std::vector<char> exp;
-  EXPECT_THAT(*fake_file_writer_output_,
-              exp);
+TEST_F(DynamicObjectRemovalPointsProcessorTest, DynamicObjectRemoved) {
+  Run("test_wedge.ply");
+  EXPECT_EQ(map_.size(), 10);
+  //EXPECT_FLOAT_EQ(map_)
 }
 
 }
