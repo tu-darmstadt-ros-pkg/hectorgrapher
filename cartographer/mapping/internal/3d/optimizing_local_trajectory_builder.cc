@@ -207,6 +207,14 @@ OptimizingLocalTrajectoryBuilder::AddRangeData(
     LOG(INFO) << "Not enough data, skipping this cloud.";
     return nullptr;
   }
+
+  if (!odometer_data_.empty() &&
+      odometer_data_.front().time >
+          range_data_in_tracking.time +
+              common::FromSeconds(range_data_in_tracking.ranges.front().time)) {
+    LOG(INFO) << "Not enough odom data, skipping this cloud.";
+    return nullptr;
+  }
   PointCloudSet point_cloud_set;
   point_cloud_set.time = range_data_in_tracking.time;
   point_cloud_set.origin = range_data_in_tracking.origin;
@@ -1060,8 +1068,13 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
     }
     return nullptr;
   }
+  if (odometer_data_.size() < 2) {
+    LOG(INFO) << "not enough odom data";
+    return nullptr;
+  }
   if(control_points_.empty()) {
-    AddControlPoint(initial_data_time_);
+    //    AddControlPoint(initial_data_time_);
+    AddControlPoint(std::max(initial_data_time_, odometer_data_.begin()->time));
   }
   last_optimization_time_ = time;
   if (!imu_calibrated_ &&
@@ -1088,33 +1101,64 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
       debiased_imu_data.angular_velocity = angular_velocity_calibration_ * debiased_imu_data.angular_velocity;
       extrapolator_->AddImuData(debiased_imu_data);
     }
+  }
 
-  }
-  if(options_.optimizing_local_trajectory_builder_options().sync_control_points_with_range_data()) {
-    for (auto& point_cloud_set : point_cloud_data_) {
-      if ((control_points_.back().time < point_cloud_set.time) &&
-          (point_cloud_set.time < imu_data_.back().time)) {
-        AddControlPoint(point_cloud_set.time);
+  switch (options_.optimizing_local_trajectory_builder_options()
+              .control_point_sampling()) {
+    case proto::CONSTANT: {
+      while (control_points_.back().time + ct_window_rate_ <
+             imu_data_.back().time) {
+        AddControlPoint(control_points_.back().time + ct_window_rate_);
       }
+      break;
     }
-  }
-  else {
-    while (control_points_.back().time + ct_window_rate_ <
-        imu_data_.back().time) {
-      AddControlPoint(control_points_.back().time + ct_window_rate_);
+    case proto::SYNCED_WITH_RANGE_DATA: {
+      for (auto& point_cloud_set : point_cloud_data_) {
+        if ((control_points_.back().time < point_cloud_set.time) &&
+            (point_cloud_set.time < imu_data_.back().time)) {
+          AddControlPoint(point_cloud_set.time);
+        }
+      }
+      break;
     }
+    case proto::ADAPTIVE: {
+      if (odometer_data_.size() > 1) {
+        double max_delta_translation = 0.15;
+        double max_delta_rotation = common::DegToRad(3.0);
+        double max_delta_time = 0.4;
+
+        transform::TransformInterpolationBuffer interpolation_buffer;
+        for (const auto& odometer_data : odometer_data_) {
+          interpolation_buffer.Push(odometer_data.time, odometer_data.pose);
+        }
+        common::Time candidate_time = control_points_.back().time;
+        while (candidate_time < interpolation_buffer.latest_time()) {
+          candidate_time = interpolation_buffer.LookupUntilDelta(
+              control_points_.back().time, max_delta_translation,
+              max_delta_rotation, max_delta_time);
+          if (candidate_time < interpolation_buffer.latest_time()) {
+            //            LOG(INFO) <<"Add CP "<<
+            //            common::ToSeconds(candidate_time-initial_data_time_);
+            AddControlPoint(candidate_time);
+          }
+        }
+      }
+      break;
+    }
+    default:
+      LOG(FATAL) << "Unsupported control_point_sampling type.";
   }
 
   ceres::Problem problem;
-  if (!active_submaps_.submaps().empty()
-  ) {
+  if (!active_submaps_.submaps().empty()) {
     std::shared_ptr<const Submap3D> matching_submap =
         active_submaps_.submaps().front();
     // We assume the map is always aligned with the direction of gravity
-    CHECK(matching_submap->local_pose().inverse().rotation().isApprox(Eigen::Quaterniond::Identity(), 1e-8));
-    // We transform the states in 'control_points_' in place to be in the submap
-    // frame as expected by the OccupiedSpaceCostFunctor. This is reverted after
-    // solving the optimization problem.
+    CHECK(matching_submap->local_pose().inverse().rotation().isApprox(
+        Eigen::Quaterniond::Identity(), 1e-8));
+    // We transform the states in 'control_points_' in place to be in the
+    // submap frame as expected by the OccupiedSpaceCostFunctor. This is
+    // reverted after solving the optimization problem.
     TransformStates(matching_submap->local_pose().inverse());
 
     if (options_.optimizing_local_trajectory_builder_options()
@@ -1150,11 +1194,10 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
     total_optimization_duration += summary.total_time_in_seconds;
     PrintLoggingData();
     //    LOG(INFO) << summary.FullReport();
-    // The optimized states in 'control_points_' are in the submap frame and we
-    // transform them in place to be in the local SLAM frame again.
+    // The optimized states in 'control_points_' are in the submap frame and
+    // we transform them in place to be in the local SLAM frame again.
     TransformStates(matching_submap->local_pose());
   }
-
 
   num_accumulated_ = 0;
   const transform::Rigid3d optimized_pose =
@@ -1165,7 +1208,8 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
       Eigen::Vector3f::Zero(), {}, {}};
 
   if (active_submaps_.submaps().empty()) {
-    //To initialize the empty map we add all available range data assuming zero motion.
+    // To initialize the empty map we add all available range data assuming
+    // zero motion.
     auto control_points_iterator = control_points_.begin();
     for (auto& point_cloud_set : point_cloud_data_) {
       if (point_cloud_set.time < control_points_.back().time) {

@@ -26,6 +26,13 @@ enum IMUCostTerm {
   DIRECT = 1;
   PREINTEGRATION = 2;
 }
+
+enum ControlPointSampling {
+  INVALID_CONTROL_POINT_SAMPLING = 0;
+  CONSTANT = 1;
+  SYNCED_WITH_RANGE_DATA = 2;
+  ADAPTIVE = 3;
+}
 message OptimizingLocalTrajectoryBuilderOptions {
   double high_resolution_grid_weight = 6;
   double low_resolution_grid_weight = 7;
@@ -41,10 +48,10 @@ message OptimizingLocalTrajectoryBuilderOptions {
   double ct_window_rate = 13;
   IMUIntegrator imu_integrator = 14;
   IMUCostTerm imu_cost_term = 15;
-  bool sync_control_points_with_range_data = 16;
   double initialization_duration = 17;
   bool use_adaptive_odometry_weights = 18;
   bool use_per_point_unwarping = 23;
   bool use_multi_resolution_matching = 24;
   int32 num_points_per_subdivision = 25;
+  ControlPointSampling control_point_sampling = 26;
 }
