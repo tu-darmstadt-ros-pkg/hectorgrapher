@@ -36,6 +36,8 @@
 #endif
 
 DEFINE_string(config_file, "", "LUA-file containing the configuration options");
+const std::string path_to_home = getenv("HOME");
+
 
 #ifdef WITH_OPEN3D
 namespace cartographer {
@@ -190,7 +192,7 @@ namespace cartographer {
                             (float) luaParameterDictionary->GetDouble("noiseCubicPointcloud"));
                 } else {
                     // Read and show the input from the .ply-file.
-                    std::string point_cloud_filename = luaParameterDictionary->GetString("pointcloudPath");
+                    std::string point_cloud_filename = path_to_home + luaParameterDictionary->GetString("pointcloudPath");
                     open3d::io::ReadPointCloud(point_cloud_filename, *myPointCloudPointer, {"auto", true, true, true});
                     std::cout << "Loaded point cloud with " << myPointCloudPointer->points_.size() << " points."
                               << std::endl;
@@ -305,13 +307,13 @@ namespace cartographer {
                 // Save some slices as png
 
                 // Tipp: Choose a number between -14 and 9
-                myTSDFDrawer.saveSliceAsPNG(2, "../cartographer/io/pointcloud_conversion/images/testimage.png");
+                myTSDFDrawer.saveSliceAsPNG(2, (path_to_home + "/hector/src/cartographer/cartographer/io/pointcloud_conversion/images/testimage.png").c_str());
 
 
 // #################################################################################################################
                 // Build a ProtoBuffer
                 cartographer::io::ProtoStreamWriter writer(
-                        "../cartographer/io/pointcloud_conversion/ProtoBuffers/TSDFProtoBufferTest.pbstream");
+                        path_to_home + "/hector/src/cartographer/cartographer/io/pointcloud_conversion/ProtoBuffers/TSDFProtoBufferTest.pbstream");
 
                 // Das kann bald weg hoffentlich v
 //                mapping::proto::SerializationHeader myHeader = cartographer::io::CreateHeader();
@@ -328,7 +330,7 @@ namespace cartographer {
 
                 auto file_resolver =
                         absl::make_unique<cartographer::common::ConfigurationFileResolver>(
-                                std::vector<std::string>{"../configuration_files"});
+                                std::vector<std::string>{path_to_home + "/hector/src/cartographer/configuration_files"});
                 cartographer::common::LuaParameterDictionary poseGraphDict(kMapBuilderLua, std::move(file_resolver));
 
                 cartographer::mapping::proto::MapBuilderOptions options;
@@ -384,7 +386,7 @@ int main(int argc, char **argv) {
     }
 #ifdef WITH_OPEN3D
     cartographer::mapping::TSDFBuilder myTSDFBuilder(
-            "../cartographer/io/pointcloud_conversion/configurations",
+            path_to_home + "/hector/src/cartographer/cartographer/io/pointcloud_conversion/configurations",
             FLAGS_config_file);
     myTSDFBuilder.run();
 #endif

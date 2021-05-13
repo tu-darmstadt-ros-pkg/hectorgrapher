@@ -3,7 +3,7 @@
 options = {
     generateCubicPointcloud = false,
 
-    pointcloudPath = "../../../../Downloads/Halle-DRZ-Modell-innen-Flug1-2020-12-09.ply",
+    pointcloudPath = "/Downloads/Halle-DRZ-Modell-innen-Flug1-2020-12-09.ply",
 
     uniformDownSample = true,
     sampleRateUniformDownSample = 100,
