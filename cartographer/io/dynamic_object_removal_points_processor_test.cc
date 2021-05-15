@@ -78,11 +78,14 @@ std::unique_ptr<common::LuaParameterDictionary> CreateParameterDictionary() {
             {
               action = "dynamic_objects_removal_filter",
               filename = "test_wedge.ply",
-              r_segments = 150, -- 15000
-              theta_segments = 63, -- 64
-              phi_segments = 127, -- 128
-              sensor_range_limit = 5, -- 150
-              end_of_file = 445
+              r_segments = 150,
+              theta_segments = 63,
+              phi_segments = 127,
+              sensor_range_limit = 5,
+              end_of_file = 445,
+              probability_reduction_factor = 0.1,
+              dynamic_object_probability_threshold = 1.0,
+              open_view_deletion = false
             }
           }
           return pipeline
@@ -115,12 +118,13 @@ class DynamicObjectRemovalPointsProcessorTest : public ::testing::Test {
       std::make_shared<std::vector<char>>();
   std::unique_ptr<cartographer::common::LuaParameterDictionary>
       pipeline_dictionary_;
-  sensor::PointCloud map_;
+  sensor::TimedPointCloud map_;
 };
 
 TEST_F(DynamicObjectRemovalPointsProcessorTest, DynamicObjectRemoved) {
   Run("test_wedge.ply");
   EXPECT_EQ(map_.size(), 10);
+  // TODO(bhirschel) check that the right points are still there
   //EXPECT_FLOAT_EQ(map_)
 }
 
