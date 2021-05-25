@@ -240,7 +240,7 @@ namespace cartographer {
 
 
                 // Draw all points of the filtered point cloud
-                open3d::visualization::DrawGeometries({myPointCloudPointer});
+                //open3d::visualization::DrawGeometries({myPointCloudPointer});
 
 
 // #################################################################################################################
@@ -265,7 +265,7 @@ namespace cartographer {
                 std::shared_ptr<open3d::geometry::VoxelGrid> pclVoxelGridPointer =
                         open3d::geometry::VoxelGrid::CreateFromPointCloud(*myPointCloudPointer, gridVoxelSideLength);
 
-                myTSDFDrawer.drawTSDF(pclVoxelGridPointer);
+   //             myTSDFDrawer.drawTSDF(pclVoxelGridPointer);
 
 
 
