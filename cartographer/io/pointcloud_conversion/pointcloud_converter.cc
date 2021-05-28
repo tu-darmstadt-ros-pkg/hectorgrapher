@@ -294,20 +294,20 @@ namespace cartographer {
                 }
 
 
-                std::cout << "Press the left/right keys to slice through the voxel grid!" << std::endl;
-                std::cout << "Press the key >o< to change the slicing orientation." << std::endl;
+               // std::cout << "Press the left/right keys to slice through the voxel grid!" << std::endl;
+               // std::cout << "Press the key >o< to change the slicing orientation." << std::endl;
 
                 // Show the VoxelGrid of the TSDF
                 std::shared_ptr<open3d::geometry::VoxelGrid> tsdfVoxelGridPointer = convertHybridGridToVoxelGrid(
                         &myHybridGridTSDF, gridVoxelSideLength, absoluteTruncationDistance);
-                myTSDFDrawer.drawTSDF(tsdfVoxelGridPointer);
+              //  myTSDFDrawer.drawTSDF(tsdfVoxelGridPointer);
 
 
 // #################################################################################################################
                 // Save some slices as png
 
                 // Tipp: Choose a number between -14 and 9
-                myTSDFDrawer.saveSliceAsPNG(2, (path_to_home + "/hector/src/cartographer/cartographer/io/pointcloud_conversion/images/testimage.png").c_str());
+                myTSDFDrawer.saveSliceAsPNG(-10, (path_to_home + "/hector/src/cartographer/cartographer/io/pointcloud_conversion/images/testimage.png").c_str(),tsdfVoxelGridPointer);
 
 
 // #################################################################################################################

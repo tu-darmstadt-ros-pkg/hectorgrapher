@@ -20,7 +20,7 @@ namespace cartographer {
 
             void drawTSDF(const std::shared_ptr<open3d::geometry::VoxelGrid> &voxelGridPointer);
 
-            void saveSliceAsPNG(const int imageSliceIndex, const char* filename);
+            void saveSliceAsPNG(const int imageSliceIndex, const char* filename,const std::shared_ptr<open3d::geometry::VoxelGrid> &voxelGridPointerSlice);
 
         private:
             std::shared_ptr<open3d::geometry::VoxelGrid> tsdfPointer;

@@ -142,9 +142,10 @@ namespace cartographer {
              * @param imageSliceIndex index of the slice to be drawn
              * @param filename where to save the PNG image
              */
-        void TSDFDrawer::saveSliceAsPNG(const int imageSliceIndex, const char* filename) {
-
+        void TSDFDrawer::saveSliceAsPNG(const int imageSliceIndex, const char* filename ,const std::shared_ptr<open3d::geometry::VoxelGrid> &voxelGridPointerSlice) {
             // Build slice from full TSDF
+            tsdfPointer = voxelGridPointerSlice;
+
             std::shared_ptr<open3d::geometry::VoxelGrid> slicedVoxelGridPointer =
                     std::make_shared<open3d::geometry::VoxelGrid>(open3d::geometry::VoxelGrid());
 
