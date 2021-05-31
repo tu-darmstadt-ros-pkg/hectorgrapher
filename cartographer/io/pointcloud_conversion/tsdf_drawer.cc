@@ -152,7 +152,6 @@ namespace cartographer {
             slicedVoxelGridPointer->voxel_size_ = tsdfPointer->voxel_size_;
             slicedVoxelGridPointer->origin_ = tsdfPointer->origin_;
 
-
                 for (open3d::geometry::Voxel nextVoxel : tsdfPointer->GetVoxels()) {
                     if (nextVoxel.grid_index_(2) == imageSliceIndex) {
                         slicedVoxelGridPointer->AddVoxel(nextVoxel);
@@ -184,7 +183,6 @@ namespace cartographer {
                     cairo_set_source_rgb(cr, nextVoxel.color_.x(), nextVoxel.color_.y(), nextVoxel.color_.z());
                     cairo_fill(cr);
                 }
-
                 cairo_surface_write_to_png(surface, filename);
 
         }
