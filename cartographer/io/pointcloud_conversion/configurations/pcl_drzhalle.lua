@@ -20,6 +20,8 @@ options = {
 
     normalOrientationNearestNeighbours = 40,
 
+    imageSliceIndex = -10,
+
     absoluteVoxelSize = 0.5,
     absoluteTruncationDistance = 1.0,
     maxTSDFWeight = 10.0,

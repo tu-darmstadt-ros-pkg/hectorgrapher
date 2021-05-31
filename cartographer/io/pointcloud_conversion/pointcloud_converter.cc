@@ -307,7 +307,7 @@ namespace cartographer {
                 // Save some slices as png
 
                 // Tipp: Choose a number between -14 and 9
-                myTSDFDrawer.saveSliceAsPNG(-10, (path_to_home + "/hector/src/cartographer/cartographer/io/pointcloud_conversion/images/testimage.png").c_str(),tsdfVoxelGridPointer);
+                myTSDFDrawer.saveSliceAsPNG( (int) luaParameterDictionary->GetInt("imageSliceIndex"), (path_to_home + "/hector/src/cartographer/cartographer/io/pointcloud_conversion/images/testimage.png").c_str(),tsdfVoxelGridPointer);
 
 
 // #################################################################################################################
