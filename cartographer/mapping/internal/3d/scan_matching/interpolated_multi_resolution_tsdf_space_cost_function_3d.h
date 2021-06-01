@@ -39,7 +39,7 @@ class InterpolatedMultiResolutionTSDFSpaceCostFunction3D {
       const double scaling_factor, const PointCloudType& point_cloud,
       const std::vector<const mapping::HybridGridTSDF*>& hybrid_grid_pyramid,
       const double interpolation_ratio) {
-    if (interpolation_ratio <= 0.0 || interpolation_ratio >= 1.0) {
+    if (interpolation_ratio < 0.0 || interpolation_ratio > 1.0) {
       LOG(WARNING) << "Extrapolating to: " << interpolation_ratio;
     }
     return new ceres::AutoDiffCostFunction<
