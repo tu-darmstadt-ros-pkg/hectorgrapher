@@ -68,7 +68,7 @@ TRAJECTORY_BUILDER_3D = {
     low_resolution = 0.45,
     num_range_data = 160,
     grid_type = "PROBABILITY_GRID",
-    range_data_inserter = {
+    high_resolution_range_data_inserter = {
       range_data_inserter_type = "PROBABILITY_GRID_INSERTER_3D",
       probability_grid_range_data_inserter = {
         hit_probability = 0.55,
@@ -86,6 +86,25 @@ TRAJECTORY_BUILDER_3D = {
         normal_estimate_radius = 0.4,
         normal_computation_method = "CLOUD_STRUCTURE",
       },
+    },
+    low_resolution_range_data_inserter = {
+        range_data_inserter_type = "PROBABILITY_GRID_INSERTER_3D",
+        probability_grid_range_data_inserter = {
+            hit_probability = 0.55,
+            miss_probability = 0.49,
+            num_free_space_voxels = 2,
+        },
+        tsdf_range_data_inserter = {
+            relative_truncation_distance = 2.5,
+            maximum_weight = 1000.,
+            num_free_space_voxels = 0,
+            project_sdf_distance_to_scan_normal = false,
+            weight_function_epsilon = 1.0,
+            weight_function_sigma = 4.,
+            normal_estimate_max_nn = 30.,
+            normal_estimate_radius = 0.4,
+            normal_computation_method = "CLOUD_STRUCTURE",
+        },
     },
   },
   optimizing_local_trajectory_builder = {
