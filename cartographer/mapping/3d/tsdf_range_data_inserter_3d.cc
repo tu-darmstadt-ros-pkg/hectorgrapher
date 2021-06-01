@@ -511,7 +511,6 @@ void TSDFRangeDataInserter3D::Insert(const sensor::RangeData& range_data,
       break;
     }
     case proto::TSDFRangeDataInserterOptions3D::CLOUD_STRUCTURE: {
-      size_t NUM_POINTS_PER_LINE = 16;
       for (size_t relative_point_idx = 0;
            relative_point_idx < range_data.returns.size();
            ++relative_point_idx) {
@@ -519,11 +518,10 @@ void TSDFRangeDataInserter3D::Insert(const sensor::RangeData& range_data,
         if (range_data.returns[point_idx].position.hasNaN()) continue;
         size_t i0 = point_idx;
         size_t horizontal_stride = 1;
-        size_t vertical_stride = 5 * NUM_POINTS_PER_LINE;
-        size_t i1 =
-            relative_point_idx + horizontal_stride >= NUM_POINTS_PER_LINE
-                ? point_idx - horizontal_stride
-                : point_idx + horizontal_stride;
+        size_t vertical_stride = 5 * range_data.width;
+        size_t i1 = relative_point_idx + horizontal_stride >= range_data.width
+                        ? point_idx - horizontal_stride
+                        : point_idx + horizontal_stride;
         size_t i2 =
             relative_point_idx + vertical_stride >= range_data.returns.size()
                 ? point_idx - vertical_stride
@@ -617,7 +615,9 @@ void TSDFRangeDataInserter3D::Insert(const sensor::RangeData& range_data,
   } else {
     for (const sensor::RangefinderPoint& hit_point : range_data.returns) {
       const Eigen::Vector3f hit = hit_point.position.head<3>();
-      InsertHit(hit, origin, tsdf);
+      if (!hit.hasNaN()) {
+        InsertHit(hit, origin, tsdf);
+      }
     }
   }
   tsdf->FinishUpdate();

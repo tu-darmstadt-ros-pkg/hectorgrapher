@@ -41,7 +41,7 @@ struct PixelData {
 // information.
 sensor::RangeData FilterRangeDataByMaxRange(const sensor::RangeData& range_data,
                                             const float max_range) {
-  sensor::RangeData result{range_data.origin, {}, {}};
+  sensor::RangeData result{range_data.origin, {}, {}, range_data.width};
   if(max_range == 0.f) {
     result.returns = range_data.returns;
     return result;
@@ -60,7 +60,8 @@ sensor::RangeData FilterRangeDataByMaxRange(const sensor::RangeData& range_data,
 // structure is preserved. Removes misses and reflectivity information.
 sensor::RangeData FilterStructuredRangeDataByMaxRange(
     const sensor::RangeData& range_data, const float max_range) {
-  sensor::RangeData result{range_data.origin, range_data.returns, {}};
+  sensor::RangeData result{
+      range_data.origin, range_data.returns, {}, range_data.width};
   if (max_range == 0.f) {
     result.returns = range_data.returns;
     return result;
