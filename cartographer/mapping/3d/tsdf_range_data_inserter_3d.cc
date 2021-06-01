@@ -69,6 +69,10 @@ proto::TSDFRangeDataInserterOptions3D CreateTSDFRangeDataInserterOptions3D(
         << "Unknown TSDFRangeDataInserterOptions3D::NormalComputationMethod: "
         << normal_computation_method_string;
     options.set_normal_computation_method(normal_computation_method);
+    options.set_min_range(parameter_dictionary->GetDouble("min_range"));
+    options.set_max_range(parameter_dictionary->GetDouble("max_range"));
+    options.set_insertion_ratio(
+        parameter_dictionary->GetDouble("insertion_ratio"));
     return options;
 }
 
@@ -511,26 +515,37 @@ void TSDFRangeDataInserter3D::Insert(const sensor::RangeData& range_data,
       break;
     }
     case proto::TSDFRangeDataInserterOptions3D::CLOUD_STRUCTURE: {
-      for (size_t relative_point_idx = 0;
-           relative_point_idx < range_data.returns.size();
-           ++relative_point_idx) {
-        size_t point_idx = relative_point_idx;
+      size_t num_inserted_points = 0;
+      size_t num_omitted_points = 0;
+      for (size_t point_idx = 0; point_idx < range_data.returns.size();
+           ++point_idx) {
+        if (double(num_inserted_points) <=
+            options_.tsdf_range_data_inserter_options_3d().insertion_ratio() *
+                double(num_inserted_points + num_omitted_points)) {
+          num_inserted_points++;
+        } else {
+          num_omitted_points++;
+          continue;
+        }
+
+        Eigen::Vector3f p0 = range_data.returns[point_idx].position;
         if (range_data.returns[point_idx].position.hasNaN()) continue;
-        size_t i0 = point_idx;
-        size_t horizontal_stride = 1;
-        size_t vertical_stride = 5 * range_data.width;
-        size_t i1 = relative_point_idx + horizontal_stride >= range_data.width
+        float r0 = p0.norm();
+        if (r0 < options_.tsdf_range_data_inserter_options_3d().min_range())
+          continue;
+        if (r0 > options_.tsdf_range_data_inserter_options_3d().max_range())
+          continue;
+        size_t vertical_stride = 1;
+        size_t horizontal_stride = 5 * range_data.width;
+        size_t i1 = point_idx + vertical_stride >= range_data.width
+                        ? point_idx - vertical_stride
+                        : point_idx + vertical_stride;
+        size_t i2 = point_idx + horizontal_stride >= range_data.returns.size()
                         ? point_idx - horizontal_stride
                         : point_idx + horizontal_stride;
-        size_t i2 =
-            relative_point_idx + vertical_stride >= range_data.returns.size()
-                ? point_idx - vertical_stride
-                : point_idx + vertical_stride;
-        Eigen::Vector3f p0 = range_data.returns[i0].position;
         Eigen::Vector3f p1 = range_data.returns[i1].position;
         Eigen::Vector3f p2 = range_data.returns[i2].position;
         if (p1.hasNaN() || p2.hasNaN()) continue;
-        float r0 = p0.norm();
         float r1 = p1.norm();
         float r2 = p2.norm();
         float max_range_delta = 1.f * tsdf->resolution() / 0.05f;
