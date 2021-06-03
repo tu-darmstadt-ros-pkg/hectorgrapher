@@ -88,6 +88,8 @@ TRAJECTORY_BUILDER_3D = {
         min_range = 0.4,
         max_range = 15.0,
         insertion_ratio = 1.0,
+        normal_computation_horizontal_stride = 5,
+        normal_computation_vertical_stride = 1,
       },
     },
     low_resolution_range_data_inserter = {
@@ -110,6 +112,8 @@ TRAJECTORY_BUILDER_3D = {
             min_range = 1.0,
             max_range = 60.0,
             insertion_ratio = 0.1,
+            normal_computation_horizontal_stride = 20,
+            normal_computation_vertical_stride = 4,
         },
     },
   },
