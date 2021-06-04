@@ -6,7 +6,7 @@ options = {
     pointcloudPath = "/Downloads/Halle-DRZ-Modell-innen-Flug1-2020-12-09.ply",
 
     uniformDownSample = true,
-    sampleRateUniformDownSample = 1,
+    sampleRateUniformDownSample = 100,
 
     voxelDownSample = true,
     voxelSizeVoxelDownSample = 0.1,
@@ -20,11 +20,11 @@ options = {
 
     normalOrientationNearestNeighbours = 40,
 
-    imageSliceIndex = -55,
-
     absoluteVoxelSize = 0.1,
     absoluteTruncationDistance = 0.5,
     maxTSDFWeight = 10.0,
+
+    imageSliceIndex = -55,
 
 
 

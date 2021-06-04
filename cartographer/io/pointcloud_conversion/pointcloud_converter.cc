@@ -46,6 +46,7 @@ namespace cartographer {
         class TSDFBuilder {
 
             cartographer::common::LuaParameterDictionary *luaParameterDictionary;
+            std::string configuration_name;
 
             /**
              * Generate a point cloud in shape of a cube and convert it into a shared pointer of an open3d point cloud.
@@ -171,6 +172,7 @@ namespace cartographer {
                 auto file_resolver =
                         absl::make_unique<cartographer::common::ConfigurationFileResolver>(
                                 std::vector<std::string>{config_directory});
+                configuration_name = config_filename;
                 const std::string code = file_resolver->GetFileContentOrDie(config_filename);
                 luaParameterDictionary = new cartographer::common::LuaParameterDictionary(code,
                                                                                           std::move(file_resolver));
@@ -192,7 +194,8 @@ namespace cartographer {
                             (float) luaParameterDictionary->GetDouble("noiseCubicPointcloud"));
                 } else {
                     // Read and show the input from the .ply-file.
-                    std::string point_cloud_filename = path_to_home + luaParameterDictionary->GetString("pointcloudPath");
+                    std::string point_cloud_filename =
+                            path_to_home + luaParameterDictionary->GetString("pointcloudPath");
                     open3d::io::ReadPointCloud(point_cloud_filename, *myPointCloudPointer, {"auto", true, true, true});
                     std::cout << "Loaded point cloud with " << myPointCloudPointer->points_.size() << " points."
                               << std::endl;
@@ -265,7 +268,7 @@ namespace cartographer {
                 std::shared_ptr<open3d::geometry::VoxelGrid> pclVoxelGridPointer =
                         open3d::geometry::VoxelGrid::CreateFromPointCloud(*myPointCloudPointer, gridVoxelSideLength);
 
-   //             myTSDFDrawer.drawTSDF(pclVoxelGridPointer);
+                //             myTSDFDrawer.drawTSDF(pclVoxelGridPointer);
 
 
 
@@ -294,30 +297,32 @@ namespace cartographer {
                 }
 
 
-               // std::cout << "Press the left/right keys to slice through the voxel grid!" << std::endl;
-               // std::cout << "Press the key >o< to change the slicing orientation." << std::endl;
+                // std::cout << "Press the left/right keys to slice through the voxel grid!" << std::endl;
+                // std::cout << "Press the key >o< to change the slicing orientation." << std::endl;
 
                 // Show the VoxelGrid of the TSDF
                 std::shared_ptr<open3d::geometry::VoxelGrid> tsdfVoxelGridPointer = convertHybridGridToVoxelGrid(
                         &myHybridGridTSDF, gridVoxelSideLength, absoluteTruncationDistance);
-              //  myTSDFDrawer.drawTSDF(tsdfVoxelGridPointer);
+                //  myTSDFDrawer.drawTSDF(tsdfVoxelGridPointer);
 
 
 // #################################################################################################################
                 // Save some slices as png
-
-                // Tipp: Choose a number between -14 and 9
                 for (int i = 0; i < 6; i++) {
-                    myTSDFDrawer.saveSliceAsPNG((int) luaParameterDictionary->GetInt("imageSliceIndex")+3*i, (path_to_home +
-                                                                                                          "/hector/src/cartographer/cartographer/io/pointcloud_conversion/images/testimage" + std::to_string(i) +
-                                                                                                          ".png").c_str(),
+                    std::string imgfilename = path_to_home +
+                                              "/hector/src/cartographer/cartographer/io/pointcloud_conversion/images/"
+                                              + configuration_name + "_img" + std::to_string(i) + ".png";
+
+                    myTSDFDrawer.saveSliceAsPNG(luaParameterDictionary->GetInt("imageSliceIndex") + 3 * i,
+                                                imgfilename.c_str(),
                                                 tsdfVoxelGridPointer);
                 }
 
 // #################################################################################################################
                 // Build a ProtoBuffer
                 cartographer::io::ProtoStreamWriter writer(
-                        path_to_home + "/hector/src/cartographer/cartographer/io/pointcloud_conversion/ProtoBuffers/TSDFProtoBufferTest.pbstream");
+                        path_to_home +
+                        "/hector/src/cartographer/cartographer/io/pointcloud_conversion/ProtoBuffers/TSDFProtoBufferTest.pbstream");
 
                 // Das kann bald weg hoffentlich v
 //                mapping::proto::SerializationHeader myHeader = cartographer::io::CreateHeader();
@@ -334,7 +339,8 @@ namespace cartographer {
 
                 auto file_resolver =
                         absl::make_unique<cartographer::common::ConfigurationFileResolver>(
-                                std::vector<std::string>{path_to_home + "/hector/src/cartographer/configuration_files"});
+                                std::vector<std::string>{
+                                        path_to_home + "/hector/src/cartographer/configuration_files"});
                 cartographer::common::LuaParameterDictionary poseGraphDict(kMapBuilderLua, std::move(file_resolver));
 
                 cartographer::mapping::proto::MapBuilderOptions options;
