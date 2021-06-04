@@ -9,12 +9,12 @@ voxelDownSample: true
 voxelSizeVoxelDownSample: [0.05, 0.1] # 0.5x - 1x so große Voxel wie absoluteVoxelSize
 
 removeRadiusOutliers: true
-sphereSizeRadiusOutliers: [0.5, 1.0] # 2x - 10x wie voxelSizeDownSample
-neighborsInSphereRadiusOutlier: [5, 10]
+sphereSizeRadiusOutliers: [0.3] # 2x - 10x wie voxelSizeDownSample
+neighborsInSphereRadiusOutlier: [1, 2]
 
 cutRoofZAxis: false
 
-normalOrientationNearestNeighbours: [5, 10, 50, 100, 300]
+normalOrientationNearestNeighbours: [5, 10, 50, 100]
 
 absoluteVoxelSize: 0.1
 absoluteTruncationDistance: [0.3]
