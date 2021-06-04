@@ -36,8 +36,7 @@ for key in param_dict:
 
 open("overview.txt", "w")
 
-# for i in range(len(current_luas)):
-for i in range(2):
+for i in range(len(current_luas)):
     luafile = open("test" + str(i+1).zfill(3) + ".lua", "w")
     luafile.write("options = {\n")
     luafile.write(current_luas[i])
