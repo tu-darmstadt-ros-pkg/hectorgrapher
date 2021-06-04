@@ -45,7 +45,7 @@ for i in range(2):
     luafile.close()
 
     start = time.time()
-    os.system('/home/leo/hector/devel/bin/cartographer_pointcloud_converter -config_file "test' + str(i+1).zfill(3) + '.lua"')
+    os.system('$HOME/hector/devel/bin/cartographer_pointcloud_converter -config_file "test' + str(i+1).zfill(3) + '.lua"')
     end = time.time()
 
     overview = open("overview.txt", "a")
