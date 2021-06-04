@@ -7,7 +7,9 @@
 #include "cairo/cairo.h"
 
 #ifdef WITH_OPEN3D
+
 #include "open3d/Open3D.h"
+
 #endif
 
 #ifdef WITH_OPEN3D
@@ -20,7 +22,8 @@ namespace cartographer {
 
             void drawTSDF(const std::shared_ptr<open3d::geometry::VoxelGrid> &voxelGridPointer);
 
-            void saveSliceAsPNG(const int imageSliceIndex, const char* filename,const std::shared_ptr<open3d::geometry::VoxelGrid> &voxelGridPointerSlice);
+            void saveSliceAsPNG(const int imageSliceIndex, const int imageSliceOrientation, const char *filename,
+                                const std::shared_ptr<open3d::geometry::VoxelGrid> &voxelGridPointerSlice);
 
         private:
             std::shared_ptr<open3d::geometry::VoxelGrid> tsdfPointer;

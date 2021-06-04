@@ -142,7 +142,9 @@ namespace cartographer {
              * @param imageSliceIndex index of the slice to be drawn
              * @param filename where to save the PNG image
              */
-        void TSDFDrawer::saveSliceAsPNG(const int imageSliceIndex, const char* filename ,const std::shared_ptr<open3d::geometry::VoxelGrid> &voxelGridPointerSlice) {
+        void
+        TSDFDrawer::saveSliceAsPNG(const int imageSliceIndex, const int imageSliceOrientation, const char *filename,
+                                   const std::shared_ptr<open3d::geometry::VoxelGrid> &voxelGridPointerSlice) {
             // Build slice from full TSDF
             tsdfPointer = voxelGridPointerSlice;
 
@@ -152,38 +154,69 @@ namespace cartographer {
             slicedVoxelGridPointer->voxel_size_ = tsdfPointer->voxel_size_;
             slicedVoxelGridPointer->origin_ = tsdfPointer->origin_;
 
-                for (open3d::geometry::Voxel nextVoxel : tsdfPointer->GetVoxels()) {
-                    if (nextVoxel.grid_index_(2) == imageSliceIndex) {
-                        slicedVoxelGridPointer->AddVoxel(nextVoxel);
-                    }
+            for (open3d::geometry::Voxel nextVoxel : tsdfPointer->GetVoxels()) {
+                if (nextVoxel.grid_index_(imageSliceOrientation) == imageSliceIndex) {
+                    slicedVoxelGridPointer->AddVoxel(nextVoxel);
+                }
+            }
+
+            // Initialize image as cairo surface. It has to be big enough for all voxels in the slice.
+            Eigen::Vector3i maxIndices = slicedVoxelGridPointer->GetVoxel(slicedVoxelGridPointer->GetMaxBound());
+            Eigen::Vector3i minIndices = slicedVoxelGridPointer->GetVoxel(slicedVoxelGridPointer->GetMinBound());
+            int imageWidth;
+            int imageHeight;
+            switch (imageSliceOrientation) {
+                case 0:
+                    imageWidth = (maxIndices - minIndices).y();
+                    imageHeight = (maxIndices - minIndices).z();
+                    break;
+                case 1:
+                    imageWidth = (maxIndices - minIndices).x();
+                    imageHeight = (maxIndices - minIndices).z();
+                    break;
+                case 2:
+                    imageWidth = (maxIndices - minIndices).x();
+                    imageHeight = (maxIndices - minIndices).y();
+                    break;
+                default:
+                    return;
+            }
+
+
+            cairo_surface_t *surface;
+            surface = cairo_image_surface_create(CAIRO_FORMAT_RGB24, 10 * imageWidth, 10 * imageHeight);
+            cairo_t *cr;
+            cr = cairo_create(surface);
+
+            // Draw background white
+            cairo_rectangle(cr, 0.0, 0.0, 10.0 * imageWidth, 10.0 * imageHeight);
+            cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+            cairo_fill(cr);
+
+            // Draw all voxels as rectangles
+            for (open3d::geometry::Voxel nextVoxel : slicedVoxelGridPointer->GetVoxels()) {
+                double xVoxel = 0.0;
+                double yVoxel = 0.0;
+                switch(imageSliceOrientation) {
+                    case 0:
+                        xVoxel = (nextVoxel.grid_index_ - minIndices).y();
+                        yVoxel = (nextVoxel.grid_index_ - minIndices).z();
+                        break;
+                    case 1:
+                        xVoxel = (nextVoxel.grid_index_ - minIndices).x();
+                        yVoxel = (nextVoxel.grid_index_ - minIndices).z();
+                        break;
+                    case 2:
+                        xVoxel = (nextVoxel.grid_index_ - minIndices).x();
+                        yVoxel = (nextVoxel.grid_index_ - minIndices).y();
+                        break;
                 }
 
-                // Initialize image as cairo surface. It has to be big enough for all voxels in the slice.
-                Eigen::Vector3i maxIndices = slicedVoxelGridPointer->GetVoxel(slicedVoxelGridPointer->GetMaxBound());
-                Eigen::Vector3i minIndices = slicedVoxelGridPointer->GetVoxel(slicedVoxelGridPointer->GetMinBound());
-                int imageWidth = (maxIndices - minIndices).x();
-                int imageHeight = (maxIndices - minIndices).y();
-
-                cairo_surface_t *surface;
-                surface = cairo_image_surface_create(CAIRO_FORMAT_RGB24, 10 * imageWidth, 10 * imageHeight);
-                cairo_t *cr;
-                cr = cairo_create(surface);
-
-                // Draw background white
-                cairo_rectangle(cr, 0.0, 0.0, 10.0 * imageWidth, 10.0 * imageHeight);
-                cairo_set_source_rgb(cr, 1.0, 1.0, 1.0);
+                cairo_rectangle(cr, 10 * xVoxel, 10 * yVoxel, 10.0, 10.0);
+                cairo_set_source_rgb(cr, nextVoxel.color_.x(), nextVoxel.color_.y(), nextVoxel.color_.z());
                 cairo_fill(cr);
-
-                // Draw all voxels as rectangles
-                for (open3d::geometry::Voxel nextVoxel : slicedVoxelGridPointer->GetVoxels()) {
-                    double xVoxel = (nextVoxel.grid_index_ - minIndices).x();
-                    double yVoxel = (nextVoxel.grid_index_ - minIndices).y();
-
-                    cairo_rectangle(cr, 10 * xVoxel, 10 * yVoxel, 10.0, 10.0);
-                    cairo_set_source_rgb(cr, nextVoxel.color_.x(), nextVoxel.color_.y(), nextVoxel.color_.z());
-                    cairo_fill(cr);
-                }
-                cairo_surface_write_to_png(surface, filename);
+            }
+            cairo_surface_write_to_png(surface, filename);
 
         }
     }  // namespace mapping

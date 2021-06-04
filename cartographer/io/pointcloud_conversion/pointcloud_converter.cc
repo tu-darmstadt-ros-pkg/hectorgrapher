@@ -307,15 +307,29 @@ namespace cartographer {
 
 // #################################################################################################################
                 // Save some slices as png
-                for (int i = 0; i < 6; i++) {
-                    std::string imgfilename = path_to_home +
-                                              "/hector/src/cartographer/cartographer/io/pointcloud_conversion/images/"
-                                              + configuration_name + "_img" + std::to_string(i) + ".png";
+                std::string imgfilename;
+                imgfilename = path_to_home +
+                                          "/hector/src/cartographer/cartographer/io/pointcloud_conversion/images/"
+                                          + configuration_name + "_img_x.png";
+                myTSDFDrawer.saveSliceAsPNG(0, 0, imgfilename.c_str(), tsdfVoxelGridPointer);
 
-                    myTSDFDrawer.saveSliceAsPNG(luaParameterDictionary->GetInt("imageSliceIndex") + 3 * i,
+                imgfilename = path_to_home +
+                                          "/hector/src/cartographer/cartographer/io/pointcloud_conversion/images/"
+                                          + configuration_name + "_img_y.png";
+                myTSDFDrawer.saveSliceAsPNG(0, 1, imgfilename.c_str(), tsdfVoxelGridPointer);
+
+                for (int i = 0; i < 6; i++) {
+                    imgfilename = path_to_home +
+                                              "/hector/src/cartographer/cartographer/io/pointcloud_conversion/images/"
+                                              + configuration_name + "_img_z" + std::to_string(i) + ".png";
+
+                    myTSDFDrawer.saveSliceAsPNG(luaParameterDictionary->GetInt("imageSliceIndex") + 3 * i, 2,
                                                 imgfilename.c_str(),
                                                 tsdfVoxelGridPointer);
                 }
+
+
+
 
 // #################################################################################################################
                 // Build a ProtoBuffer
