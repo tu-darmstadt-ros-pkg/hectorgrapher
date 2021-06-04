@@ -115,19 +115,19 @@ namespace cartographer {
                         newTSD = -newTSD;
                     }
 
-                    // Todo: Welche Methode macht mehr Sinn? Ist die eine schneller als die andere?
                     // Only change the voxel TSD, if the new absolute value is lower than the old one.
-                    if (!tsdf->IsKnown(update_cell_index) ||
-                        std::abs(tsdf->GetTSD(update_cell_index)) > std::abs(newTSD)) {
-//                        std::cout << update_cell_index << newTSD << std::endl;
-                        tsdf->SetCell(update_cell_index, newTSD, 0.0f);
-                    }
+//                    if (!tsdf->IsKnown(update_cell_index) ||
+//                        std::abs(tsdf->GetTSD(update_cell_index)) > std::abs(newTSD)) {
+//                        tsdf->SetCell(update_cell_index, newTSD, 0.0f);
+//                    }
 
                     // Combine the new and old TSD by calculating the weighted average.
-//                    float updatedWeight = 1.0f + tsdf->GetWeight(update_cell_index);
-//                    float updatedTSD = (tsdf->GetTSD(update_cell_index) * tsdf->GetWeight(update_cell_index)
-//                            + newTSD * 1.0f) / updatedWeight;
-//                    tsdf->SetCell(update_cell_index, updatedTSD, updatedWeight);
+                    float updatedWeight = 1.0f + tsdf->GetWeight(update_cell_index);
+                    float updatedTSD = (tsdf->GetTSD(update_cell_index) * tsdf->GetWeight(update_cell_index)
+                            + newTSD * 1.0f) / updatedWeight;
+                    tsdf->SetCell(update_cell_index, updatedTSD, updatedWeight);
+
+                    // Todo: maxWeight wird nicht benutzt - noch rein machen
                 }
             }
 
@@ -151,7 +151,6 @@ namespace cartographer {
                 for (std::pair<Eigen::Array<int, 3, 1>, TSDFVoxel> nextVoxel : *hybridGrid) {
                     Eigen::Vector3i cellIndex = nextVoxel.first;
 
-                    // Todo: Bessere, allgemeinere Farbcodierung, abhängig von der truncation distance anstatt "* 100"
                     Eigen::Vector3d color;
                     if (hybridGrid->GetTSD(cellIndex) > 0) {
                         color = {0.0, 0.0, hybridGrid->GetTSD(cellIndex) / maxTSD};
@@ -279,7 +278,7 @@ namespace cartographer {
                 float absoluteTruncationDistance =
                         (float) luaParameterDictionary->GetDouble("absoluteTruncationDistance");
                 float maxWeight = (float) luaParameterDictionary->GetDouble(
-                        "maxTSDFWeight");  // Todo: Was sollte das maximale Gewicht sein?
+                        "maxTSDFWeight");
                 float relativeTruncationDistance = absoluteTruncationDistance / gridVoxelSideLength;
 
                 cartographer::mapping::ValueConversionTables myValueConversionTable;
