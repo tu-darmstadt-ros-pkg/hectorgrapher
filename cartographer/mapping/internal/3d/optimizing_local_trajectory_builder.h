@@ -101,6 +101,7 @@ class OptimizingLocalTrajectoryBuilder {
     sensor::TimedPointCloud high_resolution_filtered_points;
     sensor::TimedPointCloud low_resolution_filtered_points;
     sensor::TimedPointCloud original_cloud;
+    size_t width;
 
     common::Time StartTime() {
       CHECK(!original_cloud.empty());

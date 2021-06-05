@@ -35,6 +35,7 @@ struct TimedRangeData {
   Eigen::Vector3f origin;
   TimedPointCloud returns;
   TimedPointCloud misses;
+  size_t width;
 };
 
 // Rays begin at 'origin'. 'returns' are the points where obstructions were
@@ -45,9 +46,12 @@ struct RangeData {
   Eigen::Vector3f origin;
   PointCloud returns;
   PointCloud misses;
+  size_t width;
   RangeData();
   RangeData(const Eigen::Vector3f& origin, const PointCloud& returns,
             const PointCloud& misses);
+  RangeData(const Eigen::Vector3f& origin, const PointCloud& returns,
+            const PointCloud& misses, size_t width);
 
   RangeData(const TimedRangeData& timed_range_data);
 };

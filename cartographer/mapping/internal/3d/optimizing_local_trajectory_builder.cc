@@ -219,6 +219,7 @@ OptimizingLocalTrajectoryBuilder::AddRangeData(
   point_cloud_set.time = range_data_in_tracking.time;
   point_cloud_set.origin = range_data_in_tracking.origin;
   point_cloud_set.original_cloud = range_data_in_tracking.ranges;
+  point_cloud_set.width = range_data_in_tracking.width;
   for (const auto& hit : range_data_in_tracking.ranges) {
     if (hit.position.hasNaN()) continue;
     const Eigen::Vector3f delta = hit.position - range_data_in_tracking.origin;
@@ -1220,7 +1221,7 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
   const common::Time time_optimized_pose = control_points_.front().time;
   extrapolator_->AddPose(control_points_.front().time, optimized_pose);
   sensor::TimedRangeData accumulated_range_data_in_tracking = {
-      Eigen::Vector3f::Zero(), {}, {}};
+      Eigen::Vector3f::Zero(), {}, {}, point_cloud_data_.front().width};
 
   if (active_submaps_.submaps().empty()) {
     // To initialize the empty map we add all available range data assuming
