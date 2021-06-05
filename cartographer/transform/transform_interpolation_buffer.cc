@@ -92,6 +92,7 @@ common::Time TransformInterpolationBuffer::LookupUntilDelta(
         delta_pose.rotation().angularDistance(Eigen::Quaterniond::Identity()));
     double delta_time =
         std::abs(common::ToSeconds(candidate->time - start_time));
+    ++candidate;
     if (translation_distance > max_translation ||
         rotation_distance > max_rotation || delta_time > max_duration) {
       //      LOG(INFO) << "dT " << translation_distance << "\t" <<
@@ -101,13 +102,16 @@ common::Time TransformInterpolationBuffer::LookupUntilDelta(
       //      LOG(INFO) << "dT " << int(translation_distance > max_translation)
       //                << "\t dr " << int(rotation_distance > max_rotation)
       //                << "\t dt " << int(delta_time > max_duration);
-      LOG(INFO) << std::fixed << std::setprecision(2) << "dT "
-                << (translation_distance / max_translation) << "\t dr "
-                << (rotation_distance / max_rotation) << "\t dt "
-                << (delta_time / max_duration);
+
+      if (translation_distance > max_translation ||
+          rotation_distance > max_rotation) {
+        LOG_EVERY_N(INFO, 5) << std::fixed << std::setprecision(2) << "dT "
+                             << (translation_distance / max_translation)
+                             << "\t dr " << (rotation_distance / max_rotation)
+                             << "\t dt " << (delta_time / max_duration);
+      }
       break;
     }
-    ++candidate;
   }
   return candidate->time;
 }

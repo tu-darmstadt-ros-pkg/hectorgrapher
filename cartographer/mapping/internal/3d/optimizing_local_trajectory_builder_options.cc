@@ -81,6 +81,15 @@ CreateOptimizingLocalTrajectoryBuilderOptions(
       << control_point_sampling_string;
   options.set_control_point_sampling(control_point_sampling_type);
 
+  options.set_sampling_max_delta_translation(
+      parameter_dictionary->GetDouble("sampling_max_delta_translation"));
+  options.set_sampling_max_delta_rotation(
+      parameter_dictionary->GetDouble("sampling_max_delta_rotation"));
+  options.set_sampling_min_delta_time(
+      parameter_dictionary->GetDouble("sampling_min_delta_time"));
+  options.set_sampling_max_delta_time(
+      parameter_dictionary->GetDouble("sampling_max_delta_time"));
+
   return options;
 }
 

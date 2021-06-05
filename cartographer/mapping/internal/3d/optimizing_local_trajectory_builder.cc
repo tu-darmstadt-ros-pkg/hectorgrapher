@@ -1123,9 +1123,18 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
     }
     case proto::ADAPTIVE: {
       if (odometer_data_.size() > 1) {
-        double max_delta_translation = 0.15;
-        double max_delta_rotation = common::DegToRad(3.0);
-        double max_delta_time = 0.4;
+        const double max_delta_translation =
+            options_.optimizing_local_trajectory_builder_options()
+                .sampling_max_delta_translation();
+        const double max_delta_rotation =
+            options_.optimizing_local_trajectory_builder_options()
+                .sampling_max_delta_rotation();
+        const double max_delta_time =
+            options_.optimizing_local_trajectory_builder_options()
+                .sampling_max_delta_time();
+        const double min_delta_time =
+            options_.optimizing_local_trajectory_builder_options()
+                .sampling_min_delta_time();
 
         transform::TransformInterpolationBuffer interpolation_buffer;
         for (const auto& odometer_data : odometer_data_) {
@@ -1139,6 +1148,12 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
           if (candidate_time < interpolation_buffer.latest_time()) {
             //            LOG(INFO) <<"Add CP "<<
             //            common::ToSeconds(candidate_time-initial_data_time_);
+            if (common::ToSeconds(candidate_time -
+                                  control_points_.back().time) <
+                min_delta_time) {
+              candidate_time = control_points_.back().time +
+                               common::FromSeconds(min_delta_time);
+            }
             AddControlPoint(candidate_time);
           }
         }
@@ -1216,7 +1231,10 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
         while (control_points_iterator->time <= point_cloud_set.time) {
           ++control_points_iterator;
         }
-        CHECK(control_points_iterator != control_points_.begin());
+        CHECK(control_points_iterator != control_points_.begin())
+            << "Delta "
+            << common::ToSeconds(point_cloud_set.time -
+                                 control_points_iterator->time);
         CHECK(control_points_iterator != control_points_.end());
         auto transform_cloud = InterpolateTransform(
             std::prev(control_points_iterator)->state.ToRigid(),

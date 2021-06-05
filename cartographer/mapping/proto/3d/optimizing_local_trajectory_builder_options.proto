@@ -54,4 +54,8 @@ message OptimizingLocalTrajectoryBuilderOptions {
   bool use_multi_resolution_matching = 24;
   int32 num_points_per_subdivision = 25;
   ControlPointSampling control_point_sampling = 26;
+  double sampling_max_delta_translation = 27;
+  double sampling_max_delta_rotation = 28;
+  double sampling_min_delta_time = 29;
+  double sampling_max_delta_time = 30;
 }
