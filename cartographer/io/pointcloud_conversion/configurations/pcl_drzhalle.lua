@@ -13,7 +13,7 @@ options = {
 
     removeRadiusOutliers = true,
     sphereSizeRadiusOutliers = 0.3,
-    neighborsInSphereRadiusOutlier = 5,
+    neighborsInSphereRadiusOutlier = 2,
 
     cutRoofZAxis = false,
     cutoffSize = 3.0,

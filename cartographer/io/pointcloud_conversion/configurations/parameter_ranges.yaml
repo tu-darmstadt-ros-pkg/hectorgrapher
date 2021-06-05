@@ -10,7 +10,7 @@ voxelSizeVoxelDownSample: [0.05, 0.1] # 0.5x - 1x so große Voxel wie absoluteVo
 
 removeRadiusOutliers: true
 sphereSizeRadiusOutliers: [0.3] # 2x - 10x wie voxelSizeDownSample
-neighborsInSphereRadiusOutlier: [1, 2]
+neighborsInSphereRadiusOutlier: [1, 5]
 
 cutRoofZAxis: false
 

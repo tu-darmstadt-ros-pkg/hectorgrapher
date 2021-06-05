@@ -217,7 +217,7 @@ namespace cartographer {
                 if (luaParameterDictionary->GetBool("removeRadiusOutliers")) {
                     myPointCloudPointer = std::get<0>(myPointCloudPointer->RemoveRadiusOutliers(
                             luaParameterDictionary->GetInt("neighborsInSphereRadiusOutlier"),
-                            luaParameterDictionary->GetDouble("neighborsInSphereRadiusOutlier")));
+                            luaParameterDictionary->GetDouble("sphereSizeRadiusOutliers")));
                     std::cout << "Removed outliers to " << myPointCloudPointer->points_.size() << " points."
                               << std::endl;
                 }
