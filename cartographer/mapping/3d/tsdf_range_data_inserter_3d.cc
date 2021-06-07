@@ -540,12 +540,17 @@ void TSDFRangeDataInserter3D::Insert(const sensor::RangeData& range_data,
         }
 
         Eigen::Vector3f p0 = range_data.returns[point_idx].position;
-        if (range_data.returns[point_idx].position.hasNaN()) continue;
+        if (range_data.returns[point_idx].position.hasNaN()) {
+          continue;
+        }
         float r0 = (p0 - origin).norm();
-        if (r0 < options_.tsdf_range_data_inserter_options_3d().min_range())
+        if (r0 < options_.tsdf_range_data_inserter_options_3d().min_range()) {
           continue;
-        if (r0 > options_.tsdf_range_data_inserter_options_3d().max_range())
+        }
+
+        if (r0 > options_.tsdf_range_data_inserter_options_3d().max_range()) {
           continue;
+        }
         size_t i1 = point_idx + vertical_stride >= range_data.width
                         ? point_idx - vertical_stride
                         : point_idx + vertical_stride;
@@ -554,7 +559,9 @@ void TSDFRangeDataInserter3D::Insert(const sensor::RangeData& range_data,
                         : point_idx + horizontal_stride;
         Eigen::Vector3f p1 = range_data.returns[i1].position;
         Eigen::Vector3f p2 = range_data.returns[i2].position;
-        if (p1.hasNaN() || p2.hasNaN()) continue;
+        if (p1.hasNaN() || p2.hasNaN()) {
+          continue;
+        }
         float r1 = (p1 - origin).norm();
         float r2 = (p2 - origin).norm();
         float max_range_delta = 1.f * tsdf->resolution() / 0.05f;
