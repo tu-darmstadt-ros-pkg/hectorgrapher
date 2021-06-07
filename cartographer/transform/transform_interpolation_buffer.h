@@ -47,7 +47,10 @@ class TransformInterpolationBuffer {
   // Returns the timestamp when either max_translation, max_rotation,
   // max_duration is reached with respect to the pose at start_time.
   common::Time LookupUntilDelta(common::Time start_time, double max_translation,
-                                double max_rotation, double max_duration) const;
+                                double max_rotation, double max_duration,
+                                double& translation_ratio,
+                                double& rotation_ratio,
+                                double& time_ratio) const;
 
   // Returns the timestamp of the earliest transform in the buffer or 0 if the
   // buffer is empty.

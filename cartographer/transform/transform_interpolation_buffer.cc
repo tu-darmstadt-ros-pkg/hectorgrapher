@@ -68,7 +68,8 @@ transform::Rigid3d TransformInterpolationBuffer::Lookup(
 
 common::Time TransformInterpolationBuffer::LookupUntilDelta(
     common::Time start_time, double max_translation, double max_rotation,
-    double max_duration) const {
+    double max_duration, double& translation_ratio, double& rotation_ratio,
+    double& time_ratio) const {
   CHECK(Has(start_time)) << "Missing transform for: " << start_time;
   auto candidate =
       std::lower_bound(timestamped_transforms_.begin(),
@@ -84,6 +85,7 @@ common::Time TransformInterpolationBuffer::LookupUntilDelta(
           ? start->transform
           : Interpolate(*start, *candidate, start_time).transform;
 
+  double target_ratio = 1.0;
   while (std::next(candidate) != timestamped_transforms_.end()) {
     const transform::Rigid3d delta_pose =
         start_transform.inverse() * std::next(candidate)->transform;
@@ -91,29 +93,34 @@ common::Time TransformInterpolationBuffer::LookupUntilDelta(
     double rotation_distance = std::abs(
         delta_pose.rotation().angularDistance(Eigen::Quaterniond::Identity()));
     double delta_time =
-        std::abs(common::ToSeconds(candidate->time - start_time));
+        std::abs(common::ToSeconds(std::next(candidate)->time - start_time));
     ++candidate;
-    if (translation_distance > max_translation ||
-        rotation_distance > max_rotation || delta_time > max_duration) {
-      //      LOG(INFO) << "dT " << translation_distance << "\t" <<
-      //      max_translation
-      //                << "\t dr " << rotation_distance << "\t" << max_rotation
-      //                << "\t dt " << delta_time << "\t" << max_duration;
-      //      LOG(INFO) << "dT " << int(translation_distance > max_translation)
-      //                << "\t dr " << int(rotation_distance > max_rotation)
-      //                << "\t dt " << int(delta_time > max_duration);
-
-      if (translation_distance > max_translation ||
-          rotation_distance > max_rotation) {
-        LOG_EVERY_N(INFO, 5) << std::fixed << std::setprecision(2) << "dT "
-                             << (translation_distance / max_translation)
-                             << "\t dr " << (rotation_distance / max_rotation)
-                             << "\t dt " << (delta_time / max_duration);
-      }
+    translation_ratio = translation_distance / max_translation;
+    rotation_ratio = rotation_distance / max_rotation;
+    time_ratio = delta_time / max_duration;
+    target_ratio =
+        std::max(translation_ratio, std::max(rotation_ratio, time_ratio));
+    if (target_ratio >= 1.0) {
+      //            LOG(INFO) <<"delta "<<delta_time/target_ratio<< "\t dT " <<
+      //            translation_ratio
+      //                      << "\t dr " << rotation_ratio
+      //                      << "\t dt " << time_ratio;
       break;
     }
   }
-  return candidate->time;
+  common::Duration delta_duration = candidate->time - start_time;
+  common::Duration corrected_delta =
+      target_ratio > 1.0
+          ? common::FromSeconds(
+                common::ToSeconds(candidate->time - start_time) / target_ratio)
+          : delta_duration;
+  if (target_ratio > 1.0) {
+    translation_ratio /= target_ratio;
+    rotation_ratio /= target_ratio;
+    time_ratio /= target_ratio;
+  }
+  //  LOG(INFO)<<"delta "<<common::ToSeconds(corrected_delta);
+  return start_time + corrected_delta;
 }
 
 common::Time TransformInterpolationBuffer::earliest_time() const {
