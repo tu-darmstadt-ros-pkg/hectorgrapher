@@ -1492,7 +1492,7 @@ State OptimizingLocalTrajectoryBuilder::PredictState(
     const State& start_state, const common::Time start_time,
     const common::Time end_time) {
   //return start_state;
-  bool predict_odom = true;
+  bool predict_odom = false;
   if (predict_odom) {
     return PredictStateOdom(start_state, start_time, end_time);
   }
