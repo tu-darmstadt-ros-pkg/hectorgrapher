@@ -144,10 +144,12 @@ void CeresScanMatcher3D::SetupProblem(
       }
       case GridType::TSDF: {
         problem->AddResidualBlock(
-            TSDFSpaceCostFunction3D::CreateAutoDiffCostFunction(
-                options_.occupied_space_weight(i) /
-                    std::sqrt(static_cast<double>(point_cloud.size())),
-                point_cloud, static_cast<const HybridGridTSDF&>(hybrid_grid)),
+            TSDFSpaceCostFunction3D<sensor::PointCloud>::
+                CreateAutoDiffCostFunction(
+                    options_.occupied_space_weight(i) /
+                        std::sqrt(static_cast<double>(point_cloud.size())),
+                    point_cloud,
+                    static_cast<const HybridGridTSDF&>(hybrid_grid)),
             nullptr /* loss function */, ceres_pose->translation(),
             ceres_pose->rotation());
         break;

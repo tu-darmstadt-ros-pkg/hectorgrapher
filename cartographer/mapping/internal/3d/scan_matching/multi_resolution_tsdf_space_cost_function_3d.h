@@ -14,12 +14,12 @@
  * limitations under the License.
  */
 
-#ifndef CARTOGRAPHER_MAPPING_INTERNAL_3D_SCAN_MATCHING_TSDF_SPACE_COST_FUNCTION_3D_H_
-#define CARTOGRAPHER_MAPPING_INTERNAL_3D_SCAN_MATCHING_TSDF_SPACE_COST_FUNCTION_3D_H_
+#ifndef CARTOGRAPHER_MAPPING_INTERNAL_3D_SCAN_MATCHING_TSDF_MULTI_RESOLUTION_SPACE_COST_FUNCTION_3D_H_
+#define CARTOGRAPHER_MAPPING_INTERNAL_3D_SCAN_MATCHING_TSDF_MULTI_RESOLUTION_SPACE_COST_FUNCTION_3D_H_
 
 #include "Eigen/Core"
 #include "cartographer/mapping/3d/hybrid_grid_tsdf.h"
-#include "cartographer/mapping/internal/3d/scan_matching/interpolated_tsdf.h"
+#include "cartographer/mapping/internal/3d/scan_matching/interpolated_multi_resolution_tsdf.h"
 #include "cartographer/sensor/point_cloud.h"
 #include "cartographer/transform/rigid_transform.h"
 #include "cartographer/transform/transform.h"
@@ -32,15 +32,16 @@ namespace scan_matching {
 // 'translation' and 'rotation'. The cost increases when points fall into less
 // occupied space, i.e. at voxels with lower values.
 template <typename PointCloudType>
-class TSDFSpaceCostFunction3D {
+class MultiResolutionTSDFSpaceCostFunction3D {
  public:
   static ceres::CostFunction* CreateAutoDiffCostFunction(
       const double scaling_factor, const PointCloudType& point_cloud,
-      const mapping::HybridGridTSDF& tsdf) {
+      const std::vector<const HybridGridTSDF*>& tsdf) {
     return new ceres::AutoDiffCostFunction<
-        TSDFSpaceCostFunction3D, ceres::DYNAMIC /* residuals */,
+        MultiResolutionTSDFSpaceCostFunction3D, ceres::DYNAMIC /* residuals */,
         3 /* translation variables */, 4 /* rotation variables */>(
-        new TSDFSpaceCostFunction3D(scaling_factor, point_cloud, tsdf),
+        new MultiResolutionTSDFSpaceCostFunction3D(scaling_factor, point_cloud,
+                                                   tsdf),
         point_cloud.size());
   }
 
@@ -55,15 +56,17 @@ class TSDFSpaceCostFunction3D {
   }
 
  private:
-  TSDFSpaceCostFunction3D(const double scaling_factor,
-                          const PointCloudType& point_cloud,
-                          const mapping::HybridGridTSDF& tsdf)
+  MultiResolutionTSDFSpaceCostFunction3D(
+      const double scaling_factor, const PointCloudType& point_cloud,
+      const std::vector<const HybridGridTSDF*>& tsdf)
       : scaling_factor_(scaling_factor),
         point_cloud_(point_cloud),
         interpolated_grid_(tsdf) {}
 
-  TSDFSpaceCostFunction3D(const TSDFSpaceCostFunction3D&) = delete;
-  TSDFSpaceCostFunction3D& operator=(const TSDFSpaceCostFunction3D&) = delete;
+  MultiResolutionTSDFSpaceCostFunction3D(
+      const MultiResolutionTSDFSpaceCostFunction3D&) = delete;
+  MultiResolutionTSDFSpaceCostFunction3D& operator=(
+      const MultiResolutionTSDFSpaceCostFunction3D&) = delete;
 
   template <typename T>
   bool Evaluate(const transform::Rigid3<T>& transform,
@@ -80,11 +83,11 @@ class TSDFSpaceCostFunction3D {
 
   const double scaling_factor_;
   const PointCloudType& point_cloud_;
-  const InterpolatedTSDF interpolated_grid_;
+  const InterpolatedMultiResolutionTSDF interpolated_grid_;
 };
 
 }  // namespace scan_matching
 }  // namespace mapping
 }  // namespace cartographer
 
-#endif  // CARTOGRAPHER_MAPPING_INTERNAL_3D_SCAN_MATCHING_TSDF_SPACE_COST_FUNCTION_3D_H_
+#endif  // tsdf->CARTOGRAPHER_MAPPING_INTERNAL_3D_SCAN_MATCHING_TSDF_MULTI_RESOLUTION_SPACE_COST_FUNCTION_3D_H_

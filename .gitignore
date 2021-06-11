@@ -2,6 +2,4 @@ build
 bazel-*
 .idea/
 
-cmake-build-release/abseil/src/abseil-build/
-cmake-build-release
-cmake-build-debug
+cmake-*

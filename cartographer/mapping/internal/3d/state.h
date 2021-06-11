@@ -25,10 +25,17 @@ struct State {
   }
 
   transform::Rigid3d ToRigid() const {
-    return transform::Rigid3d(
-        Eigen::Vector3d(translation[0], translation[1], translation[2]),
-        ToQuaternion());
+    return {Eigen::Vector3d(translation[0], translation[1], translation[2]),
+            ToQuaternion()};
   }
+};
+
+struct ControlPoint {
+  common::Time time;
+  State state;
+  double translation_ratio = 0.0;
+  double rotation_ratio = 0.0;
+  double time_ratio = 0.0;
 };
 
 }  // namespace mapping

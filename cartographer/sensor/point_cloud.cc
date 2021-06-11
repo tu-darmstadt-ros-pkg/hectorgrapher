@@ -22,6 +22,15 @@
 namespace cartographer {
 namespace sensor {
 
+PointCloud ToPointCloud(const TimedPointCloud& timed_point_cloud) {
+  PointCloud point_cloud;
+  point_cloud.reserve(timed_point_cloud.size());
+  for (const auto& timed_point : timed_point_cloud) {
+    point_cloud.push_back({timed_point.position});
+  }
+  return point_cloud;
+}
+
 PointCloud TransformPointCloud(const PointCloud& point_cloud,
                                const transform::Rigid3f& transform) {
   PointCloud result;

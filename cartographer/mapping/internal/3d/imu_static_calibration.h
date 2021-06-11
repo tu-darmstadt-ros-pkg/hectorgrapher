@@ -58,8 +58,8 @@ void CalibrateIMU(
   double acceleration_scale_correction_factor =
       gravity_constant / acceleration_biases.norm();
   Eigen::Quaterniond r = Eigen::Quaterniond::Identity();
-      Eigen::Quaterniond::FromTwoVectors(
-      acceleration_biases.normalized(), Eigen::Vector3d({0.0, 0.0, 1.0}));
+  //      Eigen::Quaterniond::FromTwoVectors(
+  //      acceleration_biases.normalized(), Eigen::Vector3d({0.0, 0.0, 1.0}));
 
   linear_acceleration_calibration =
       acceleration_scale_correction_factor * r.matrix();

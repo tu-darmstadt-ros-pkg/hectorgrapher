@@ -68,6 +68,7 @@ class PoseGraphInterface {
   struct SubmapPose {
     int version;
     transform::Rigid3d pose;
+    common::Time start_time;
   };
 
   struct SubmapData {

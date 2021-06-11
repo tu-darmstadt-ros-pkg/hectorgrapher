@@ -49,7 +49,8 @@ class Submap3D : public Submap {
            std::unique_ptr<GridInterface> low_resolution_grid,
            std::unique_ptr<GridInterface> high_resolution_grid,
            const Eigen::VectorXf& rotational_scan_matcher_histogram,
-           ValueConversionTables* conversion_tables);
+           ValueConversionTables* conversion_tables,
+           const common::Time& start_time);
 
   explicit Submap3D(const proto::Submap3D& proto);
 
@@ -71,11 +72,13 @@ class Submap3D : public Submap {
 
   // Insert 'range_data' into this submap using 'range_data_inserter'. The
   // submap must not be finished yet.
-  void InsertData(const sensor::RangeData& range_data,
-                  const RangeDataInserterInterface* range_data_inserter,
-                  float high_resolution_max_range,
-                  const Eigen::Quaterniond& local_from_gravity_aligned,
-                  const Eigen::VectorXf& scan_histogram_in_gravity);
+  void InsertData(
+      const sensor::RangeData& range_data,
+      const RangeDataInserterInterface* high_resolution_range_data_inserter,
+      const RangeDataInserterInterface* low_resolution_range_data_inserter,
+      float high_resolution_max_range,
+      const Eigen::Quaterniond& local_from_gravity_aligned,
+      const Eigen::VectorXf& scan_histogram_in_gravity);
 
   void Finish();
 
@@ -113,19 +116,25 @@ class ActiveSubmaps3D {
   std::vector<std::shared_ptr<const Submap3D>> InsertData(
       const sensor::RangeData& range_data_in_local,
       const Eigen::Quaterniond& local_from_gravity_aligned,
-      const Eigen::VectorXf& rotational_scan_matcher_histogram_in_gravity);
+      const Eigen::VectorXf& rotational_scan_matcher_histogram_in_gravity,
+      const common::Time& time);
 
   std::vector<std::shared_ptr<const Submap3D>> submaps() const;
 
  private:
-  std::unique_ptr<RangeDataInserterInterface> CreateRangeDataInserter();
+  std::unique_ptr<RangeDataInserterInterface> CreateRangeDataInserter(
+      const proto::RangeDataInserterOptions3D& inserter_options);
   std::unique_ptr<GridInterface> CreateGrid(float resolution);
   void AddSubmap(const transform::Rigid3d& local_submap_pose,
-                 int rotational_scan_matcher_histogram_size);
+                 int rotational_scan_matcher_histogram_size,
+                 const common::Time& time);
 
   const proto::SubmapsOptions3D options_;
   std::vector<std::shared_ptr<Submap3D>> submaps_;
-  std::unique_ptr<RangeDataInserterInterface> range_data_inserter_;
+  std::unique_ptr<RangeDataInserterInterface>
+      high_resolution_range_data_inserter_;
+  std::unique_ptr<RangeDataInserterInterface>
+      low_resolution_range_data_inserter_;
   ValueConversionTables conversion_tables_;
 };
 

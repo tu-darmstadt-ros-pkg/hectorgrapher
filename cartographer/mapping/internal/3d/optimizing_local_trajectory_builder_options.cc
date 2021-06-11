@@ -62,18 +62,33 @@ CreateOptimizingLocalTrajectoryBuilderOptions(
       << "Unknown OptimizingLocalTrajectoryBuilderOptions_IMUCostTerm type: "
       << imu_cost_term_string;
   options.set_imu_cost_term(imu_cost_term_type);
-  options.set_sync_control_points_with_range_data(
-      parameter_dictionary->GetBool("sync_control_points_with_range_data"));
   options.set_use_adaptive_odometry_weights(
       parameter_dictionary->GetBool("use_adaptive_odometry_weights"));
-  options.set_max_odometry_translation_weight(
-      parameter_dictionary->GetDouble("max_odometry_translation_weight"));
-  options.set_max_odometry_rotation_weight(
-      parameter_dictionary->GetDouble("max_odometry_rotation_weight"));
-  options.set_weight_odometry_translation_limit(
-      parameter_dictionary->GetDouble("weight_odometry_translation_limit"));
-  options.set_weight_odometry_rotation_limit(
-      parameter_dictionary->GetDouble("weight_odometry_rotation_limit"));
+  options.set_use_per_point_unwarping(
+      parameter_dictionary->GetBool("use_per_point_unwarping"));
+  options.set_use_multi_resolution_matching(
+      parameter_dictionary->GetBool("use_multi_resolution_matching"));
+  options.set_num_points_per_subdivision(
+      parameter_dictionary->GetInt("num_points_per_subdivision"));
+
+  const std::string control_point_sampling_string =
+      parameter_dictionary->GetString("control_point_sampling");
+  proto::ControlPointSampling control_point_sampling_type;
+  CHECK(proto::ControlPointSampling_Parse(control_point_sampling_string,
+                                          &control_point_sampling_type))
+      << "Unknown OptimizingLocalTrajectoryBuilderOptions_ControlPointSampling "
+         "type: "
+      << control_point_sampling_string;
+  options.set_control_point_sampling(control_point_sampling_type);
+
+  options.set_sampling_max_delta_translation(
+      parameter_dictionary->GetDouble("sampling_max_delta_translation"));
+  options.set_sampling_max_delta_rotation(
+      parameter_dictionary->GetDouble("sampling_max_delta_rotation"));
+  options.set_sampling_min_delta_time(
+      parameter_dictionary->GetDouble("sampling_min_delta_time"));
+  options.set_sampling_max_delta_time(
+      parameter_dictionary->GetDouble("sampling_max_delta_time"));
 
   return options;
 }

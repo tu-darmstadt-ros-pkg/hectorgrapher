@@ -38,17 +38,17 @@
 
   <build_depend>git</build_depend>
   <build_depend>google-mock</build_depend>
-  <build_depend>python-sphinx</build_depend>
+  <build_depend>gtest</build_depend>
+  <build_depend>python3-sphinx</build_depend>
 
-  <depend>boost</depend>
-  <depend>ceres_catkin</depend>
-  <depend>eigen_catkin</depend>
+  <depend>libboost-iostreams-dev</depend>
+  <depend>eigen</depend>
   <depend>libcairo2-dev</depend>
-  <depend>libpcl-all-dev</depend>
-  <depend>gflags_catkin</depend>
-  <depend>glog_catkin</depend>
+  <depend>libceres-dev</depend>
+  <depend>libgflags-dev</depend>
+  <depend>libgoogle-glog-dev</depend>
   <depend>lua5.2-dev</depend>
-  <depend>ninja-build</depend>
+  <depend>protobuf-dev</depend>
 
   <export>
     <build_type>cmake</build_type>

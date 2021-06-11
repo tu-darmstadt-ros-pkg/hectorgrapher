@@ -69,6 +69,14 @@ proto::TSDFRangeDataInserterOptions3D CreateTSDFRangeDataInserterOptions3D(
         << "Unknown TSDFRangeDataInserterOptions3D::NormalComputationMethod: "
         << normal_computation_method_string;
     options.set_normal_computation_method(normal_computation_method);
+    options.set_min_range(parameter_dictionary->GetDouble("min_range"));
+    options.set_max_range(parameter_dictionary->GetDouble("max_range"));
+    options.set_insertion_ratio(
+        parameter_dictionary->GetDouble("insertion_ratio"));
+    options.set_normal_computation_horizontal_stride(
+        parameter_dictionary->GetInt("normal_computation_horizontal_stride"));
+    options.set_normal_computation_vertical_stride(
+        parameter_dictionary->GetInt("normal_computation_vertical_stride"));
     return options;
 }
 
@@ -126,9 +134,9 @@ void TSDFRangeDataInserter3D::RasterTriangle(
           .relative_truncation_distance() *
       tsdf->resolution();
 
-  Eigen::Vector3f v01 = v1 - v0;
-  Eigen::Vector3f v02 = v2 - v0;
-//  CHECK_LE(v01.cwiseAbs().maxCoeff(), v02.cwiseAbs().maxCoeff());
+  //  Eigen::Vector3f v01 = v1 - v0;
+  //  Eigen::Vector3f v02 = v2 - v0;
+  //  CHECK_LE(v01.cwiseAbs().maxCoeff(), v02.cwiseAbs().maxCoeff());
 
   const Eigen::Array3i i_0 = tsdf->GetCellIndex(v0);
   const Eigen::Array3i i_1 = tsdf->GetCellIndex(v1);
@@ -204,9 +212,9 @@ void TSDFRangeDataInserter3D::InsertHitWithNormal(const Eigen::Vector3f& hit,
           .relative_truncation_distance() *
       tsdf->resolution();
   if (range < truncation_distance) return;
-  bool update_free_space =
-      options_.tsdf_range_data_inserter_options_3d().num_free_space_voxels() >
-      0;  // todo(kdaun) use num free space
+  //  bool update_free_space =
+  //      options_.tsdf_range_data_inserter_options_3d().num_free_space_voxels()
+  //      > 0;  // todo(kdaun) use num free space
   // cells value instead of bool
   float normal_direction = 1.f;
   if (normal.dot(ray) > 0.f) normal_direction = -1.f;
@@ -252,7 +260,8 @@ void TSDFRangeDataInserter3D::InsertHitWithNormal(const Eigen::Vector3f& hit,
     int step_y = update_cell[1] <= end_cell[1] ? 1 : -1;
     int step_z = update_cell[2] <= end_cell[2] ? 1 : -1;
 
-    const Eigen::Vector3f step_direction({step_x, step_y, step_z});
+    const Eigen::Vector3f step_direction(
+        {float(step_x), float(step_y), float(step_z)});
     Eigen::Vector3f t_max = begin_cell_center - ray_begin +
                             0.5f * float(tsdf->resolution()) *
                                 step_direction.cwiseQuotient(ray_begin_to_end);
@@ -357,7 +366,8 @@ void TSDFRangeDataInserter3D::InsertHit(const Eigen::Vector3f& hit,
     int step_y = update_cell[1] <= end_cell[1] ? 1 : -1;
     int step_z = update_cell[2] <= end_cell[2] ? 1 : -1;
 
-    const Eigen::Vector3f step_direction({step_x, step_y, step_z});
+    const Eigen::Vector3f step_direction(
+        {float(step_x), float(step_y), float(step_z)});
     Eigen::Vector3f t_max = begin_cell_center - ray_begin +
                             0.5f * float(tsdf->resolution()) *
                                 step_direction.cwiseQuotient(ray_begin_to_end);
@@ -509,69 +519,93 @@ void TSDFRangeDataInserter3D::Insert(const sensor::RangeData& range_data,
       break;
     }
     case proto::TSDFRangeDataInserterOptions3D::CLOUD_STRUCTURE: {
-      int NUM_ROWS = 16;
-      int NUM_POINTS_PER_LINE = 1800;
-      int NUM_POINTS_PER_CLOUD = NUM_POINTS_PER_LINE * NUM_ROWS;
-      if (range_data.returns.size() % NUM_POINTS_PER_CLOUD == 0) {
-        int NUM_CLOUDS = range_data.returns.size()/NUM_POINTS_PER_CLOUD;
-        for (int cloud_idx = 0; cloud_idx < NUM_CLOUDS; ++cloud_idx) {
-          for (int relative_point_idx = 0; relative_point_idx < NUM_POINTS_PER_CLOUD; ++relative_point_idx) {
-            int point_idx = relative_point_idx + cloud_idx * NUM_POINTS_PER_CLOUD;
-            if (range_data.returns[point_idx].position.hasNaN()) continue;
-            int i0 = point_idx;
-            int horizontal_stride = 5;
-            int i1 = relative_point_idx + horizontal_stride >= NUM_POINTS_PER_CLOUD
-                     ? point_idx - horizontal_stride
-                     : point_idx + horizontal_stride;
-            int i2 = relative_point_idx + NUM_POINTS_PER_LINE >= NUM_POINTS_PER_CLOUD
-                     ? point_idx - NUM_POINTS_PER_LINE
-                     : point_idx + NUM_POINTS_PER_LINE;
-            Eigen::Vector3f p0 = range_data.returns[i0].position;
-            Eigen::Vector3f p1 = range_data.returns[i1].position;
-            Eigen::Vector3f p2 = range_data.returns[i2].position;
-            if (p1.hasNaN() || p2.hasNaN()) continue;
-            float r0 = p0.norm();
-            float r1 = p1.norm();
-            float r2 = p2.norm();
-            float max_range_delta = 1.f * tsdf->resolution() / 0.05f;
-            if (std::abs(r0 - r1) > max_range_delta ||
-                std::abs(r0 - r2) > max_range_delta ||
-                std::abs(r1 - r2) > max_range_delta ||
-                (p0 - p1).isZero() ||
-                (p0 - p2).isZero()) {
-              continue;
-            }
-            const Eigen::Vector3f normal = (p0 - p1).cross(p0 - p2).normalized();
-            if (normal.isZero()) {
-              continue;
-            }
-            InsertHitWithNormal(p0, origin, normal, tsdf);
-          }
+      size_t num_inserted_points = 0;
+      size_t num_omitted_points = 0;
+      const size_t vertical_stride =
+          options_.tsdf_range_data_inserter_options_3d()
+              .normal_computation_vertical_stride();
+      const size_t horizontal_stride =
+          options_.tsdf_range_data_inserter_options_3d()
+              .normal_computation_horizontal_stride() *
+          range_data.width;
+      for (size_t point_idx = 0; point_idx < range_data.returns.size();
+           ++point_idx) {
+        if (double(num_inserted_points) <=
+            options_.tsdf_range_data_inserter_options_3d().insertion_ratio() *
+                double(num_inserted_points + num_omitted_points)) {
+          num_inserted_points++;
+        } else {
+          num_omitted_points++;
+          continue;
         }
+
+        Eigen::Vector3f p0 = range_data.returns[point_idx].position;
+        if (range_data.returns[point_idx].position.hasNaN()) {
+          continue;
+        }
+        float r0 = (p0 - origin).norm();
+        if (r0 < options_.tsdf_range_data_inserter_options_3d().min_range()) {
+          continue;
+        }
+
+        if (r0 > options_.tsdf_range_data_inserter_options_3d().max_range()) {
+          continue;
+        }
+        size_t i1 = point_idx + vertical_stride >= range_data.width
+                        ? point_idx - vertical_stride
+                        : point_idx + vertical_stride;
+        size_t i2 = point_idx + horizontal_stride >= range_data.returns.size()
+                        ? point_idx - horizontal_stride
+                        : point_idx + horizontal_stride;
+        Eigen::Vector3f p1 = range_data.returns[i1].position;
+        Eigen::Vector3f p2 = range_data.returns[i2].position;
+        if (p1.hasNaN() || p2.hasNaN()) {
+          continue;
+        }
+        float r1 = (p1 - origin).norm();
+        float r2 = (p2 - origin).norm();
+        float max_range_delta = 1.f * tsdf->resolution() / 0.05f;
+        if (std::abs(r0 - r1) > max_range_delta ||
+            std::abs(r0 - r2) > max_range_delta ||
+            std::abs(r1 - r2) > max_range_delta || (p0 - p1).isZero() ||
+            (p0 - p2).isZero()) {
+          continue;
+        }
+        const Eigen::Vector3f normal = (p0 - p1).cross(p0 - p2).normalized();
+        if (normal.isZero()) {
+          continue;
+        }
+        InsertHitWithNormal(p0, origin, normal, tsdf);
       }
-      else {
-        LOG(WARNING)<<"INVALID CLOUD SIZE "<< range_data.returns.size()<<" - Cloud not inserted!";
-      }
+
+      //      LOG(INFO)<<"res "<<tsdf->resolution()<<" ratio
+      //      "<<double(num_inserted_points)/double(num_inserted_points+
+      //      num_omitted_points+1E-6)<<" num_inserted_points
+      //      "<<num_inserted_points<<" total "<<num_inserted_points+
+      //      num_omitted_points;
       break;
     }
     case proto::TSDFRangeDataInserterOptions3D::TRIANGLE_FILL_IN: {
       if (range_data.returns.size() % 28800 == 0) {
-        const int num_pointclouds = range_data.returns.size() /28800;
-        const int NUM_ROWS = 16;
-        const int NUM_POINTS_PER_LINE = 1800;
-        const int NUM_POINTS_PER_CLOUD = NUM_POINTS_PER_LINE * NUM_ROWS;
-        for(int pointcloud_idx = 0; pointcloud_idx < num_pointclouds; ++pointcloud_idx) {
-          int pointcloud_offset = pointcloud_idx * NUM_POINTS_PER_CLOUD;
-          for (int point_idx = pointcloud_offset; point_idx < NUM_POINTS_PER_CLOUD + pointcloud_offset; ++point_idx) {
+        const size_t num_pointclouds = range_data.returns.size() / 28800;
+        const size_t NUM_ROWS = 16;
+        const size_t NUM_POINTS_PER_LINE = 1800;
+        const size_t NUM_POINTS_PER_CLOUD = NUM_POINTS_PER_LINE * NUM_ROWS;
+        for (size_t pointcloud_idx = 0; pointcloud_idx < num_pointclouds;
+             ++pointcloud_idx) {
+          size_t pointcloud_offset = pointcloud_idx * NUM_POINTS_PER_CLOUD;
+          for (size_t point_idx = pointcloud_offset;
+               point_idx < NUM_POINTS_PER_CLOUD + pointcloud_offset;
+               ++point_idx) {
             if (range_data.returns[point_idx].position.isZero()) continue;
-            int i0 = point_idx;
-            int horizontal_stride = 5;
-            int i1 = point_idx + horizontal_stride >= NUM_POINTS_PER_CLOUD
-                     ? point_idx - horizontal_stride
-                     : point_idx + horizontal_stride;
-            int i2 = point_idx + NUM_POINTS_PER_LINE >= NUM_POINTS_PER_CLOUD
-                     ? point_idx - NUM_POINTS_PER_LINE
-                     : point_idx + NUM_POINTS_PER_LINE;
+            size_t i0 = point_idx;
+            size_t horizontal_stride = 5;
+            size_t i1 = point_idx + horizontal_stride >= NUM_POINTS_PER_CLOUD
+                            ? point_idx - horizontal_stride
+                            : point_idx + horizontal_stride;
+            size_t i2 = point_idx + NUM_POINTS_PER_LINE >= NUM_POINTS_PER_CLOUD
+                            ? point_idx - NUM_POINTS_PER_LINE
+                            : point_idx + NUM_POINTS_PER_LINE;
             Eigen::Vector3f p0 = range_data.returns[i0].position;
             Eigen::Vector3f p1 = range_data.returns[i1].position;
             Eigen::Vector3f p2 = range_data.returns[i2].position;
@@ -616,9 +650,29 @@ void TSDFRangeDataInserter3D::Insert(const sensor::RangeData& range_data,
     }
     }
   } else {
+    size_t num_inserted_points = 0;
+    size_t num_omitted_points = 0;
     for (const sensor::RangefinderPoint& hit_point : range_data.returns) {
       const Eigen::Vector3f hit = hit_point.position.head<3>();
-      InsertHit(hit, origin, tsdf);
+      if (double(num_inserted_points) <=
+          options_.tsdf_range_data_inserter_options_3d().insertion_ratio() *
+              double(num_inserted_points + num_omitted_points)) {
+        num_inserted_points++;
+      } else {
+        num_omitted_points++;
+        continue;
+      }
+
+      if (hit.hasNaN()) continue;
+      float r0 = (hit - range_data.origin).norm();
+      if (r0 < options_.tsdf_range_data_inserter_options_3d().min_range())
+        continue;
+      if (r0 > options_.tsdf_range_data_inserter_options_3d().max_range())
+        continue;
+
+      if (!hit.hasNaN()) {
+        InsertHit(hit, origin, tsdf);
+      }
     }
   }
   tsdf->FinishUpdate();

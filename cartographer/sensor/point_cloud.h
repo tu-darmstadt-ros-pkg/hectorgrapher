@@ -42,10 +42,15 @@ using PointCloud = std::vector<RangefinderPoint>;
 // third entry is 0.f (and the fourth entry is time).
 using TimedPointCloud = std::vector<TimedRangefinderPoint>;
 
+PointCloud ToPointCloud(const TimedPointCloud& timed_point_cloud);
+
 struct PointCloudWithIntensities {
   TimedPointCloud points;
   std::vector<float> intensities;
   std::vector<Uint8Color> colors;
+  unsigned int
+      width;  // Width of structured range data. width>1 indicates the
+              // pointcloud is dense, empty points are filled in with NaN.
 };
 
 // Transforms 'point_cloud' according to 'transform'.

@@ -59,6 +59,11 @@ class Submap {
  public:
   Submap(const transform::Rigid3d& local_submap_pose)
       : local_pose_(local_submap_pose) {}
+
+  Submap(const transform::Rigid3d& local_submap_pose,
+         const common::Time& start_time)
+      : local_pose_(local_submap_pose), start_time_(start_time) {}
+
   virtual ~Submap() {}
 
   virtual proto::Submap ToProto(bool include_grid_data) const = 0;
@@ -83,10 +88,13 @@ class Submap {
     insertion_finished_ = insertion_finished;
   }
 
+  common::Time start_time() const { return start_time_; }
+
  private:
   const transform::Rigid3d local_pose_;
   int num_range_data_ = 0;
   bool insertion_finished_ = false;
+  common::Time start_time_;
 };
 
 }  // namespace mapping

@@ -113,23 +113,31 @@ std::string StatisticsString(const std::vector<Error>& errors) {
          MeanAndStdDevString(squared_rotational_errors_degrees) + " deg^2\n";
 }
 
-void WriteRelationMetricsToFile(const std::vector<Error>& errors,
-                                const proto::GroundTruth& ground_truth,
-                                const std::string& relation_metrics_filename) {
+void WriteRelationMetricsToFile(
+    const std::vector<Error>& errors,
+    const std::vector<transform::Rigid3d>& observations,
+    const proto::GroundTruth& ground_truth,
+    const std::string& relation_metrics_filename) {
   std::ofstream relation_errors_file;
   std::string log_file_path;
   LOG(INFO) << "Writing relation metrics to '" + relation_metrics_filename +
                    "'...";
   relation_errors_file.open(relation_metrics_filename);
   relation_errors_file
-      << "translational_error,squared_translational_error,rotational_"
+      << "t0, t1, translational_error,squared_translational_error,rotational_"
          "errors_degree,squared_rotational_errors_degree,"
          "expected_translation_x,expected_translation_y,expected_"
-         "translation_z,expected_rotation_w,expected_rotation_x,"
-         "expected_rotation_y,expected_rotation_z,covered_distance\n";
+         "translation_z,expected_rotation_roll,expected_rotation_pitch,"
+         "expected_rotation_yaw,covered_distance,"
+         "observed_translation_x,observed_translation_y,observed_translation_z,"
+         "observed_rotation_roll,observed_rotation_pitch,observed_rotation_"
+         "yaw\n";
+  common::Time t_init =
+      common::FromUniversal(ground_truth.relation(0).timestamp1());
   for (int relation_index = 0; relation_index < ground_truth.relation_size();
        ++relation_index) {
     const Error& error = errors[relation_index];
+    const transform::Rigid3d& observation = observations[relation_index];
     const proto::Relation& relation = ground_truth.relation(relation_index);
     double translational_error = std::sqrt(error.translational_squared);
     double squared_translational_error = error.translational_squared;
@@ -137,18 +145,27 @@ void WriteRelationMetricsToFile(const std::vector<Error>& errors,
         common::RadToDeg(std::sqrt(error.rotational_squared));
     double squared_rotational_errors_degree =
         common::Pow2(rotational_errors_degree);
-    relation_errors_file << translational_error << ","
-                         << squared_translational_error << ","
-                         << rotational_errors_degree << ","
-                         << squared_rotational_errors_degree << ","
-                         << relation.expected().translation().x() << ","
-                         << relation.expected().translation().y() << ","
-                         << relation.expected().translation().z() << ","
-                         << relation.expected().rotation().w() << ","
-                         << relation.expected().rotation().x() << ","
-                         << relation.expected().rotation().y() << ","
-                         << relation.expected().rotation().z() << ","
-                         << relation.covered_distance() << "\n";
+    relation_errors_file
+        << common::ToSeconds(common::FromUniversal(relation.timestamp1()) -
+                             t_init)
+        << ","
+        << common::ToSeconds(common::FromUniversal(relation.timestamp2()) -
+                             t_init)
+        << "," << translational_error << "," << squared_translational_error
+        << "," << rotational_errors_degree << ","
+        << squared_rotational_errors_degree << ","
+        << relation.expected().translation().x() << ","
+        << relation.expected().translation().y() << ","
+        << relation.expected().translation().z() << ","
+        << transform::GetRoll(transform::ToRigid3(relation.expected())) << ","
+        << transform::GetPitch(transform::ToRigid3(relation.expected())) << ","
+        << transform::GetYaw(transform::ToRigid3(relation.expected())) << ","
+        << relation.covered_distance() << "," << observation.translation().x()
+        << "," << observation.translation().y() << ","
+        << observation.translation().z() << ","
+        << transform::GetRoll(observation) << ","
+        << transform::GetPitch(observation) << ","
+        << transform::GetYaw(observation) << "\n";
   }
   relation_errors_file.close();
 }
@@ -191,6 +208,7 @@ void Run(const std::string& pose_graph_filename,
   }
 
   std::vector<Error> errors;
+  std::vector<transform::Rigid3d> observations;
   for (const auto& relation : ground_truth.relation()) {
     const auto pose1 =
         LookupTransform(transform_interpolation_buffer,
@@ -201,12 +219,14 @@ void Run(const std::string& pose_graph_filename,
     const transform::Rigid3d expected =
         transform::ToRigid3(relation.expected());
     errors.push_back(ComputeError(pose1, pose2, expected));
+    observations.push_back(pose1.inverse() * pose2);
   }
 
   const std::string relation_metrics_filename =
       pose_graph_filename + ".relation_metrics.csv";
   if (write_relation_metrics) {
-    WriteRelationMetricsToFile(errors, ground_truth, relation_metrics_filename);
+    WriteRelationMetricsToFile(errors, observations, ground_truth,
+                               relation_metrics_filename);
   }
 
   LOG(INFO) << "Result:\n" << StatisticsString(errors);

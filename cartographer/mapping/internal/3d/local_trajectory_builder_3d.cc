@@ -367,7 +367,7 @@ LocalTrajectoryBuilder3D::InsertIntoSubmap(
       map_update_enabled_
           ? active_submaps_.InsertData(
                 filtered_range_data_in_local, local_from_gravity_aligned,
-                rotational_scan_matcher_histogram_in_gravity)
+                rotational_scan_matcher_histogram_in_gravity, time)
           : active_submaps_.submaps();
   return absl::make_unique<InsertionResult>(
       InsertionResult{std::make_shared<const mapping::TrajectoryNode::Data>(
