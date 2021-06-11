@@ -13,6 +13,8 @@
 #include "cartographer/io/points_processor_pipeline_builder.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+DEFINE_string(gtest_color, "", "");
+DEFINE_string(gtest_filter, "", "");
 
 namespace cartographer {
 namespace io {
