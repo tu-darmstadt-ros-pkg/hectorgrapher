@@ -6,15 +6,17 @@ uniformDownSample: false
 sampleRateUniformDownSample: 100
 
 voxelDownSample: true
-voxelSizeVoxelDownSample: [0.05, 0.1] # 0.5x - 1x so große Voxel wie absoluteVoxelSize
+#voxelSizeVoxelDownSample: [0.05, 0.1] # 0.5x - 1x so große Voxel wie absoluteVoxelSize
+voxelSizeVoxelDownSample: 0.05 # 0.5x - 1x so große Voxel wie absoluteVoxelSize
 
 removeRadiusOutliers: true
 sphereSizeRadiusOutliers: [0.3] # 2x - 10x wie voxelSizeDownSample
-neighborsInSphereRadiusOutlier: [1, 5]
+neighborsInSphereRadiusOutlier: [1, 5, 10, 100]
 
 cutRoofZAxis: false
 
-normalOrientationNearestNeighbours: [5, 10, 50, 100]
+#normalOrientationNearestNeighbours: [50, 100]
+normalOrientationNearestNeighbours: 100
 
 absoluteVoxelSize: 0.1
 absoluteTruncationDistance: [0.3]

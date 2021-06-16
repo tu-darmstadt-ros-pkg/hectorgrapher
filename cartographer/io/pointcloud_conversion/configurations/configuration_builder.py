@@ -1,7 +1,8 @@
 import os
 import yaml
 import time
-
+import sys
+import subprocess
 
 with open("parameter_ranges.yaml", 'r') as stream:
     param_dict = yaml.safe_load(stream)
@@ -37,6 +38,7 @@ for key in param_dict:
 open("overview.txt", "w")
 
 for i in range(len(current_luas)):
+    print("Starting run " + str(i))
     luafile = open("test" + str(i+1).zfill(3) + ".lua", "w")
     luafile.write("options = {\n")
     luafile.write(current_luas[i])
@@ -44,12 +46,16 @@ for i in range(len(current_luas)):
     luafile.close()
 
     start = time.time()
-    os.system('$HOME/hector/devel/bin/cartographer_pointcloud_converter -config_file "test' + str(i+1).zfill(3) + '.lua"')
+    # run_filename = "$HOME/hector/devel/bin/cartographer_pointcloud_converter"
+    run_filename = '/home/leo/hector/devel/bin/cartographer_pointcloud_converter -config_file "test' + str(i+1).zfill(3) + '.lua"'
+    proc = subprocess.run(run_filename, capture_output=True, text=True, shell=True)
     end = time.time()
 
     overview = open("overview.txt", "a")
     overview.write("Run No. " + str(i+1).zfill(3) + ":\n")
     overview.write("Calculation time: " + str(end-start) + "\n")
+
+    overview.write(proc.stdout)
     overview.close()
 
 

@@ -196,7 +196,7 @@ namespace cartographer {
                     std::string point_cloud_filename =
                             path_to_home + luaParameterDictionary->GetString("pointcloudPath");
                     open3d::io::ReadPointCloud(point_cloud_filename, *myPointCloudPointer, {"auto", true, true, true});
-                    std::cout << "Loaded point cloud with " << myPointCloudPointer->points_.size() << " points."
+                    std::cout << "Loaded point cloud with exactly " << myPointCloudPointer->points_.size() << " points."
                               << std::endl;
                 }
 
