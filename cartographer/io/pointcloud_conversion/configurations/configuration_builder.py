@@ -46,8 +46,7 @@ for i in range(len(current_luas)):
     luafile.close()
 
     start = time.time()
-    # run_filename = "$HOME/hector/devel/bin/cartographer_pointcloud_converter"
-    run_filename = '/home/leo/hector/devel/bin/cartographer_pointcloud_converter -config_file "test' + str(i+1).zfill(3) + '.lua"'
+    run_filename = '$HOME/hector/devel/bin/cartographer_pointcloud_converter -config_file "test' + str(i+1).zfill(3) + '.lua"'
     proc = subprocess.run(run_filename, capture_output=True, text=True, shell=True)
     end = time.time()
 
