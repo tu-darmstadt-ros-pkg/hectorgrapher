@@ -19,7 +19,7 @@
 #include "cartographer/common/ceres_solver_options.h"
 #include "cartographer/common/lua_parameter_dictionary.h"
 #include "cartographer/common/lua_parameter_dictionary_test_helpers.h"
-#include "cartographer/evaluation/scan_cloud_generator.h"
+//#include "cartographer/evaluation/scan_cloud_generator.h"
 #include "cartographer/mapping/3d/hybrid_grid_tsdf.h"
 #include "cartographer/mapping/3d/range_data_inserter_3d.h"
 #include "cartographer/mapping/3d/tsdf_range_data_inserter_3d.h"
@@ -157,9 +157,11 @@ class TSDFSpaceCostFunction3DTest : public ::testing::Test {
 
   void InsertPointcloud() {
     auto range_data = sensor::RangeData();
-    evaluation::ScanCloudGenerator generator =
-        evaluation::ScanCloudGenerator(0.025);
-    generator.generateCube(range_data.returns, 1.f, 0.f);
+    LOG(ERROR) << "todo(kdaun) ScanCloudGenerator needs to be moved from "
+                  "evaluation to scan matching";
+    //    evaluation::ScanCloudGenerator generator =
+    //        evaluation::ScanCloudGenerator(0.025);
+    //    generator.generateCube(range_data.returns, 1.f, 0.f);
     range_data_inserter_->Insert(range_data, tsdf_.get());
     tsdf_->FinishUpdate();
   }
@@ -195,9 +197,11 @@ struct State {
 
 TEST_F(TSDFSpaceCostFunction3DTest, MatchEmptyTSDF) {
   sensor::PointCloud matching_cloud = sensor::PointCloud();
-  evaluation::ScanCloudGenerator generator =
-      evaluation::ScanCloudGenerator(0.025);
-  generator.generateCube(matching_cloud, 1.f, 0.f);
+  //  evaluation::ScanCloudGenerator generator =
+  //      evaluation::ScanCloudGenerator(0.025);
+  //  generator.generateCube(matching_cloud, 1.f, 0.f);
+  LOG(ERROR) << "todo(kdaun) ScanCloudGenerator needs to be moved from "
+                "evaluation to scan matching";
   std::unique_ptr<ceres::CostFunction> cost_function(
       InterpolatedTSDFSpaceCostFunction3D<
           sensor::PointCloud>::CreateAutoDiffCostFunction(1.0, matching_cloud,
@@ -249,9 +253,11 @@ TEST_F(TSDFSpaceCostFunction3DTest, MatchEmptyTSDF) {
 TEST_F(TSDFSpaceCostFunction3DTest, SmallPertubation) {
   InsertPointcloud();
   auto matching_cloud = sensor::PointCloud();
-  evaluation::ScanCloudGenerator generator =
-      evaluation::ScanCloudGenerator(0.025);
-  generator.generateCube(matching_cloud, 1.f, 0.f);
+  //  evaluation::ScanCloudGenerator generator =
+  //      evaluation::ScanCloudGenerator(0.025);
+  //  generator.generateCube(matching_cloud, 1.f, 0.f);
+  LOG(ERROR) << "todo(kdaun) ScanCloudGenerator needs to be moved from "
+                "evaluation to scan matching";
 
   State state_t0 = State({0.0, 0.0, 0.0}, Eigen::Quaterniond::Identity(),
                          Eigen::Vector3d::Zero());

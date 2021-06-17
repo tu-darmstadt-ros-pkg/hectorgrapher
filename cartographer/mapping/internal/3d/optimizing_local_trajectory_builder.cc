@@ -18,7 +18,6 @@
 
 #include "cartographer/common/ceres_solver_options.h"
 #include "cartographer/common/time.h"
-#include "cartographer/evaluation/grid_drawer.h"
 #include "cartographer/mapping/internal/3d/imu_static_calibration.h"
 #include "cartographer/mapping/internal/3d/scan_matching/interpolated_multi_resolution_tsdf_per_point_space_cost_function_3d.h"
 #include "cartographer/mapping/internal/3d/scan_matching/interpolated_multi_resolution_tsdf_space_cost_function_3d.h"

@@ -17,8 +17,6 @@
 #include "cartographer/mapping/3d/tsdf_range_data_inserter_3d.h"
 
 #include "cairo/cairo.h"
-
-#include "cartographer/evaluation/grid_drawer.h"
 #include "cartographer/mapping/internal/3d/scan_matching/interpolated_tsdf.h"
 
 #include "Eigen/Core"
