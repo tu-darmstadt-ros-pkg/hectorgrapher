@@ -126,8 +126,6 @@ namespace cartographer {
                     float updatedTSD = (tsdf->GetTSD(update_cell_index) * tsdf->GetWeight(update_cell_index)
                             + newTSD * 1.0f) / updatedWeight;
                     tsdf->SetCell(update_cell_index, updatedTSD, updatedWeight);
-
-                    // Todo: maxWeight wird nicht benutzt - noch rein machen
                 }
             }
 
@@ -277,8 +275,7 @@ namespace cartographer {
 
                 float absoluteTruncationDistance =
                         (float) luaParameterDictionary->GetDouble("absoluteTruncationDistance");
-                float maxWeight = (float) luaParameterDictionary->GetDouble(
-                        "maxTSDFWeight");
+                float maxWeight = 100.0;
                 float relativeTruncationDistance = absoluteTruncationDistance / gridVoxelSideLength;
 
                 cartographer::mapping::ValueConversionTables myValueConversionTable;

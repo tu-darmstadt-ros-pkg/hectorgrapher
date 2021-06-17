@@ -1,7 +1,6 @@
 import os
 import yaml
 import time
-import sys
 
 with open("parameter_ranges.yaml", 'r') as stream:
     param_dict = yaml.safe_load(stream)
@@ -45,7 +44,7 @@ for i in range(len(current_luas)):
 
     start = time.time()
     # run_filename = "$HOME/hector/devel/bin/cartographer_pointcloud_converter"
-    run_filename = '/home/leo/hector/devel/bin/cartographer_pointcloud_converter -config_file "test' + str(i+1).zfill(3) + '.lua"'
+    run_filename = '$HOME/hector/devel/bin/cartographer_pointcloud_converter -config_file "test' + str(i+1).zfill(3) + '.lua"'
     os.system(run_filename)
     end = time.time()
 
