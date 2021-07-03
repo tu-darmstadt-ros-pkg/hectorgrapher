@@ -1013,6 +1013,8 @@ void OptimizingLocalTrajectoryBuilder::AddOdometryResiduals(
           interpolation_buffer.Lookup(control_points_[i].time);
       const transform::Rigid3d delta_pose =
           current_odometer_pose.inverse() * previous_odometer_pose;
+      const double delta_time = common::ToSeconds(control_points_[i].time -
+                                                  control_points_[i - 1].time);
 
       double residual_translation_weight =
           options_.optimizing_local_trajectory_builder_options()
@@ -1026,16 +1028,16 @@ void OptimizingLocalTrajectoryBuilder::AddOdometryResiduals(
         double rotation_distance =
             std::abs(delta_pose.rotation().angularDistance(
                 Eigen::Quaterniond::Identity()));
-        const double translation_normalization = 1.0E-4;
-        const double rotation_normalization = 1.0E-5;
+        const double translation_normalization = 1.0E-3 * delta_time;
+        const double rotation_normalization = 5.0E-3 * delta_time;
         residual_translation_weight =
             options_.optimizing_local_trajectory_builder_options()
                 .odometry_translation_weight() /
-            (translation_distance + translation_normalization);
+            sqrt(translation_distance + translation_normalization);
         residual_rotation_weight =
             options_.optimizing_local_trajectory_builder_options()
                 .odometry_rotation_weight() /
-            (rotation_distance + rotation_normalization);
+            sqrt(rotation_distance + rotation_normalization);
       }
       problem.AddResidualBlock(
           new ceres::AutoDiffCostFunction<RelativeTranslationAndYawCostFunction,
@@ -1093,8 +1095,9 @@ void OptimizingLocalTrajectoryBuilder::TransformStates(
 
 std::unique_ptr<OptimizingLocalTrajectoryBuilder::MatchingResult>
 OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
-  if (time - initial_data_time_ < initialization_duration_ ||
-      time - last_optimization_time_ < optimization_rate_) {
+  if (time - initial_data_time_ < initialization_duration_
+      //  ||     time - last_optimization_time_ < optimization_rate_
+  ) {
     if (time - initial_data_time_ < initialization_duration_) {
       LOG(INFO) << "No Optimization - not enough time since initialization "
                 << common::ToSeconds(time - initial_data_time_) << "\t < "
@@ -1605,14 +1608,14 @@ void OptimizingLocalTrajectoryBuilder::SetMapUpdateEnabled(
 
 void OptimizingLocalTrajectoryBuilder::PrintLoggingData() {
   if (num_optimizations > 0) {
-    LOG_EVERY_N(INFO, 1) << "Optimization - Avg: "
-                         << total_optimization_duration / num_optimizations
-                         << "\t total: " << total_optimization_duration;
+    LOG_EVERY_N(INFO, 100) << "Optimization - Avg: "
+                           << total_optimization_duration / num_optimizations
+                           << "\t total: " << total_optimization_duration;
   }
   if (num_insertions > 0) {
-    LOG_EVERY_N(INFO, 1) << "Insertion - Avg: "
-                         << total_insertion_duration / num_insertions
-                         << "\t total: " << total_insertion_duration;
+    LOG_EVERY_N(INFO, 100) << "Insertion - Avg: "
+                           << total_insertion_duration / num_insertions
+                           << "\t total: " << total_insertion_duration;
   }
 }
 
