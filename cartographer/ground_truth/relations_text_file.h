@@ -35,6 +35,17 @@ namespace ground_truth {
 // Robots, vol. 27, no. 4, pp. 387–407, 2009.
 proto::GroundTruth ReadRelationsTextFile(const std::string& relations_filename);
 
+// Reads a text file with data from a motion tracking file and converts it to a
+// GroundTruth proto. Each line contains: time1 time2 x y z roll pitch yaw using
+// Unix epoch timestamps.
+//
+// This is the format used in the relations files provided for:
+// R. Kuemmerle, B. Steder, C. Dornhege, M. Ruhnke, G. Grisetti, C. Stachniss,
+// and A. Kleiner, "On measuring the accuracy of SLAM algorithms," Autonomous
+// Robots, vol. 27, no. 4, pp. 387–407, 2009.
+proto::GroundTruth CreateRelationsFromMocapData(
+    const std::string& relations_filename, double time_delta);
+
 }  // namespace ground_truth
 }  // namespace cartographer
 

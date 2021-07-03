@@ -124,7 +124,7 @@ void WriteRelationMetricsToFile(
                    "'...";
   relation_errors_file.open(relation_metrics_filename);
   relation_errors_file
-      << "t0, t1, translational_error,squared_translational_error,rotational_"
+      << "t0,t1,translational_error,squared_translational_error,rotational_"
          "errors_degree,squared_rotational_errors_degree,"
          "expected_translation_x,expected_translation_y,expected_"
          "translation_z,expected_rotation_roll,expected_rotation_pitch,"
