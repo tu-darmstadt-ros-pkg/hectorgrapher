@@ -196,6 +196,12 @@ OptimizingLocalTrajectoryBuilder::AddRangeData(
     LOG(INFO) << "IMU not yet initialized.";
     return nullptr;
   }
+  if (odometer_data_.empty()) {
+    // Until we've initialized the extrapolator with our first IMU message, we
+    // cannot compute the orientation of the rangefinder.
+    LOG(INFO) << "Odom not yet initialized.";
+    return nullptr;
+  }
 
   if (initial_data_time_ >
       range_data_in_tracking.time +
