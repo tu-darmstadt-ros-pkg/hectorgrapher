@@ -114,7 +114,6 @@ class LocalTrajectoryBuilderEval {
               odometry_rotation_weight = 1,
               initialize_map_orientation_with_imu = true,
               calibrate_imu = false,
-              optimization_rate = 0.05,
               ct_window_horizon = 0.6,
               ct_window_rate = 0.3,
               imu_integrator = "RK4",

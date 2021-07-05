@@ -114,15 +114,20 @@ proto::GroundTruth CreateRelationsFromMocapData(
   transform::Rigid3d pose_correction =
       transform::Rigid3d(translation, orientation);
   for (const transform::TimestampedTransform& current_transform : transforms) {
-    LOG(INFO) << "aa";
     double dt = common::ToSeconds(current_transform.time - last_transform.time);
-    if (dt >= time_delta) {
+    if (dt >= time_delta + 1E-4) {
+      LOG(INFO) << "skip: "<<dt;
+      last_transform = current_transform;
+
+    }
+    else if (dt >= time_delta - 1E-4) {
+      LOG(INFO) << "delta: "<<dt;
       auto* const new_relation = ground_truth.add_relation();
       new_relation->set_timestamp1(common::ToUniversal(last_transform.time));
       new_relation->set_timestamp2(common::ToUniversal(current_transform.time));
       *new_relation->mutable_expected() = transform::ToProto(
           (last_transform.transform * pose_correction).inverse() *
-          (current_transform.transform * pose_correction));
+              (current_transform.transform * pose_correction));
       last_transform = current_transform;
     }
   }

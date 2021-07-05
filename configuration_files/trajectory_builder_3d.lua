@@ -127,7 +127,6 @@ TRAJECTORY_BUILDER_3D = {
       odometry_rotation_weight = 1,
       initialize_map_orientation_with_imu = true,
       calibrate_imu = false,
-      optimization_rate = 0.05,
       ct_window_horizon = 0.9,
       ct_window_rate = 0.1,
       initialization_duration = 2.0,
@@ -139,5 +138,6 @@ TRAJECTORY_BUILDER_3D = {
       use_per_point_unwarping = false,
       use_multi_resolution_matching = false,
       num_points_per_subdivision = 4,
+      velocity_in_state = true,
   },
 }

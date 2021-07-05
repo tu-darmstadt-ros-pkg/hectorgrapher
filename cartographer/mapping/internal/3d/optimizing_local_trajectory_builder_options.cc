@@ -40,8 +40,6 @@ CreateOptimizingLocalTrajectoryBuilderOptions(
   options.set_initialize_map_orientation_with_imu(
       parameter_dictionary->GetBool("initialize_map_orientation_with_imu"));
   options.set_calibrate_imu(parameter_dictionary->GetBool("calibrate_imu"));
-  options.set_optimization_rate(
-      parameter_dictionary->GetDouble("optimization_rate"));
   options.set_ct_window_horizon(
       parameter_dictionary->GetDouble("ct_window_horizon"));
   options.set_ct_window_rate(
@@ -89,6 +87,8 @@ CreateOptimizingLocalTrajectoryBuilderOptions(
       parameter_dictionary->GetDouble("sampling_min_delta_time"));
   options.set_sampling_max_delta_time(
       parameter_dictionary->GetDouble("sampling_max_delta_time"));
+
+  options.set_velocity_in_state(parameter_dictionary->GetBool("velocity_in_state"));
 
   return options;
 }

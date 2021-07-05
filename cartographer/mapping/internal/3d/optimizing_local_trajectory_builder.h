@@ -140,9 +140,7 @@ class OptimizingLocalTrajectoryBuilder {
   mapping::ActiveSubmaps3D active_submaps_;
   int num_accumulated_;
   int total_num_accumulated_;
-  common::Time last_optimization_time_;
   common::Time initial_data_time_;
-  common::Duration optimization_rate_;
 
   std::deque<ControlPoint> control_points_;
   double gravity_constant_ = 9.80665;
