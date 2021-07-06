@@ -20,26 +20,27 @@ namespace cartographer {
 namespace io {
 namespace {
 
-std::unique_ptr<PointsBatch> CreatePointsBatch1() {
+std::unique_ptr<PointsBatch> CreatePointsBatch1(sensor::PointCloud &static_points,
+                                                Eigen::Vector3f &dynamic_point) {
   auto points_batch = ::absl::make_unique<PointsBatch>();
   points_batch->origin = Eigen::Vector3f(0, 0, 0);
-  points_batch->points.push_back({Eigen::Vector3f{-1.0f, 2.0f, 0.0f}});
-  points_batch->points.push_back({Eigen::Vector3f{-0.5f, 2.0f, 0.0f}});
-  points_batch->points.push_back({Eigen::Vector3f{0.0f, 2.0f, 0.0f}});
-  points_batch->points.push_back({Eigen::Vector3f{0.5f, 2.0f, 0.0f}});
-  points_batch->points.push_back({Eigen::Vector3f{1.0f, 2.0f, 0.0f}});
-  points_batch->points.push_back({Eigen::Vector3f{0.0f, 1.0f, 0.0f}}); // dynamic point in front
+  points_batch->points.push_back(static_points[0]);
+  points_batch->points.push_back(static_points[1]);
+  points_batch->points.push_back(static_points[2]);
+  points_batch->points.push_back(static_points[3]);
+  points_batch->points.push_back(static_points[4]);
+  points_batch->points.push_back({dynamic_point}); // dynamic point in front
   return points_batch;
 }
 
-std::unique_ptr<PointsBatch> CreatePointsBatch2() {
+std::unique_ptr<PointsBatch> CreatePointsBatch2(sensor::PointCloud &static_points) {
   auto points_batch = ::absl::make_unique<PointsBatch>();
   points_batch->origin = Eigen::Vector3f(0, 0, 0);
-  points_batch->points.push_back({Eigen::Vector3f{-1.01f, 2.0f, 0.0f}});
-  points_batch->points.push_back({Eigen::Vector3f{-0.5f, 2.01f, 0.0f}});
-  points_batch->points.push_back({Eigen::Vector3f{0.01f, 2.01f, 0.0f}});
-  points_batch->points.push_back({Eigen::Vector3f{0.51f, 2.0f, 0.0f}});
-  points_batch->points.push_back({Eigen::Vector3f{1.01f, 2.0f, 0.0f}});
+  points_batch->points.push_back(static_points[5]);
+  points_batch->points.push_back(static_points[6]);
+  points_batch->points.push_back(static_points[7]);
+  points_batch->points.push_back(static_points[8]);
+  points_batch->points.push_back(static_points[9]);
   return points_batch;
 }
 
@@ -108,9 +109,20 @@ class DynamicObjectRemovalPointsProcessorTest : public ::testing::Test {
                                     fake_file_writer_output_));
     EXPECT_TRUE(pipeline.size() > 0);
 
+    static_points_.push_back({Eigen::Vector3f{-1.0f, 2.0f, 0.0f}});
+    static_points_.push_back({Eigen::Vector3f{-0.5f, 2.0f, 0.0f}});
+    static_points_.push_back({Eigen::Vector3f{0.0f, 2.0f, 0.0f}});
+    static_points_.push_back({Eigen::Vector3f{0.5f, 2.0f, 0.0f}});
+    static_points_.push_back({Eigen::Vector3f{1.0f, 2.0f, 0.0f}});
+    static_points_.push_back({Eigen::Vector3f{-1.01f, 2.0f, 0.0f}});
+    static_points_.push_back({Eigen::Vector3f{-0.5f, 2.01f, 0.0f}});
+    static_points_.push_back({Eigen::Vector3f{0.01f, 2.01f, 0.0f}});
+    static_points_.push_back({Eigen::Vector3f{0.51f, 2.0f, 0.0f}});
+    static_points_.push_back({Eigen::Vector3f{1.01f, 2.0f, 0.0f}});
+
     do {
-      pipeline.back()->Process(CreatePointsBatch1());
-      pipeline.back()->Process(CreatePointsBatch2());
+      pipeline.back()->Process(CreatePointsBatch1(static_points_, dynamic_point_));
+      pipeline.back()->Process(CreatePointsBatch2(static_points_));
     } while (pipeline.back()->Flush() == cartographer::io::PointsProcessor::FlushResult::kRestartStream);
 
     map_ = dynamic_cast<DynamicObjectsRemovalPointsProcessor*>(pipeline.back().get())->map_;
@@ -120,14 +132,40 @@ class DynamicObjectRemovalPointsProcessorTest : public ::testing::Test {
       std::make_shared<std::vector<char>>();
   std::unique_ptr<cartographer::common::LuaParameterDictionary>
       pipeline_dictionary_;
+  sensor::PointCloud static_points_;
+  Eigen::Vector3f dynamic_point_ = Eigen::Vector3f{0.0f, 1.0f, 0.0f};
   sensor::TimedPointCloud map_;
 };
 
-TEST_F(DynamicObjectRemovalPointsProcessorTest, DynamicObjectRemoved) {
+TEST_F(DynamicObjectRemovalPointsProcessorTest, NumberOfPointsCheck) {
   Run("test_wedge.ply");
   EXPECT_EQ(map_.size(), 10);
   // TODO(bhirschel) check that the right points are still there
-  //EXPECT_FLOAT_EQ(map_)
+}
+
+TEST_F(DynamicObjectRemovalPointsProcessorTest, PointsValueCheck) {
+  Run("test_wedge.ply");
+  // Map to std vector
+  std::vector<std::vector<float>> map_points_std, static_points_std;
+  for (auto & map_point : map_) {
+    std::vector<float> v;
+    v.resize(map_point.position.size());
+    Eigen::Vector3f::Map(&v[0], map_point.position.size()) = map_point.position;
+    map_points_std.push_back(v);
+  }
+  for (auto & static_point : static_points_) {
+    std::vector<float> v;
+    v.resize(static_point.position.size());
+    Eigen::Vector3f::Map(&v[0], static_point.position.size()) = static_point.position;
+
+    // Check that ALL static points v are within the final map
+    EXPECT_TRUE(std::find(map_points_std.begin(), map_points_std.end(), v) != map_points_std.end());
+  }
+  // Check that the dynamic point is NOT within the final map
+  std::vector<float> v;
+  v.resize(dynamic_point_.size());
+  Eigen::Vector3f::Map(&v[0], dynamic_point_.size()) = dynamic_point_;
+  EXPECT_TRUE(std::find(map_points_std.begin(), map_points_std.end(), v) == map_points_std.end());
 }
 
 }
