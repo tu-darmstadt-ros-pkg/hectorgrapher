@@ -13,7 +13,7 @@ configurations.
 The purpose of this branch is to provide optimal localization and mapping for object penetrating sensors with sparse 
 data and high noise, like radar.
 
-[![Cartographer Radar SLAM Demo](https://j.gifs.com/3620x9.gif "Cartographer Radar SLAM Demo, TU Darmstadt SIM Lab")](https://youtu.be/kJNA30l0X-w)
+[![Cartographer Radar SLAM Demo](/radar_slam.gif "Cartographer Radar SLAM Demo, TU Darmstadt SIM Lab")](https://youtu.be/kJNA30l0X-w)
 
 
 # Getting started
