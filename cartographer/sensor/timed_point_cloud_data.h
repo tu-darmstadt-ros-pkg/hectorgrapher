@@ -28,6 +28,7 @@ struct TimedPointCloudData {
   common::Time time;
   Eigen::Vector3f origin;
   TimedPointCloud ranges;
+  size_t width;
 };
 
 struct TimedPointCloudOriginData {
@@ -38,6 +39,7 @@ struct TimedPointCloudOriginData {
   common::Time time;
   std::vector<Eigen::Vector3f> origins;
   std::vector<RangeMeasurement> ranges;
+  size_t width;
 };
 
 // Converts 'timed_point_cloud_data' to a proto::TimedPointCloudData.

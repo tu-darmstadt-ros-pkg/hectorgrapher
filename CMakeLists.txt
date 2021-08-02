@@ -122,6 +122,12 @@ file(GLOB_RECURSE TEST_LIBRARY_HDRS "cartographer/fake_*.h" "cartographer/*test_
 file(GLOB_RECURSE TEST_LIBRARY_SRCS "cartographer/fake_*.cc" "cartographer/*test_helpers*.cc" "cartographer/mock_*.cc")
 file(GLOB_RECURSE ALL_TESTS "cartographer/*_test.cc")
 file(GLOB_RECURSE ALL_EXECUTABLES "cartographer/*_main.cc")
+file(GLOB_RECURSE ALL_EVALUATION_SRCS "cartographer/evaluation/*")
+
+# remove evaluation tools from src list if not explicitly enabled
+if (NOT ${BUILD_EVALUATION_TOOLS})
+  list(REMOVE_ITEM ALL_LIBRARY_SRCS ${ALL_EVALUATION_SRCS})
+endif()
 
 # Remove dotfiles/-folders that could potentially pollute the build.
 file(GLOB_RECURSE ALL_DOTFILES ".*/*")
@@ -233,6 +239,12 @@ google_binary(cartographer_autogenerate_ground_truth
     cartographer/ground_truth/autogenerate_ground_truth_main.cc
 )
 
+
+google_binary(cartographer_generate_ground_truth_from_mocap
+  SRCS
+    cartographer/ground_truth/generate_ground_truth_from_mocap_main.cc
+)
+
 google_binary(cartographer_compute_relations_metrics
   SRCS
     cartographer/ground_truth/compute_relations_metrics_main.cc
@@ -242,7 +254,6 @@ google_binary(cartographer_pbstream
   SRCS
   cartographer/io/pbstream_main.cc
 )
-
 
 if(${BUILD_EVALUATION_TOOLS})
 google_binary(cartographer_scan_matching_evaluation

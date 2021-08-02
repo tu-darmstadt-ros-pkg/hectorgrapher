@@ -41,7 +41,7 @@ struct PixelData {
 // information.
 sensor::RangeData FilterRangeDataByMaxRange(const sensor::RangeData& range_data,
                                             const float max_range) {
-  sensor::RangeData result{range_data.origin, {}, {}};
+  sensor::RangeData result{range_data.origin, {}, {}, range_data.width};
   if(max_range == 0.f) {
     result.returns = range_data.returns;
     return result;
@@ -60,7 +60,8 @@ sensor::RangeData FilterRangeDataByMaxRange(const sensor::RangeData& range_data,
 // structure is preserved. Removes misses and reflectivity information.
 sensor::RangeData FilterStructuredRangeDataByMaxRange(
     const sensor::RangeData& range_data, const float max_range) {
-  sensor::RangeData result{range_data.origin, range_data.returns, {}};
+  sensor::RangeData result{
+      range_data.origin, range_data.returns, {}, range_data.width};
   if (max_range == 0.f) {
     result.returns = range_data.returns;
     return result;
@@ -285,9 +286,16 @@ proto::SubmapsOptions3D CreateSubmapsOptions3D(
   options.set_low_resolution(parameter_dictionary->GetDouble("low_resolution"));
   options.set_num_range_data(
       parameter_dictionary->GetNonNegativeInt("num_range_data"));
-  *options.mutable_range_data_inserter_options() =
+  *options.mutable_high_resolution_range_data_inserter_options() =
       CreateRangeDataInserterOptions3D(
-          parameter_dictionary->GetDictionary("range_data_inserter").get());
+          parameter_dictionary
+              ->GetDictionary("high_resolution_range_data_inserter")
+              .get());
+  *options.mutable_low_resolution_range_data_inserter_options() =
+      CreateRangeDataInserterOptions3D(
+          parameter_dictionary
+              ->GetDictionary("low_resolution_range_data_inserter")
+              .get());
   CHECK_GT(options.num_range_data(), 0);
   const std::string grid_type_string =
       parameter_dictionary->GetString("grid_type");
@@ -414,29 +422,25 @@ void Submap3D::ToResponseProto(
   }
 }
 
-void Submap3D::InsertData(const sensor::RangeData& range_data_in_local,
-                          const RangeDataInserterInterface* range_data_inserter,
-                          const float high_resolution_max_range,
-                          const Eigen::Quaterniond& local_from_gravity_aligned,
-                          const Eigen::VectorXf& scan_histogram_in_gravity) {
+void Submap3D::InsertData(
+    const sensor::RangeData& range_data_in_local,
+    const RangeDataInserterInterface* high_resolution_range_data_inserter,
+    const RangeDataInserterInterface* low_resolution_range_data_inserter,
+    const float high_resolution_max_range,
+    const Eigen::Quaterniond& local_from_gravity_aligned,
+    const Eigen::VectorXf& scan_histogram_in_gravity) {
   CHECK(!insertion_finished());
   // Transform range data into submap frame.
   const sensor::RangeData transformed_range_data = sensor::TransformRangeData(
       range_data_in_local, local_pose().inverse().cast<float>());
-  if (range_data_inserter->RequiresStructuredData()) {
-    range_data_inserter->Insert(
-        FilterStructuredRangeDataByMaxRange(transformed_range_data,
-                                            high_resolution_max_range),
-        high_resolution_grid_.get());
-  } else {
-    range_data_inserter->Insert(
-        FilterRangeDataByMaxRange(transformed_range_data,
-                                  high_resolution_max_range),
-        high_resolution_grid_.get());
-  }
 
-  range_data_inserter->Insert(transformed_range_data,
-                              low_resolution_grid_.get());
+  // todo(kdaun) remove high_resolution_max_range parameter from Submap options
+  // --> move to range_data_inserter
+  high_resolution_range_data_inserter->Insert(transformed_range_data,
+                                              high_resolution_grid_.get());
+
+  low_resolution_range_data_inserter->Insert(transformed_range_data,
+                                             low_resolution_grid_.get());
   set_num_range_data(num_range_data() + 1);
   const float yaw_in_submap_from_gravity = transform::GetYaw(
       local_pose().inverse().rotation() * local_from_gravity_aligned);
@@ -451,24 +455,28 @@ void Submap3D::Finish() {
 }
 
 std::unique_ptr<RangeDataInserterInterface>
-  ActiveSubmaps3D::CreateRangeDataInserter() {
-    switch (options_.range_data_inserter_options().range_data_inserter_type()) {
-      case proto::RangeDataInserterOptions3D::PROBABILITY_GRID_INSERTER_3D:
-        return absl::make_unique<OccupancyGridRangeDataInserter3D>(
-            options_.range_data_inserter_options());
-      case proto::RangeDataInserterOptions3D::TSDF_INSERTER_3D:
-        return absl::make_unique<TSDFRangeDataInserter3D>(
-            options_.range_data_inserter_options());
-      default:
-        LOG(FATAL) << "Unknown RangeDataInserterType.";
-        return absl::make_unique<TSDFRangeDataInserter3D>(
-            options_.range_data_inserter_options()); //todo(kdaun) fix error: control reaches end of non-void function
-    }
+ActiveSubmaps3D::CreateRangeDataInserter(
+    const proto::RangeDataInserterOptions3D& inserter_options) {
+  switch (inserter_options.range_data_inserter_type()) {
+    case proto::RangeDataInserterOptions3D::PROBABILITY_GRID_INSERTER_3D:
+      return absl::make_unique<OccupancyGridRangeDataInserter3D>(
+          inserter_options);
+    case proto::RangeDataInserterOptions3D::TSDF_INSERTER_3D:
+      return absl::make_unique<TSDFRangeDataInserter3D>(inserter_options);
+    default:
+      LOG(FATAL) << "Unknown RangeDataInserterType.";
+      return absl::make_unique<TSDFRangeDataInserter3D>(
+          inserter_options);  // todo(kdaun) fix error: control reaches end of
+                              // non-void function
   }
+}
 
 ActiveSubmaps3D::ActiveSubmaps3D(const proto::SubmapsOptions3D& options)
     : options_(options),
-      range_data_inserter_(CreateRangeDataInserter()) {}
+      high_resolution_range_data_inserter_(CreateRangeDataInserter(
+          options.high_resolution_range_data_inserter_options())),
+      low_resolution_range_data_inserter_(CreateRangeDataInserter(
+          options.low_resolution_range_data_inserter_options())) {}
 
 std::vector<std::shared_ptr<const Submap3D>> ActiveSubmaps3D::submaps() const {
   return std::vector<std::shared_ptr<const Submap3D>>(submaps_.begin(),
@@ -487,7 +495,8 @@ std::vector<std::shared_ptr<const Submap3D>> ActiveSubmaps3D::InsertData(
               rotational_scan_matcher_histogram_in_gravity.size(), time);
   }
   for (auto& submap : submaps_) {
-    submap->InsertData(range_data, range_data_inserter_.get(),
+    submap->InsertData(range_data, high_resolution_range_data_inserter_.get(),
+                       low_resolution_range_data_inserter_.get(),
                        options_.high_resolution_max_range(),
                        local_from_gravity_aligned,
                        rotational_scan_matcher_histogram_in_gravity);
@@ -503,12 +512,24 @@ std::unique_ptr<GridInterface> ActiveSubmaps3D::CreateGrid(float resolution) {
     case proto::SubmapsOptions3D_GridType_PROBABILITY_GRID:
       return absl::make_unique<HybridGrid>(resolution, &conversion_tables_);
     case proto::SubmapsOptions3D_GridType_TSDF:
+      CHECK_EQ(options_.high_resolution_range_data_inserter_options()
+                   .tsdf_range_data_inserter_options_3d()
+                   .relative_truncation_distance(),
+               options_.low_resolution_range_data_inserter_options()
+                   .tsdf_range_data_inserter_options_3d()
+                   .relative_truncation_distance());
+      CHECK_EQ(options_.high_resolution_range_data_inserter_options()
+                   .tsdf_range_data_inserter_options_3d()
+                   .maximum_weight(),
+               options_.low_resolution_range_data_inserter_options()
+                   .tsdf_range_data_inserter_options_3d()
+                   .maximum_weight());
       return absl::make_unique<HybridGridTSDF>(
           resolution,
-          options_.range_data_inserter_options()
+          options_.high_resolution_range_data_inserter_options()
               .tsdf_range_data_inserter_options_3d()
               .relative_truncation_distance(),
-          options_.range_data_inserter_options()
+          options_.low_resolution_range_data_inserter_options()
               .tsdf_range_data_inserter_options_3d()
               .maximum_weight(),
           &conversion_tables_);

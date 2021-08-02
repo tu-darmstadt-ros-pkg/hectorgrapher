@@ -24,6 +24,7 @@
 
 #include "cartographer/common/time.h"
 #include "cartographer/mapping/3d/submap_3d.h"
+#include "cartographer/mapping/internal/3d/debug_logger.h"
 #include "cartographer/mapping/internal/3d/imu_integration.h"
 #include "cartographer/mapping/internal/3d/state.h"
 #include "cartographer/mapping/internal/motion_filter.h"
@@ -39,10 +40,6 @@
 namespace cartographer {
 namespace mapping {
 
-struct ControlPoint {
-  common::Time time;
-  State state;
-};
 
 // Batches up some sensor data and optimizes them in one go to get a locally
 // consistent trajectory.
@@ -88,6 +85,7 @@ class OptimizingLocalTrajectoryBuilder {
 
  private:
   void AddControlPoint(common::Time t);
+  void AddControlPoint(common::Time t, double dT, double dR, double dt);
 
   void AddPerScanMatchingResiduals(ceres::Problem& problem);
   void AddPerPointMatchingResiduals(ceres::Problem& problem);
@@ -101,6 +99,7 @@ class OptimizingLocalTrajectoryBuilder {
     sensor::TimedPointCloud high_resolution_filtered_points;
     sensor::TimedPointCloud low_resolution_filtered_points;
     sensor::TimedPointCloud original_cloud;
+    size_t width;
 
     common::Time StartTime() {
       CHECK(!original_cloud.empty());
@@ -141,9 +140,7 @@ class OptimizingLocalTrajectoryBuilder {
   mapping::ActiveSubmaps3D active_submaps_;
   int num_accumulated_;
   int total_num_accumulated_;
-  common::Time last_optimization_time_;
   common::Time initial_data_time_;
-  common::Duration optimization_rate_;
 
   std::deque<ControlPoint> control_points_;
   double gravity_constant_ = 9.80665;
@@ -170,7 +167,7 @@ class OptimizingLocalTrajectoryBuilder {
   double total_insertion_duration;
   unsigned int num_optimizations;
   double total_optimization_duration;
-
+  DebugLogger debug_logger_;
 };
 
 }  // namespace mapping
