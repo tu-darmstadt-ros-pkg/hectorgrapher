@@ -28,7 +28,7 @@ option(BUILD_PROMETHEUS "build Prometheus monitoring support" false)
 option(WITH_OPEN3D "build with open3d support" true)
 option(WITH_PCL "build with pcl support" false)
 option(WITH_RK4_INTEGRATOR "build with rk4 integrator" false)
-option(BUILD_EVALUATION_TOOLS "build with evaluation tool" false)
+option(BUILD_EVALUATION_TOOLS "build with evaluation tool" true)
 
 
 #set(CMAKE_CXX_STANDARD 14)
