@@ -6,7 +6,7 @@ options = {
     pointcloudPath = "/Downloads/Halle-DRZ-Modell-innen-Flug1-2020-12-09.ply",
 
     uniformDownSample = true,
-    sampleRateUniformDownSample = 10,
+    sampleRateUniformDownSample = 100,
 
     voxelDownSample = true,
     voxelSizeVoxelDownSample = 0.1,
