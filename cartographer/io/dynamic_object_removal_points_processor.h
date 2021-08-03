@@ -33,6 +33,7 @@ class DynamicObjectsRemovalPointsProcessor : public PointsProcessor {
                                        int phi_segments,
                                        double sensor_range_limit,
                                        int end_of_file,
+                                       const int max_search_depth,
                                        double probability_reduction_factor,
                                        double dynamic_object_probability_threshold,
                                        bool open_view_deletion,
@@ -56,14 +57,14 @@ class DynamicObjectsRemovalPointsProcessor : public PointsProcessor {
   FlushResult Flush() override;
 
  private:
-  const int r_segments_, theta_segments_, phi_segments_, end_of_file_;
+  const int r_segments_, theta_segments_, phi_segments_, end_of_file_, max_search_depth_;
   const double sensor_range_limit_, probability_reduction_factor_,
       dynamic_object_probability_threshold_;
   const bool open_view_deletion_;
   std::vector<PointsBatch> list_of_batches_;
   PointsProcessor *const next_;
   std::unique_ptr<FileWriter> file_;
-  transform::Rigid3<float> sensor_height_adjustment_;
+  transform::Rigid3<float> robot_translation_;
   uint16_t scan_batch_max_range_;
 
   static uint16_t cantor_pairing(uint16_t a, uint16_t b);

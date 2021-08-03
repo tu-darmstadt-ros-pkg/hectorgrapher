@@ -88,7 +88,8 @@ std::unique_ptr<common::LuaParameterDictionary> CreateParameterDictionary() {
               end_of_file = 445,
               probability_reduction_factor = 0.1,
               dynamic_object_probability_threshold = 1.0,
-              open_view_deletion = false
+              open_view_deletion = false,
+              search_depth = -1
             }
           }
           return pipeline
