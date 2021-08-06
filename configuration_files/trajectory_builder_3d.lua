@@ -138,6 +138,12 @@ TRAJECTORY_BUILDER_3D = {
       use_per_point_unwarping = false,
       use_multi_resolution_matching = false,
       num_points_per_subdivision = 4,
+
+      sampling_max_delta_translation = 0.1,
+      sampling_max_delta_rotation = 0.1,
+      sampling_min_delta_time = 1.0,
+      sampling_max_delta_time = 2.0,
+
       velocity_in_state = true,
   },
 }
