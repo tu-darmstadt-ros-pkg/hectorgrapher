@@ -105,6 +105,11 @@ class OptimizingLocalTrajectoryBuilder {
       CHECK(!original_cloud.empty());
       return time + common::FromSeconds(original_cloud.front().time);
     };
+
+    common::Time EndTime() {
+      CHECK(!original_cloud.empty());
+      return time + common::FromSeconds(original_cloud.back().time);
+    };
   };
 
   State PredictStateRK4(const State& start_state, common::Time start_time,

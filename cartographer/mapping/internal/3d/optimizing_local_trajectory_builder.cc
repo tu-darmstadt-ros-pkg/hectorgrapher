@@ -1330,7 +1330,9 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
       auto next_control_point = control_points_.begin();
       bool first_point = true;
       while (ct_window_horizon_ < control_points_.back().time -
-                                      point_cloud_data_.front().StartTime()) {
+                                      point_cloud_data_.front().StartTime() &&
+             control_points_.back().time >
+                 point_cloud_data_.front().EndTime()) {
         for (const auto& point : point_cloud_data_.front().original_cloud) {
           if (point.position.hasNaN()) {
             accumulated_range_data_in_tracking.returns.push_back(point);
