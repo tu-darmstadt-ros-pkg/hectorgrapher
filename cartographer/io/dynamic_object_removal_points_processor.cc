@@ -141,7 +141,7 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
 
       // Create wedge for global map and current scan. Only if this isn't the first scan
       if (!map_.empty()) {
-        robot_translation_ = transform::Rigid3<float>(/*batch->sensor_to_map.translation(), Eigen::Quaternion<float>::Identity()*/).inverse();
+        robot_translation_ = transform::Rigid3<float>(batch->sensor_to_map.translation(), Eigen::Quaternion<float>::Identity()).inverse();
         LOG(INFO) << "Translation x:" << robot_translation_.translation().x() << ", y: " << robot_translation_.translation().y() << ", z: " << robot_translation_.translation().z();
         // Create wedges
         wedge_map_t scan_wedge_map =
@@ -166,7 +166,7 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
           float phi_min = 16.0f * phi_step;
           float phi_max = phi_min + phi_step;
 
-          for (int i = 0; i < 50 * 1000; ++i) {
+          /*for (int i = 0; i < 50 * 1000; ++i) {
             float r = r_min
                 + static_cast<float>(rand()) / (static_cast <float> (RAND_MAX / (r_max - r_min)));
             float theta = theta_min + static_cast<float>(rand())
@@ -176,7 +176,7 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
             sensor::TimedRangefinderPoint coords;
             coords.position = polar_to_cartesian(r, theta, phi);
             wedge.wedge_points.push_back(coords);
-          }
+          }*/
 
           std::vector<std::string> comments;
 
@@ -186,10 +186,14 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
           }
           WriteBinaryPlyHeader(false, false, comments, batch->points.size(),
                                file_.get());*/
-          for (size_t i = 0; i < wedge.wedge_points.size(); ++i) {
-            WriteBinaryPlyPointCoordinate(wedge.wedge_points[i].position, file_.get());
+          int elem_count = 0;
+          for (auto & elem : scan_wedge_map) {
+            for (auto & p : elem.second.wedge_points) {
+              WriteBinaryPlyPointCoordinate(p.position, file_.get());
+              ++elem_count;
+            }
           }
-          WriteBinaryPlyHeader(false, false, comments, 50 * 1000,
+          WriteBinaryPlyHeader(false, false, comments, elem_count,
                                file_.get());
           /*for (size_t i = 0; i < batch->points.size(); ++i) {
             WriteBinaryPlyPointCoordinate(batch->points[i].position, file_.get());
