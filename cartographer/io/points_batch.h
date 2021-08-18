@@ -67,9 +67,6 @@ struct PointsBatch {
   std::vector<FloatColor> colors;
 
   transform::Rigid3f sensor_to_map;
-
-  // Uses the TimesPointCloud struct to store the probability of a point being static in the 4th dim
-  sensor::TimedPointCloud points_with_probabilities;
 };
 
 // Removes the indices in 'to_remove' from 'batch'.

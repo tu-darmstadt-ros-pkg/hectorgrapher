@@ -22,6 +22,7 @@
 #include "Eigen/Core"
 #include "cartographer/sensor/proto/sensor.pb.h"
 #include "cartographer/transform/transform.h"
+#include "cartographer/io/color.h"
 #include "glog/logging.h"
 
 namespace cartographer {
@@ -37,6 +38,14 @@ struct RangefinderPoint {
 struct TimedRangefinderPoint {
   Eigen::Vector3f position;
   float time;
+};
+
+struct CustomRangefinderPoint {
+  Eigen::Vector3f position;
+  float probability;
+  int index;
+  float intensity;
+  io::FloatColor color;
 };
 
 template <class T>

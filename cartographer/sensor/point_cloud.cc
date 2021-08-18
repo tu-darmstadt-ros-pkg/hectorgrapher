@@ -51,6 +51,18 @@ TimedPointCloud TransformTimedPointCloud(const TimedPointCloud& point_cloud,
   return result;
 }
 
+CustomPointCloud TransformCustomPointCloud(
+    const CustomPointCloud& point_cloud,
+    const transform::Rigid3f& transform) {
+  CustomPointCloud result;
+  result.reserve(point_cloud.size());
+  for (const CustomRangefinderPoint& point : point_cloud) {
+    Eigen::Vector3f vector = transform * point.position;
+    result.push_back({vector, point.probability, point.index, point.intensity, point.color});
+  }
+  return result;
+}
+
 PointCloud CropPointCloud(const PointCloud& point_cloud, const float min_z,
                           const float max_z) {
   PointCloud cropped_point_cloud;

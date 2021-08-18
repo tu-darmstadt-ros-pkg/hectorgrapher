@@ -126,7 +126,7 @@ class DynamicObjectRemovalPointsProcessorTest : public ::testing::Test {
       pipeline.back()->Process(CreatePointsBatch2(static_points_));
     } while (pipeline.back()->Flush() == cartographer::io::PointsProcessor::FlushResult::kRestartStream);
 
-    map_ = dynamic_cast<DynamicObjectsRemovalPointsProcessor*>(pipeline.back().get())->map_;
+//    map_ = dynamic_cast<DynamicObjectsRemovalPointsProcessor*>(pipeline.back().get())->map_;
   }
 
   std::shared_ptr<std::vector<char>> fake_file_writer_output_ =

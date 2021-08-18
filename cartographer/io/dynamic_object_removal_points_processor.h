@@ -20,7 +20,7 @@ class DynamicObjectsRemovalPointsProcessor : public PointsProcessor {
  public:
   constexpr static const char *kConfigurationFileActionName =
       "dynamic_objects_removal_filter";
-  sensor::TimedPointCloud map_;
+  sensor::CustomPointCloud map_;
   enum class RunState {
     kInitialRun,
     kSecondRun,
@@ -66,6 +66,7 @@ class DynamicObjectsRemovalPointsProcessor : public PointsProcessor {
   std::unique_ptr<FileWriter> file_;
   transform::Rigid3<float> robot_translation_;
   uint16_t scan_batch_max_range_;
+  int iteration_ = -1;
 
   static uint16_t cantor_pairing(uint16_t a, uint16_t b);
 
@@ -90,7 +91,7 @@ class DynamicObjectsRemovalPointsProcessor : public PointsProcessor {
   };
 
   struct sphercial_wedge {
-    sensor::TimedPointCloud wedge_points;
+    sensor::CustomPointCloud wedge_points;
   };
 
   typedef std::unordered_map<const wedge_key_t, sphercial_wedge, key_hash, key_equal> wedge_map_t;
@@ -114,6 +115,8 @@ class DynamicObjectsRemovalPointsProcessor : public PointsProcessor {
     }
   };
 
+  void initialize_scan_map(sensor::CustomPointCloud &scan_map, PointsBatch *batch, int index);
+
   /**
    * Forces a 3D vector of polar coordinates into an interval defined by the number of segments for
    * r, theta and phi.
@@ -125,55 +128,14 @@ class DynamicObjectsRemovalPointsProcessor : public PointsProcessor {
    * Allocates every point from the given pointcloud to its associated wedge and returns the full
    * wedge map. When allocating the global wedge map, a range limit defined by sensor_range_limit_
    * is enforced, while for a local scan every point is added to the wedge map
-   * @param cloud The pointcloud as sensor::TimedPointCloud
+   * @param cloud The pointcloud as sensor::ProbabilityIndexedPointCloud
    * @param is_scan_batch True if the pointcloud is from the local scan batch. Toggles enforcement
    * of the sensor range limit
    * @return A wedge map as wedge_map_t
    */
-  wedge_map_t create_wedge_map(const sensor::TimedPointCloud &cloud, bool is_scan_batch);
+  wedge_map_t create_wedge_map(const sensor::CustomPointCloud &cloud, bool is_scan_batch);
 
-  /**
-   * Given a vector of wedge map keys that are identified as dynamic object points and a points
-   * batch, this function reduces their probability by the global factor
-   * probability_reduction_factor_. If their resulting probability is below the threshold defined by
-   * dynamic_object_probability_threshold_, they are deleted using the safe method provided by
-   * DynamicObjectsRemovalPointsProcessor::RemoveTimedPoints()
-   * @param keys_to_lower std vector of wedge_key_t containing wedge map keys belonging to dynamic
-   * object detections
-   * @param batch reference to the PointsBatch to work on
-   * @param transformation as transform::Rigid3<float> to be applied to each point before checking
-   * its associated wedge key
-   * @return total number of points that have been lowered in their probability
-   */
-  size_t lower_prob_in_batch(std::vector<wedge_key_t> keys_to_lower,
-                             PointsBatch &batch,
-                             const transform::Rigid3<float> &transformation);
-
-  /**
-   * Safe removal of timed points from a PointsBatch. Deletes the points_with_probabilities from the
-   * batch that have their index in the given list to_remove. Also removes associated intensities
-   * and color entries, if given.
-   * @param to_remove list of indices of points_with_probabilities to be removed
-   * @param batch reference to the PointsBatch to work on
-   */
-  static void RemoveTimedPoints(const absl::flat_hash_set<int> &to_remove, PointsBatch *batch);
-
-  /**
-   * Given a PointsBatch, this function copies all original points of type sensor::RangefinderPoint
-   * to the new list points_with_probabilities of type sensor::TimedRangefinderPoint. The additional
-   * time field of a TimedRangefinderPoint is used to store the points probability to be a detection
-   * of a static object and is initialized to 1.0. Clears points.
-   * @param batch reference to the PointsBatch to work on
-   */
-  static void initialize_probabilities(PointsBatch &batch);
-
-  /**
-   * Inverse operation to ::initialize_probabilities. Copies all points_with_probabilities of type
-   * sensor::TimedRangefinderPoint back to their original field points of type
-   * sensor::RangefinderPoint. Clears points_with_probabilities.
-   * @param batch reference to the PointsBatch to work on
-   */
-  static void copy_points_to_batch(PointsBatch &batch);
+  void flush_points_to_batch();
 };
 
 }  // namespace io

@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "dynamic_object_removal_points_processor.h"
+#include "cartographer/io/color.h"
 
 namespace cartographer {
 namespace io {
@@ -116,41 +117,41 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
 //  if (map_.empty()) {
 //    std::this_thread::sleep_for(std::chrono::seconds(10));
 //  }
+  ++iteration_;
 
   switch (run_state_) {
-    case RunState::kInitialRun:
-      LOG(INFO) << "Iteration: " << list_of_batches_.size() + 1
-                << "\tBatch points: " << batch->points.size();
-//      LOG(INFO) << "Batch origin:      x: " << batch->origin.x() << "\ty: " << batch->origin.y() << "\tz: " << batch->origin.z();
-//      LOG(INFO) << "Batch transformation: " << batch->sensor_to_map.DebugString();
+    case RunState::kInitialRun: {
+      LOG(INFO) << "Iteration: " << iteration_
+      << "\tBatch points: " << batch->points.size();
+      //      LOG(INFO) << "Batch origin:      x: " << batch->origin.x() << "\ty: " << batch->origin.y() << "\tz: " << batch->origin.z();
+      //      LOG(INFO) << "Batch transformation: " << batch->sensor_to_map.DebugString();
 
-      // Copies the vector of sensor::RangeFinderPoint to a vector of sensor::TimedRangeFinderPoint
-      // that uses the 4th attribute time as probability
-      initialize_probabilities(*batch);
+      //      if (list_of_batches_.size() == end_of_file_-1) {
+      //        std::vector<std::string> comments;
+      //        WriteBinaryPlyHeader(false, false, comments, 11760, file_.get());
+      //        for (size_t i = 0; i < batch->points.size(); ++i) {
+      //          WriteBinaryPlyPointCoordinate(batch->sensor_to_map * batch->points[i].position,
+      //                                        file_.get());
+      //        }
+      //        WriteBinaryPlyHeader(false, false, comments, batch->points.size(),
+      //                             file_.get());
+      //      }
+      robot_translation_ = transform::Rigid3<float>(batch->sensor_to_map.translation(), Eigen::Quaternion<float>::Identity()).inverse();
+      LOG(INFO) << "Translation x:" << robot_translation_.translation().x() << ", y: " << robot_translation_.translation().y() << ", z: " << robot_translation_.translation().z();
 
-//      if (list_of_batches_.size() == end_of_file_-1) {
-//        std::vector<std::string> comments;
-//        WriteBinaryPlyHeader(false, false, comments, 11760, file_.get());
-//        for (size_t i = 0; i < batch->points.size(); ++i) {
-//          WriteBinaryPlyPointCoordinate(batch->sensor_to_map * batch->points[i].position,
-//                                        file_.get());
-//        }
-//        WriteBinaryPlyHeader(false, false, comments, batch->points.size(),
-//                             file_.get());
-//      }
+      // Create scan wedges
+      sensor::CustomPointCloud scan_map;
+      initialize_scan_map(scan_map, batch.get(), iteration_);
+      wedge_map_t scan_wedge_map =
+          create_wedge_map(sensor::TransformCustomPointCloud(scan_map, robot_translation_), true);
 
-      // Create wedge for global map and current scan. Only if this isn't the first scan
       if (!map_.empty()) {
-        robot_translation_ = transform::Rigid3<float>(batch->sensor_to_map.translation(), Eigen::Quaternion<float>::Identity()).inverse();
-        LOG(INFO) << "Translation x:" << robot_translation_.translation().x() << ", y: " << robot_translation_.translation().y() << ", z: " << robot_translation_.translation().z();
-        // Create wedges
-        wedge_map_t scan_wedge_map =
-            create_wedge_map(sensor::TransformTimedPointCloud(batch->points_with_probabilities, robot_translation_), true);
+        // Create global wedges
         wedge_map_t global_wedge_map =
-            create_wedge_map(sensor::TransformTimedPointCloud(map_, robot_translation_), false);
+            create_wedge_map(sensor::TransformCustomPointCloud(map_, robot_translation_), false);
 
         LOG(INFO) << "Scan wedge map size: " << scan_wedge_map.size() << "\tGlobal wedge map size: "
-                  << global_wedge_map.size();
+        << global_wedge_map.size();
 
         // Test writing of points
         if (list_of_batches_.size() == end_of_file_ - 1) {
@@ -233,7 +234,7 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
 
         // Detection of points of type 2 (delete map points in front of current detection points)
         std::unordered_map<std::pair<uint16_t, uint16_t>, int, key_hash_pair, key_equal_pair>
-            scan_wedge_map_cardinalities;
+        scan_wedge_map_cardinalities;
 
         for (uint16_t theta_iter = 0; theta_iter < theta_segments_; ++theta_iter) {
           for (uint16_t phi_iter = 0; phi_iter < phi_segments_; ++phi_iter) {
@@ -249,7 +250,7 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
                 // Wedge exists
                 // Cardinality check: find wedge with greatest cardinality
                 if (max_cardinality.first < 0 || max_cardinality.second < 0 ||
-                    max_cardinality.second < static_cast<int>(search->second.wedge_points.size())) {
+                1.2f * max_cardinality.second < static_cast<float>(search->second.wedge_points.size())) {
                   max_cardinality = std::make_pair(r_iter, search->second.wedge_points.size());
                 }
               }
@@ -259,22 +260,22 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
                 max_cardinality.first;
 
             if (max_cardinality.first >= 0 && max_cardinality.first <= r_segments_
-                && max_cardinality.second >= 0) {
+            && max_cardinality.second >= 0) {
               // TODO(bhirschel) maybe set a minimum number of detections to make it significant
               // Significant detection perceived. Check if dynamic object
               uint16_t r_scan_detection =
                   max_cardinality.first - 1; // TODO(bhirschel) try adding a little tolerance here
 
-              for (uint16_t r_to_lower = 0; r_to_lower < r_scan_detection; ++r_to_lower) {
-                wedge_key_t new_key = std::make_tuple(r_to_lower, theta_iter, phi_iter);
-                keys_to_lower.push_back(new_key);
+                  for (uint16_t r_to_lower = 0; r_to_lower < r_scan_detection; ++r_to_lower) {
+                    wedge_key_t new_key = std::make_tuple(r_to_lower, theta_iter, phi_iter);
+                    keys_to_lower.push_back(new_key);
 
-                // We lower the probability of all points in this wedge
-                for (auto &p : global_wedge_map[new_key].wedge_points) {
-                  p.time -= static_cast<float>(probability_reduction_factor_);
-                  total_to_be_lowered++;
-                }
-              }
+                    // We lower the probability of all points in this wedge
+                    for (auto &p : global_wedge_map[new_key].wedge_points) {
+                      p.probability -= static_cast<float>(probability_reduction_factor_);
+                      total_to_be_lowered++;
+                    }
+                  }
             }
           }
         }
@@ -294,7 +295,7 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
 
               // Lower the probability of all points in this wedge
               for (auto &p : wedge.second.wedge_points) {
-                p.time -= static_cast<float>(probability_reduction_factor_);
+                p.probability -= static_cast<float>(probability_reduction_factor_);
                 total_to_be_lowered++;
               }
             }
@@ -306,9 +307,10 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
         map_.clear();
         for (auto &wedge : global_wedge_map) {
           for (auto &p : wedge.second.wedge_points) {
-            if (p.time >= static_cast<float>(dynamic_object_probability_threshold_)) {
+            if (p.probability >= static_cast<float>(dynamic_object_probability_threshold_)) {
               // Apply backwards transformation back to map frame
-              map_.push_back(robot_translation_.inverse() * p);
+              Eigen::Vector3f new_point = robot_translation_.inverse() * p.position;
+              map_.push_back({new_point, p.probability, p.index, p.intensity, p.color});
             } else {
               // Point was not taken over since its probability is too low. Will be removed from the map and batches
               total_number_removed_points++;
@@ -320,49 +322,57 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
         // the last batch often is the main contributor to a dynamic objects' remaining
         // spurious trail. Count the number of points from the global map and break the loop if
         // this number was removed in total for all the individual batches
-        int depth_counter = 0;
-        for (auto batch_iter = list_of_batches_.rbegin(); batch_iter != list_of_batches_.rend();
-             ++batch_iter) {
-          ++depth_counter;
-          if (max_search_depth_ != -1 && depth_counter >= max_search_depth_) {
-            break;
-          }
-
-          already_lowered += lower_prob_in_batch(keys_to_lower, *batch_iter, robot_translation_);
-
-          if (already_lowered >= total_to_be_lowered) {
-            break;
-          }
-        }
+        //        int depth_counter = 0;
+        //        for (auto batch_iter = list_of_batches_.rbegin(); batch_iter != list_of_batches_.rend();
+        //             ++batch_iter) {
+        //          ++depth_counter;
+        //          if (max_search_depth_ != -1 && depth_counter >= max_search_depth_) {
+        //            break;
+        //          }
+        //
+        //          already_lowered += lower_prob_in_batch(keys_to_lower, *batch_iter, robot_translation_);
+        //
+        //          if (already_lowered >= total_to_be_lowered) {
+        //            break;
+        //          }
+        //        }
         LOG(INFO) << "Total number of removed points: " << total_number_removed_points;
       }
-
-      // Add the current batch to the list of batches for later sending
-      list_of_batches_.push_back(*batch);
 
       // Add all points from the current scan to the full map
       // IMPORTANT: First clear the full map and add all points from the global wedge map since
       // there the dynamic points have been removed while they are still in map_ ! This is done at
       // the deletion step above
-      for (auto &point : batch->points_with_probabilities) {
-        // No back-transformation necessary since we take the points directly from the untouched batch
-        sensor::TimedRangefinderPoint new_point = {point.position, point.time};
-        map_.push_back(new_point);
+      for (auto & wedge : scan_wedge_map) {
+        for (auto & point : wedge.second.wedge_points) {
+          Eigen::Vector3f scan_position = robot_translation_.inverse() * point.position;
+          map_.push_back({scan_position, point.probability, point.index, point.intensity, point.color});
+        }
       }
+
+      // Add the current batch to the list of batches for later sending
+      batch->points.clear();
+      batch->intensities.clear();
+      batch->colors.clear();
+      list_of_batches_.push_back(*batch);
 
       LOG(INFO) << "Total Map points: " << map_.size();
       break;
-    case RunState::kSecondRun:auto this_batch = list_of_batches_[0];
-      copy_points_to_batch(this_batch);
+    }
+    case RunState::kSecondRun: {
+      // At the second run, send the batches through the pipeline
+      auto this_batch = list_of_batches_[0];
       LOG(INFO) << "Batch sent. Size: " << this_batch.points.size();
       next_->Process(std::make_unique<PointsBatch>(this_batch));
       list_of_batches_.erase(list_of_batches_.begin());
+    }
   }
 }
 
 PointsProcessor::FlushResult DynamicObjectsRemovalPointsProcessor::Flush() {
   LOG(INFO) << "Flushing dynamic_object_removal_points_processor";
   if (run_state_ == RunState::kInitialRun) {
+    flush_points_to_batch();
     run_state_ = RunState::kSecondRun;
     return FlushResult::kRestartStream;
   } else {
@@ -419,16 +429,16 @@ DynamicObjectsRemovalPointsProcessor::wedge_key_t DynamicObjectsRemovalPointsPro
 }
 
 DynamicObjectsRemovalPointsProcessor::wedge_map_t DynamicObjectsRemovalPointsProcessor::create_wedge_map(
-    const sensor::TimedPointCloud &cloud, bool is_scan_batch) {
+    const sensor::CustomPointCloud &cloud, bool is_scan_batch) {
   wedge_map_t wedge_map;
 
   for (auto &p : cloud) {
     Eigen::Vector3f polar = cartesian_to_polar(p.position);
 
     // Skip if global wedge map and distance is greater than the sensor range limit
-    if (!is_scan_batch && polar.x() > sensor_range_limit_) {
-      continue;
-    }
+//    if (!is_scan_batch && polar.x() > sensor_range_limit_) {
+//      continue;
+//    }
 
     wedge_key_t key = get_interval_segment(polar);
     auto search = wedge_map.find(key);
@@ -461,87 +471,34 @@ DynamicObjectsRemovalPointsProcessor::wedge_map_t DynamicObjectsRemovalPointsPro
   return wedge_map;
 }
 
-size_t DynamicObjectsRemovalPointsProcessor::lower_prob_in_batch(std::vector<wedge_key_t> keys_to_lower,
-                                                                 PointsBatch &batch,
-                                                                 const transform::Rigid3<float> &transformation) {
-  absl::flat_hash_set<int> to_remove;
-  size_t total_lowered = 0;
+void DynamicObjectsRemovalPointsProcessor::initialize_scan_map(sensor::CustomPointCloud &scan_map,
+                                                               PointsBatch *batch,
+                                                               int index) {
+  FloatColor nan_color = {{NAN, NAN, NAN}};
+  for (size_t i = 0; i < batch->points.size(); ++i) {
+    float intensity = batch->intensities.empty() ? NAN : batch->intensities[i];
+    FloatColor color = batch->colors.empty() ? nan_color : batch->colors[i];
+    scan_map.push_back({batch->points[i].position, 1.0f, index, intensity, color});
+  }
+}
 
-  for (size_t i = 0; i < batch.points_with_probabilities.size(); ++i) {
-    wedge_key_t local_key = get_interval_segment(cartesian_to_polar(
-        transformation * batch.points_with_probabilities[i].position));
-    if (std::find(keys_to_lower.begin(), keys_to_lower.end(), local_key) != keys_to_lower.end()) {
-      batch.points_with_probabilities[i].time -= static_cast<float>(probability_reduction_factor_);
-      total_lowered++;
-
-      if (batch.points_with_probabilities[i].time
-          < static_cast<float>(dynamic_object_probability_threshold_)) {
-        to_remove.insert(i);
+void DynamicObjectsRemovalPointsProcessor::flush_points_to_batch() {
+  for (auto & point : map_) {
+    if (point.probability >= dynamic_object_probability_threshold_ && point.index < list_of_batches_.size()) {
+      sensor::RangefinderPoint extracted_point;
+      extracted_point.position = point.position;
+      list_of_batches_[point.index].points.push_back(extracted_point);
+      // Only set intensities if they were originally set (not nan)
+      if (!std::isnan(point.intensity)) {
+        list_of_batches_[point.index].intensities.push_back(point.intensity);
+      }
+      // Only set colors if they were originally set (not nan)
+      if (!std::isnan(point.color[0])) {
+        list_of_batches_[point.index].colors.push_back(point.color);
       }
     }
   }
-
-  if (!to_remove.empty()) {
-    RemoveTimedPoints(to_remove, &batch);
-  }
-
-  return total_lowered;
 }
 
-void DynamicObjectsRemovalPointsProcessor::initialize_probabilities(PointsBatch &batch) {
-  batch.points_with_probabilities.clear();
-  batch.points.reserve(batch.points.size());
-
-  for (auto &p : batch.points) {
-    sensor::TimedRangefinderPoint new_point = {p.position, 1.0};
-
-    batch.points_with_probabilities.push_back(new_point);
-  }
-
-  batch.points.clear();
-}
-
-void DynamicObjectsRemovalPointsProcessor::RemoveTimedPoints(const absl::flat_hash_set<int> &to_remove,
-                                                             PointsBatch *batch) {
-  const size_t new_num_points = batch->points_with_probabilities.size() - to_remove.size();
-  sensor::TimedPointCloud points;
-  points.reserve(new_num_points);
-  std::vector<float> intensities;
-  if (!batch->intensities.empty()) {
-    intensities.reserve(new_num_points);
-  }
-  std::vector<FloatColor> colors;
-  if (!batch->colors.empty()) {
-    colors.reserve(new_num_points);
-  }
-
-  for (size_t i = 0; i < batch->points_with_probabilities.size(); ++i) {
-    if (to_remove.count(static_cast<int>(i)) == 1) {
-      continue;
-    }
-    points.push_back(batch->points_with_probabilities[i]);
-    if (!batch->colors.empty()) {
-      colors.push_back(batch->colors[i]);
-    }
-    if (!batch->intensities.empty()) {
-      intensities.push_back(batch->intensities[i]);
-    }
-  }
-  batch->points_with_probabilities = std::move(points);
-  batch->intensities = std::move(intensities);
-  batch->colors = std::move(colors);
-}
-
-void DynamicObjectsRemovalPointsProcessor::copy_points_to_batch(PointsBatch &batch) {
-  batch.points.reserve(batch.points_with_probabilities.size());
-
-  for (auto &point : batch.points_with_probabilities) {
-    sensor::RangefinderPoint new_point = {point.position};
-
-    batch.points.push_back(new_point);
-  }
-
-  batch.points_with_probabilities.clear();
-}
 }
 }
