@@ -123,8 +123,8 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
     case RunState::kInitialRun: {
       LOG(INFO) << "Iteration: " << iteration_
       << "\tBatch points: " << batch->points.size();
-      //      LOG(INFO) << "Batch origin:      x: " << batch->origin.x() << "\ty: " << batch->origin.y() << "\tz: " << batch->origin.z();
-      //      LOG(INFO) << "Batch transformation: " << batch->sensor_to_map.DebugString();
+            LOG(INFO) << "Batch origin:      x: " << batch->origin.x() << "\ty: " << batch->origin.y() << "\tz: " << batch->origin.z();
+            LOG(INFO) << "Batch transformation: " << batch->sensor_to_map.DebugString();
 
       //      if (list_of_batches_.size() == end_of_file_-1) {
       //        std::vector<std::string> comments;
