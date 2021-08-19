@@ -121,11 +121,7 @@ OptimizingLocalTrajectoryBuilder::OptimizingLocalTrajectoryBuilder(
       active_submaps_(options.submaps_options()),
       num_accumulated_(0),
       total_num_accumulated_(0),
-      last_optimization_time_(common::FromUniversal(0)),
       initial_data_time_(common::FromUniversal(0)),
-      optimization_rate_(common::FromSeconds(
-          options.optimizing_local_trajectory_builder_options()
-              .optimization_rate())),
       ct_window_horizon_(common::FromSeconds(
           options.optimizing_local_trajectory_builder_options()
               .ct_window_horizon())),
@@ -198,6 +194,12 @@ OptimizingLocalTrajectoryBuilder::AddRangeData(
     // Until we've initialized the extrapolator with our first IMU message, we
     // cannot compute the orientation of the rangefinder.
     LOG(INFO) << "IMU not yet initialized.";
+    return nullptr;
+  }
+  if (odometer_data_.empty()) {
+    // Until we've initialized the extrapolator with our first IMU message, we
+    // cannot compute the orientation of the rangefinder.
+    LOG(INFO) << "Odom not yet initialized.";
     return nullptr;
   }
 
@@ -922,6 +924,15 @@ void OptimizingLocalTrajectoryBuilder::AddPerPointMatchingResiduals(
 
 void OptimizingLocalTrajectoryBuilder::AddIMUResiduals(
     ceres::Problem& problem) {
+  if(options_.optimizing_local_trajectory_builder_options()
+      .translation_weight() == 0.0 &&
+      options_.optimizing_local_trajectory_builder_options()
+          .velocity_weight() == 0.0 &&
+      options_.optimizing_local_trajectory_builder_options()
+          .rotation_weight() == 0.0) {
+    return;
+  }
+  CHECK(options_.optimizing_local_trajectory_builder_options().velocity_in_state())<<"IMU residuals require velocity_in_state to be enabled."; //todo(kdaun) Add rotation residual which works without velocity
   Eigen::Vector3d gravity = gravity_constant_ * Eigen::Vector3d::UnitZ();
   switch (
       options_.optimizing_local_trajectory_builder_options().imu_cost_term()) {
@@ -1013,6 +1024,8 @@ void OptimizingLocalTrajectoryBuilder::AddOdometryResiduals(
           interpolation_buffer.Lookup(control_points_[i].time);
       const transform::Rigid3d delta_pose =
           current_odometer_pose.inverse() * previous_odometer_pose;
+      const double delta_time = common::ToSeconds(control_points_[i].time -
+                                                  control_points_[i - 1].time);
 
       double residual_translation_weight =
           options_.optimizing_local_trajectory_builder_options()
@@ -1026,16 +1039,19 @@ void OptimizingLocalTrajectoryBuilder::AddOdometryResiduals(
         double rotation_distance =
             std::abs(delta_pose.rotation().angularDistance(
                 Eigen::Quaterniond::Identity()));
-        const double translation_normalization = 1.0E-4;
-        const double rotation_normalization = 1.0E-5;
+
+//        const double translation_normalization = 1.0E-3 * delta_time;
+//        const double rotation_normalization = 5.0E-3 * delta_time;
+        const double translation_normalization = 2.0E-2 * delta_time;
+        const double rotation_normalization = 1.0E-1 * delta_time;
         residual_translation_weight =
             options_.optimizing_local_trajectory_builder_options()
                 .odometry_translation_weight() /
-            (translation_distance + translation_normalization);
+            sqrt(translation_distance + translation_normalization);
         residual_rotation_weight =
             options_.optimizing_local_trajectory_builder_options()
                 .odometry_rotation_weight() /
-            (rotation_distance + rotation_normalization);
+            sqrt(rotation_distance + rotation_normalization);
       }
       problem.AddResidualBlock(
           new ceres::AutoDiffCostFunction<RelativeTranslationAndYawCostFunction,
@@ -1093,8 +1109,9 @@ void OptimizingLocalTrajectoryBuilder::TransformStates(
 
 std::unique_ptr<OptimizingLocalTrajectoryBuilder::MatchingResult>
 OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
-  if (time - initial_data_time_ < initialization_duration_ ||
-      time - last_optimization_time_ < optimization_rate_) {
+  if (time - initial_data_time_ < initialization_duration_
+      //  ||     time - last_optimization_time_ < optimization_rate_
+  ) {
     if (time - initial_data_time_ < initialization_duration_) {
       LOG(INFO) << "No Optimization - not enough time since initialization "
                 << common::ToSeconds(time - initial_data_time_) << "\t < "
@@ -1110,7 +1127,6 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
     //    AddControlPoint(initial_data_time_);
     AddControlPoint(std::max(initial_data_time_, odometer_data_.begin()->time));
   }
-  last_optimization_time_ = time;
   if (!imu_calibrated_ &&
       options_.optimizing_local_trajectory_builder_options()
           .calibrate_imu()) {
@@ -1143,7 +1159,7 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
               .control_point_sampling()) {
     case proto::CONSTANT: {
       while (control_points_.back().time + ct_window_rate_ <
-             imu_data_.back().time) {
+          odometer_data_.back().time) {
         AddControlPoint(control_points_.back().time + ct_window_rate_);
         added_control_point = true;
       }
@@ -1187,14 +1203,17 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
               control_points_.back().time, max_delta_translation,
               max_delta_rotation, max_delta_time, translation_ratio,
               rotation_ratio, time_ratio);
+          if (common::ToSeconds(candidate_time -
+              control_points_.back().time) <
+              min_delta_time) {
+            candidate_time = control_points_.back().time +
+                common::FromSeconds(min_delta_time);
+          }
           if (candidate_time < interpolation_buffer.latest_time()) {
-            //            LOG(INFO) <<"Add CP "<<
-            //            common::ToSeconds(candidate_time-initial_data_time_);
-            if (common::ToSeconds(candidate_time -
-                                  control_points_.back().time) <
-                min_delta_time) {
-              candidate_time = control_points_.back().time +
-                               common::FromSeconds(min_delta_time);
+            if (!control_points_.empty()) {
+//              LOG(INFO) << "Add CP "
+//                        << common::ToSeconds(candidate_time -
+//                                             control_points_.back().time);
             }
             AddControlPoint(candidate_time, translation_ratio, rotation_ratio,
                             time_ratio);
@@ -1244,12 +1263,15 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
         control_points_.front().state.translation.data());
     problem.SetParameterBlockConstant(
         control_points_.front().state.rotation.data());
-    problem.SetParameterBlockConstant(
-        control_points_.front().state.velocity.data());
+    if(options_.optimizing_local_trajectory_builder_options().velocity_in_state()) {
+      problem.SetParameterBlockConstant(
+          control_points_.front().state.velocity.data());
+    }
 
     for (size_t i = 1; i < control_points_.size(); ++i) {
       problem.SetParameterization(control_points_[i].state.rotation.data(),
                                   new ceres::QuaternionParameterization());
+
     }
     ceres::Solver::Summary summary;
     ceres::Solve(ceres_solver_options_, &problem, &summary);
@@ -1308,7 +1330,9 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
       auto next_control_point = control_points_.begin();
       bool first_point = true;
       while (ct_window_horizon_ < control_points_.back().time -
-                                      point_cloud_data_.front().StartTime()) {
+                                      point_cloud_data_.front().StartTime() &&
+             control_points_.back().time >
+                 point_cloud_data_.front().EndTime()) {
         for (const auto& point : point_cloud_data_.front().original_cloud) {
           if (point.position.hasNaN()) {
             accumulated_range_data_in_tracking.returns.push_back(point);
@@ -1491,13 +1515,14 @@ State OptimizingLocalTrajectoryBuilder::PredictState(
     const State& start_state, const common::Time start_time,
     const common::Time end_time) {
   //return start_state;
-  bool predict_odom = false;
+  bool predict_odom = true;
   if (predict_odom) {
     return PredictStateOdom(start_state, start_time, end_time);
   }
 
   switch (
       options_.optimizing_local_trajectory_builder_options().imu_integrator()) {
+    CHECK(options_.optimizing_local_trajectory_builder_options().velocity_in_state())<<"IMU based state propagation requires velocity_in_state to be enabled.";
     case proto::IMUIntegrator::EULER:
       return PredictStateEuler(start_state, start_time, end_time);
     case proto::IMUIntegrator::RK4:
@@ -1571,10 +1596,33 @@ State OptimizingLocalTrajectoryBuilder::PredictStateOdom(
 //    control_points_[i].time <= interpolation_buffer.latest_time())) {
 //    continue;
 //  }
-  const transform::Rigid3d previous_odometer_pose =
-    interpolation_buffer.Lookup(start_time);
-  const transform::Rigid3d current_odometer_pose =
-    interpolation_buffer.Lookup(end_time);
+
+
+  const common::Time earliest_time =
+      interpolation_buffer.earliest_time();
+  const common::Time latest_time =
+      interpolation_buffer.latest_time();
+  transform::Rigid3d previous_odometer_pose;
+  if (interpolation_buffer.Has(start_time)) {
+    previous_odometer_pose = interpolation_buffer.Lookup(start_time);
+  } else if (start_time < earliest_time) {
+    LOG(WARNING) << "start_time out of buffer, too early "<<common::ToSeconds(earliest_time-start_time);
+    previous_odometer_pose = interpolation_buffer.Lookup(earliest_time);
+  } else if (start_time > latest_time) {
+    LOG(WARNING) << "start_time out of buffer, too late "<<common::ToSeconds(start_time-latest_time);
+    previous_odometer_pose = interpolation_buffer.Lookup(latest_time);
+  }
+  transform::Rigid3d current_odometer_pose;
+  if (interpolation_buffer.Has(end_time)) {
+    current_odometer_pose = interpolation_buffer.Lookup(end_time);
+  } else if (end_time < earliest_time) {
+    current_odometer_pose = interpolation_buffer.Lookup(earliest_time);
+    LOG(WARNING) << "end_time out of buffer, too early "<<common::ToSeconds(earliest_time-end_time);
+  } else if (end_time > latest_time) {
+    current_odometer_pose = interpolation_buffer.Lookup(latest_time);
+    LOG(WARNING) << "end_time out of buffer, too late "<<common::ToSeconds(end_time-latest_time)<<" ratio "<<common::ToSeconds(end_time-latest_time)/common::ToSeconds(end_time-start_time);
+  }
+
   const transform::Rigid3d delta_pose =
     current_odometer_pose.inverse() * previous_odometer_pose;
   const double delta_time_seconds = common::ToSeconds(end_time - start_time);
@@ -1605,14 +1653,14 @@ void OptimizingLocalTrajectoryBuilder::SetMapUpdateEnabled(
 
 void OptimizingLocalTrajectoryBuilder::PrintLoggingData() {
   if (num_optimizations > 0) {
-    LOG_EVERY_N(INFO, 1) << "Optimization - Avg: "
-                         << total_optimization_duration / num_optimizations
-                         << "\t total: " << total_optimization_duration;
+    LOG_EVERY_N(INFO, 100) << "Optimization - Avg: "
+                           << total_optimization_duration / num_optimizations
+                           << "\t total: " << total_optimization_duration;
   }
   if (num_insertions > 0) {
-    LOG_EVERY_N(INFO, 1) << "Insertion - Avg: "
-                         << total_insertion_duration / num_insertions
-                         << "\t total: " << total_insertion_duration;
+    LOG_EVERY_N(INFO, 100) << "Insertion - Avg: "
+                           << total_insertion_duration / num_insertions
+                           << "\t total: " << total_insertion_duration;
   }
 }
 

@@ -238,6 +238,12 @@ google_binary(cartographer_autogenerate_ground_truth
     cartographer/ground_truth/autogenerate_ground_truth_main.cc
 )
 
+
+google_binary(cartographer_generate_ground_truth_from_mocap
+  SRCS
+    cartographer/ground_truth/generate_ground_truth_from_mocap_main.cc
+)
+
 google_binary(cartographer_compute_relations_metrics
   SRCS
     cartographer/ground_truth/compute_relations_metrics_main.cc

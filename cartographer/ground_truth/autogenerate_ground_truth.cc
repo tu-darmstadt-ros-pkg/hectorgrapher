@@ -16,6 +16,8 @@
 
 #include "cartographer/ground_truth/autogenerate_ground_truth.h"
 
+#include <fstream>
+#include <iostream>
 #include <string>
 #include <vector>
 

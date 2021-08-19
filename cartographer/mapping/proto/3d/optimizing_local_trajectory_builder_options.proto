@@ -43,7 +43,6 @@ message OptimizingLocalTrajectoryBuilderOptions {
   double odometry_rotation_weight = 5;
   bool initialize_map_orientation_with_imu = 9;
   bool calibrate_imu = 10;
-  double optimization_rate = 11;
   double ct_window_horizon = 12;
   double ct_window_rate = 13;
   IMUIntegrator imu_integrator = 14;
@@ -58,4 +57,5 @@ message OptimizingLocalTrajectoryBuilderOptions {
   double sampling_max_delta_rotation = 28;
   double sampling_min_delta_time = 29;
   double sampling_max_delta_time = 30;
+  bool velocity_in_state = 31;
 }

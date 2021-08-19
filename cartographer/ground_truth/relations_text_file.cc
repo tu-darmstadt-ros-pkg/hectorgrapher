@@ -20,6 +20,7 @@
 
 #include "cartographer/common/time.h"
 #include "cartographer/transform/rigid_transform.h"
+#include "cartographer/transform/timestamped_transform.h"
 #include "cartographer/transform/transform.h"
 #include "glog/logging.h"
 
@@ -33,6 +34,38 @@ common::Time UnixToCommonTime(double unix_time) {
   return common::FromUniversal(common::kUtsEpochOffsetFromUnixEpochInSeconds *
                                kUtsTicksPerSecond) +
          common::FromSeconds(unix_time);
+}
+
+::cartographer::common::Time FromRos(const int64& time_ns) {
+  // The epoch of the ICU Universal Time Scale is "0001-01-01 00:00:00.0 +0000",
+  // exactly 719162 days before the Unix epoch.
+  return ::cartographer::common::FromUniversal(
+      (::cartographer::common::
+           kUtsEpochOffsetFromUnixEpochInSeconds)*10000000ll +
+      (time_ns + 50) / 100);  // + 50 to get the rounding correct.
+}
+
+transform::TimestampedTransform ParseLine(const std::string& line) {
+  const std::vector<std::string> split_line =
+      absl::StrSplit(line, ',', absl::SkipEmpty());
+  transform::TimestampedTransform result;
+  result.time = FromRos(std::stoll(split_line[2]));
+
+  Eigen::Vector3d translation;
+  Eigen::Quaterniond orientation;
+  translation.x() = std::stod(split_line[4]);
+  translation.y() = std::stod(split_line[5]);
+  translation.z() = std::stod(split_line[6]);
+  orientation.x() = std::stod(split_line[7]);
+  orientation.y() = std::stod(split_line[8]);
+  orientation.z() = std::stod(split_line[9]);
+  orientation.w() = std::stod(split_line[10]);
+  //  LOG(INFO)<< translation.x() << " " << translation.y() << " " <<
+  //  translation.z() << " " <<
+  //    orientation.x() << " " << orientation.y() << " " << orientation.z() << "
+  //    " << orientation.w();
+  result.transform = transform::Rigid3d(translation, orientation);
+  return result;
 }
 
 }  // namespace
@@ -55,6 +88,49 @@ proto::GroundTruth ReadRelationsTextFile(
     *new_relation->mutable_expected() = transform::ToProto(expected);
   }
   CHECK(relations_stream.eof());
+  return ground_truth;
+}
+
+proto::GroundTruth CreateRelationsFromMocapData(
+    const std::string& relations_filename, double time_delta) {
+  std::ifstream relations_stream(relations_filename.c_str());
+  common::Time header_time;
+  std::string frame_id;
+
+  std::ifstream csv_file(relations_filename);
+  std::vector<std::vector<std::string> > data_list;
+  std::string line;
+  getline(csv_file, line);
+  std::vector<transform::TimestampedTransform> transforms;
+  while (getline(csv_file, line)) {
+    transforms.push_back(ParseLine(line));
+  }
+
+  proto::GroundTruth ground_truth;
+  transform::TimestampedTransform last_transform = transforms.front();
+  Eigen::Vector3d translation = {0.07, 0.05, -0.013};
+  Eigen::Quaterniond orientation =
+      transform::RollPitchYaw(3.1416, 0.0, -1.5708);
+  transform::Rigid3d pose_correction =
+      transform::Rigid3d(translation, orientation);
+  for (const transform::TimestampedTransform& current_transform : transforms) {
+    double dt = common::ToSeconds(current_transform.time - last_transform.time);
+    if (dt >= time_delta + 1E-4) {
+      LOG(INFO) << "skip: "<<dt;
+      last_transform = current_transform;
+
+    }
+    else if (dt >= time_delta - 1E-4) {
+      LOG(INFO) << "delta: "<<dt;
+      auto* const new_relation = ground_truth.add_relation();
+      new_relation->set_timestamp1(common::ToUniversal(last_transform.time));
+      new_relation->set_timestamp2(common::ToUniversal(current_transform.time));
+      *new_relation->mutable_expected() = transform::ToProto(
+          (last_transform.transform * pose_correction).inverse() *
+              (current_transform.transform * pose_correction));
+      last_transform = current_transform;
+    }
+  }
   return ground_truth;
 }
 
