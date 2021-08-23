@@ -274,7 +274,6 @@ namespace cartographer {
                 std::unique_ptr<GridInterface> myHybridGridTSDF = absl::make_unique<HybridGridTSDF>(
                         gridVoxelSideLength, relativeTruncationDistance, maxWeight, &myValueConversionTable);
 
-
                 // Build the TSDF by raytracing every point/normal pair from the point cloud
                 for (long unsigned int i = 0; i < myPointCloudPointer->points_.size(); i++) {
                     raycastPointWithNormal(
@@ -330,11 +329,34 @@ namespace cartographer {
                 cartographer::mapping::ValueConversionTables my_vct;
                 const cartographer::common::Time my_time = cartographer::common::FromUniversal(100);
 
+
+
+                // *****************************************
+                std::unique_ptr<GridInterface> mySecondHybridGridTSDF = absl::make_unique<HybridGridTSDF>(
+                        gridVoxelSideLength, relativeTruncationDistance, maxWeight, &myValueConversionTable);
+
+                auto *low_res_tsdf = dynamic_cast<HybridGridTSDF *>(myHybridGridTSDF.get());
+                auto *high_res_tsdf = dynamic_cast<HybridGridTSDF *>(mySecondHybridGridTSDF.get());
+
+                Eigen::Vector3i cellIndex;
+                float tsd, weight;
+                for (std::pair<Eigen::Array<int, 3, 1>, TSDFVoxel> nextVoxel : *low_res_tsdf) {
+                    cellIndex = nextVoxel.first;
+                    tsd = low_res_tsdf->GetTSD(cellIndex);
+                    weight = low_res_tsdf->GetWeight(cellIndex);
+                    high_res_tsdf->SetCell(cellIndex, tsd, weight);
+                }
+                // *****************************************
+
+
+
                 cartographer::mapping::Submap3D my_submap(
                         my_transform,
                         std::unique_ptr<GridInterface>(static_cast<GridInterface *>(myHybridGridTSDF.release())),
-                        std::unique_ptr<GridInterface>(static_cast<GridInterface *>(myHybridGridTSDF.release())),
+                        std::unique_ptr<GridInterface>(static_cast<GridInterface *>(mySecondHybridGridTSDF.release())),
                         rot_sm_histo, &my_vct, my_time);
+
+                my_submap.set_insertion_finished(true);
 
                 // --- Build a pose graph for the submap (with some dummy values) ---
                 proto::PoseGraphOptions my_posegraph_options;
@@ -353,7 +375,12 @@ namespace cartographer {
                 );
 
                 // --- Put the submap in the pose graph ---
-                posegraph.AddSubmapFromProto(my_transform, my_submap.ToProto(false));
+                posegraph.AddSubmapFromProto(my_transform, my_submap.ToProto(true));
+
+                for (const auto& submap_id_pose : posegraph.GetAllSubmapPoses()) {
+                    std::cout << "The start_time for the submap is " << submap_id_pose.data.start_time << std::endl;
+                }
+
 
                 // --- Write the pose graph as protoBuffer ---
                 proto::TrajectoryBuilderOptionsWithSensorIds my_traj_builder_options;

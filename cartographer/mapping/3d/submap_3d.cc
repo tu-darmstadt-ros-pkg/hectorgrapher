@@ -364,6 +364,9 @@ void Submap3D::UpdateFromProto(const proto::Submap& proto) {
 void Submap3D::UpdateFromProto(const proto::Submap3D& submap_3d) {
   set_num_range_data(submap_3d.num_range_data());
   set_insertion_finished(submap_3d.finished());
+
+  conversion_tables_ = new cartographer::mapping::ValueConversionTables;
+
   if (submap_3d.has_high_resolution_hybrid_grid()) {
     high_resolution_grid_ = absl::make_unique<HybridGrid>(
         submap_3d.high_resolution_hybrid_grid(), conversion_tables_);
