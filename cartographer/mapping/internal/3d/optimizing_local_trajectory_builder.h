@@ -100,15 +100,17 @@ class OptimizingLocalTrajectoryBuilder {
     sensor::TimedPointCloud low_resolution_filtered_points;
     sensor::TimedPointCloud original_cloud;
     size_t width;
+    float min_point_timestamp;
+    float max_point_timestamp;
 
     common::Time StartTime() {
       CHECK(!original_cloud.empty());
-      return time + common::FromSeconds(original_cloud.front().time);
+      return time + common::FromSeconds(min_point_timestamp);
     };
 
     common::Time EndTime() {
       CHECK(!original_cloud.empty());
-      return time + common::FromSeconds(original_cloud.back().time);
+      return time + common::FromSeconds(max_point_timestamp);
     };
   };
 
