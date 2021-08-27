@@ -264,9 +264,9 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
               // TODO(bhirschel) maybe set a minimum number of detections to make it significant
               // Significant detection perceived. Check if dynamic object
               uint16_t r_scan_detection =
-                  max_cardinality.first - 1; // TODO(bhirschel) try adding a little tolerance here
+                  max_cardinality.first; // TODO(bhirschel) try adding a little tolerance here
 
-                  for (uint16_t r_to_lower = 0; r_to_lower < r_scan_detection; ++r_to_lower) {
+                  for (uint16_t r_to_lower = 0; r_to_lower < 0.9 * r_scan_detection; ++r_to_lower) {
                     wedge_key_t new_key = std::make_tuple(r_to_lower, theta_iter, phi_iter);
                     keys_to_lower.push_back(new_key);
 
@@ -283,14 +283,19 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
         //Detection of points of type 3 (delete map points with empty scan ray)
         if (open_view_deletion_) {
           for (auto &wedge : global_wedge_map) {
+            if (std::get<0>(wedge.first) > r_segments_) {
+              continue;
+            }
+
             wedge_key_t this_key;
             int scan_wedge_cardinality;
             this_key = wedge.first;
             scan_wedge_cardinality =
-                scan_wedge_map_cardinalities[std::make_pair(std::get<0>(this_key),
-                                                            std::get<1>(this_key))];
+                scan_wedge_map_cardinalities[std::make_pair(std::get<1>(this_key),
+                                                            std::get<2>(this_key))];
 
             if (scan_wedge_cardinality == -1) {
+              // Scan wedge doesn't have any significant detections for this direction of theta, phi
               keys_to_lower.push_back(this_key);
 
               // Lower the probability of all points in this wedge
@@ -452,7 +457,7 @@ DynamicObjectsRemovalPointsProcessor::wedge_map_t DynamicObjectsRemovalPointsPro
       search->second.wedge_points.push_back(p);
     }
 
-    if (is_scan_batch && polar.x() > sensor_range_limit_) {
+    if (is_scan_batch && std::get<0>(key) > scan_batch_max_range_) {
       scan_batch_max_range_ = std::get<0>(key);
     }
 
