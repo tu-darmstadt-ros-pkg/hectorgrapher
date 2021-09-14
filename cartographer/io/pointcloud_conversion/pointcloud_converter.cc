@@ -250,12 +250,13 @@ namespace cartographer {
                     }
                 }
 
-                float gridVoxelSideLength = (float) luaParameterDictionary->GetDouble("absoluteVoxelSize");
-                int numberOfVoxels = (int) (ranges.x() * ranges.y() * ranges.z() / pow(gridVoxelSideLength, 3));
-                std::cout << "Created VoxelGrid with " << numberOfVoxels << " possible voxels." << std::endl;
+                float gridVoxelSideLength_highRes = (float) luaParameterDictionary->GetDouble("absoluteHighResVoxelSize");
+                float gridVoxelSideLength_lowRes = (float) luaParameterDictionary->GetDouble("absoluteLowResVoxelSize");
+                int numberOfVoxels_highRes = (int) (ranges.x() * ranges.y() * ranges.z() / pow(gridVoxelSideLength_highRes, 3));
+                std::cout << "Created HighRes-VoxelGrid with " << numberOfVoxels_highRes << " possible voxels." << std::endl;
 
                 std::shared_ptr<open3d::geometry::VoxelGrid> pclVoxelGridPointer =
-                        open3d::geometry::VoxelGrid::CreateFromPointCloud(*myPointCloudPointer, gridVoxelSideLength);
+                        open3d::geometry::VoxelGrid::CreateFromPointCloud(*myPointCloudPointer, gridVoxelSideLength_highRes);
 
                 //             myTSDFDrawer.drawTSDF(pclVoxelGridPointer);
 
@@ -268,11 +269,16 @@ namespace cartographer {
                 float absoluteTruncationDistance =
                         (float) luaParameterDictionary->GetDouble("absoluteTruncationDistance");
                 float maxWeight = 100.0;
-                float relativeTruncationDistance = absoluteTruncationDistance / gridVoxelSideLength;
+                float relativeTruncationDistance_highRes = absoluteTruncationDistance / gridVoxelSideLength_highRes;
+                float relativeTruncationDistance_lowRes = absoluteTruncationDistance / gridVoxelSideLength_lowRes;
 
                 cartographer::mapping::ValueConversionTables myValueConversionTable;
-                std::unique_ptr<GridInterface> myHybridGridTSDF = absl::make_unique<HybridGridTSDF>(
-                        gridVoxelSideLength, relativeTruncationDistance, maxWeight, &myValueConversionTable);
+
+                std::unique_ptr<GridInterface> myHighResHybridGridTSDF = absl::make_unique<HybridGridTSDF>(
+                        gridVoxelSideLength_highRes, relativeTruncationDistance_highRes, maxWeight, &myValueConversionTable);
+
+                std::unique_ptr<GridInterface> myLowResHybridGridTSDF = absl::make_unique<HybridGridTSDF>(
+                        gridVoxelSideLength_lowRes, relativeTruncationDistance_lowRes, maxWeight, &myValueConversionTable);
 
                 // Build the TSDF by raytracing every point/normal pair from the point cloud
                 for (long unsigned int i = 0; i < myPointCloudPointer->points_.size(); i++) {
@@ -280,7 +286,13 @@ namespace cartographer {
                             myPointCloudPointer->points_.at(i).cast<float>(),
                             myPointCloudPointer->normals_.at(i).cast<float>(),
                             absoluteTruncationDistance,
-                            dynamic_cast<HybridGridTSDF *>(myHybridGridTSDF.get()));
+                            dynamic_cast<HybridGridTSDF *>(myHighResHybridGridTSDF.get()));
+
+                    raycastPointWithNormal(
+                            myPointCloudPointer->points_.at(i).cast<float>(),
+                            myPointCloudPointer->normals_.at(i).cast<float>(),
+                            absoluteTruncationDistance,
+                            dynamic_cast<HybridGridTSDF *>(myLowResHybridGridTSDF.get()));
                 }
 
 
@@ -289,7 +301,7 @@ namespace cartographer {
 
                 // Show the VoxelGrid of the TSDF
                 std::shared_ptr<open3d::geometry::VoxelGrid> tsdfVoxelGridPointer = convertHybridGridToVoxelGrid(
-                        dynamic_cast<HybridGridTSDF *>(myHybridGridTSDF.get()), gridVoxelSideLength,
+                        dynamic_cast<HybridGridTSDF *>(myHighResHybridGridTSDF.get()), gridVoxelSideLength_highRes,
                         absoluteTruncationDistance);
 //                  myTSDFDrawer.drawTSDF(tsdfVoxelGridPointer);
 
@@ -330,30 +342,10 @@ namespace cartographer {
                 const cartographer::common::Time my_time = cartographer::common::FromUniversal(100);
 
 
-
-                // *****************************************
-                std::unique_ptr<GridInterface> mySecondHybridGridTSDF = absl::make_unique<HybridGridTSDF>(
-                        gridVoxelSideLength, relativeTruncationDistance, maxWeight, &myValueConversionTable);
-
-                auto *low_res_tsdf = dynamic_cast<HybridGridTSDF *>(myHybridGridTSDF.get());
-                auto *high_res_tsdf = dynamic_cast<HybridGridTSDF *>(mySecondHybridGridTSDF.get());
-
-                Eigen::Vector3i cellIndex;
-                float tsd, weight;
-                for (std::pair<Eigen::Array<int, 3, 1>, TSDFVoxel> nextVoxel : *low_res_tsdf) {
-                    cellIndex = nextVoxel.first;
-                    tsd = low_res_tsdf->GetTSD(cellIndex);
-                    weight = low_res_tsdf->GetWeight(cellIndex);
-                    high_res_tsdf->SetCell(cellIndex, tsd, weight);
-                }
-                // *****************************************
-
-
-
                 cartographer::mapping::Submap3D my_submap(
                         my_transform,
-                        std::unique_ptr<GridInterface>(static_cast<GridInterface *>(myHybridGridTSDF.release())),
-                        std::unique_ptr<GridInterface>(static_cast<GridInterface *>(mySecondHybridGridTSDF.release())),
+                        std::unique_ptr<GridInterface>(static_cast<GridInterface *>(myLowResHybridGridTSDF.release())),
+                        std::unique_ptr<GridInterface>(static_cast<GridInterface *>(myHighResHybridGridTSDF.release())),
                         rot_sm_histo, &my_vct, my_time);
 
                 my_submap.set_insertion_finished(true);
