@@ -33,9 +33,9 @@ class DynamicObjectsRemovalPointsProcessor : public PointsProcessor {
                                        int phi_segments,
                                        double sensor_range_limit,
                                        int end_of_file,
-                                       const int max_search_depth,
                                        double probability_reduction_factor,
                                        double dynamic_object_probability_threshold,
+                                       double search_ray_threshold,
                                        bool open_view_deletion,
                                        PointsProcessor *next);
 
@@ -57,9 +57,9 @@ class DynamicObjectsRemovalPointsProcessor : public PointsProcessor {
   FlushResult Flush() override;
 
  private:
-  const int r_segments_, theta_segments_, phi_segments_, end_of_file_, max_search_depth_;
+  const int r_segments_, theta_segments_, phi_segments_, end_of_file_;
   const double sensor_range_limit_, probability_reduction_factor_,
-      dynamic_object_probability_threshold_;
+      dynamic_object_probability_threshold_, search_ray_threshold_;
   const bool open_view_deletion_;
   std::vector<PointsBatch> list_of_batches_;
   PointsProcessor *const next_;
@@ -115,6 +115,15 @@ class DynamicObjectsRemovalPointsProcessor : public PointsProcessor {
     }
   };
 
+  /**
+   * Given a batch, this function initializes a custom point cloud with the position, color and
+   * intensity from the batch, 1.0 as initial probability and the index from the associated index
+   * parameter. Color and intensity are set to NAN if they are not specified in the batch. The
+   * CustomPointCloud will be written at the position of the pointer given by scan_map
+   * @param scan_map pointer to a CustomPointCloud to save the initialized pointcloud
+   * @param batch PointsBatch from which to take the data
+   * @param index of the batch in the pipeline
+   */
   void initialize_scan_map(sensor::CustomPointCloud &scan_map, PointsBatch *batch, int index);
 
   /**
@@ -126,11 +135,10 @@ class DynamicObjectsRemovalPointsProcessor : public PointsProcessor {
 
   /**
    * Allocates every point from the given pointcloud to its associated wedge and returns the full
-   * wedge map. When allocating the global wedge map, a range limit defined by sensor_range_limit_
-   * is enforced, while for a local scan every point is added to the wedge map
+   * wedge map. Sets the class variable scan_batch_max_range_ according to the highest range segment
+   * found within the scan batch
    * @param cloud The pointcloud as sensor::ProbabilityIndexedPointCloud
-   * @param is_scan_batch True if the pointcloud is from the local scan batch. Toggles enforcement
-   * of the sensor range limit
+   * @param is_scan_batch True if the pointcloud is from the local scan batch
    * @return A wedge map as wedge_map_t
    */
   wedge_map_t create_wedge_map(const sensor::CustomPointCloud &cloud, bool is_scan_batch);

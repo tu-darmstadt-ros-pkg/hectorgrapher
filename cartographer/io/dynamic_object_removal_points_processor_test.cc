@@ -88,8 +88,8 @@ std::unique_ptr<common::LuaParameterDictionary> CreateParameterDictionary() {
               end_of_file = 445,
               probability_reduction_factor = 0.1,
               dynamic_object_probability_threshold = 1.0,
-              open_view_deletion = false,
-              search_depth = -1
+              search_ray_threshold = 0.9,
+              open_view_deletion = false
             }
           }
           return pipeline
@@ -126,7 +126,7 @@ class DynamicObjectRemovalPointsProcessorTest : public ::testing::Test {
       pipeline.back()->Process(CreatePointsBatch2(static_points_));
     } while (pipeline.back()->Flush() == cartographer::io::PointsProcessor::FlushResult::kRestartStream);
 
-//    map_ = dynamic_cast<DynamicObjectsRemovalPointsProcessor*>(pipeline.back().get())->map_;
+    map_ = dynamic_cast<DynamicObjectsRemovalPointsProcessor*>(pipeline.back().get())->map_;
   }
 
   std::shared_ptr<std::vector<char>> fake_file_writer_output_ =
@@ -135,13 +135,12 @@ class DynamicObjectRemovalPointsProcessorTest : public ::testing::Test {
       pipeline_dictionary_;
   sensor::PointCloud static_points_;
   Eigen::Vector3f dynamic_point_ = Eigen::Vector3f{0.0f, 1.0f, 0.0f};
-  sensor::TimedPointCloud map_;
+  sensor::CustomPointCloud map_;
 };
 
 TEST_F(DynamicObjectRemovalPointsProcessorTest, NumberOfPointsCheck) {
   Run("test_wedge.ply");
   EXPECT_EQ(map_.size(), 10);
-  // TODO(bhirschel) check that the right points are still there
 }
 
 TEST_F(DynamicObjectRemovalPointsProcessorTest, PointsValueCheck) {

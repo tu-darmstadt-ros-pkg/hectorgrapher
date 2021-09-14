@@ -12,6 +12,7 @@
 
 #include "dynamic_object_removal_points_processor.h"
 #include "cartographer/io/color.h"
+#include "cartographer/evaluation/grid_drawer.h"
 
 namespace cartographer {
 namespace io {
@@ -66,9 +67,9 @@ std::unique_ptr<DynamicObjectsRemovalPointsProcessor> DynamicObjectsRemovalPoint
       dictionary->GetInt("phi_segments"),
       dictionary->GetDouble("sensor_range_limit"),
       dictionary->GetInt("end_of_file"),
-      dictionary->GetInt("max_search_depth"),
       dictionary->GetDouble("probability_reduction_factor"),
       dictionary->GetDouble("dynamic_object_probability_threshold"),
+      dictionary->GetDouble("search_ray_threshold"),
       dictionary->GetBool("open_view_deletion"),
       next);
 }
@@ -80,19 +81,19 @@ DynamicObjectsRemovalPointsProcessor::DynamicObjectsRemovalPointsProcessor(std::
                                                                            const int phi_segments,
                                                                            const double sensor_range_limit,
                                                                            const int end_of_file,
-                                                                           const int max_search_depth,
                                                                            const double probability_reduction_factor,
                                                                            const double dynamic_object_probability_threshold,
+                                                                           const double search_ray_threshold,
                                                                            const bool open_view_deletion,
                                                                            PointsProcessor *next)
     : r_segments_(r_segments),
       theta_segments_(theta_segments),
       phi_segments_(phi_segments),
       end_of_file_(end_of_file),
-      max_search_depth_(max_search_depth),
       sensor_range_limit_(sensor_range_limit),
       probability_reduction_factor_(probability_reduction_factor),
       dynamic_object_probability_threshold_(dynamic_object_probability_threshold),
+      search_ray_threshold_(search_ray_threshold),
       open_view_deletion_(open_view_deletion),
       next_(next),
       file_(std::move(file_writer)) {
@@ -102,11 +103,10 @@ DynamicObjectsRemovalPointsProcessor::DynamicObjectsRemovalPointsProcessor(std::
             "phi_segments:                          " << phi_segments_ << "\n" <<
             "sensor_range_limit:                    " << sensor_range_limit_ << "\n" <<
             "end_of_file:                           " << end_of_file_ << "\n" <<
-            "search_depth:                          " << max_search_depth_ << "\n" <<
             "probability_reduction_factor:          " << probability_reduction_factor_ << "\n" <<
-            "dynamic_object_probability_threshold:  " << dynamic_object_probability_threshold_
-            << "\n" <<
-            "open_view_deletion:                    " << open_view_deletion_;
+            "dynamic_object_probability_threshold:  " << dynamic_object_probability_threshold_ << "\n" <<
+            "search_ray_threshold:                  " << search_ray_threshold_ << "\n" <<
+            "open_view_deletion:                    " << (open_view_deletion_ ? "True" : "False");
 
   // Initialize max range for scan batch
   scan_batch_max_range_ = static_cast<uint16_t>(r_segments_);
@@ -225,12 +225,7 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
         }
 
         // Dynamic objects detection
-        std::vector<wedge_key_t> keys_to_lower;
-        size_t total_number_removed_points, total_to_be_lowered, already_lowered;
-
-        total_number_removed_points = 0;
-        total_to_be_lowered = 0;
-        already_lowered = 0;
+        size_t total_number_removed_points = 0;
 
         // Detection of points of type 2 (delete map points in front of current detection points)
         std::unordered_map<std::pair<uint16_t, uint16_t>, int, key_hash_pair, key_equal_pair>
@@ -243,9 +238,9 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
             std::pair<int, int> max_cardinality = std::make_pair(-1, -1);
 
             for (uint16_t r_iter = 0; r_iter < scan_batch_max_range_; ++r_iter) {
-              wedge_key_t new_key = std::make_tuple(r_iter, theta_iter, phi_iter);
+              wedge_key_t search_key = std::make_tuple(r_iter, theta_iter, phi_iter);
 
-              auto search = scan_wedge_map.find(new_key);
+              auto search = scan_wedge_map.find(search_key);
               if (search != scan_wedge_map.end()) {
                 // Wedge exists
                 // Cardinality check: find wedge with greatest cardinality
@@ -266,14 +261,12 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
               uint16_t r_scan_detection =
                   max_cardinality.first; // TODO(bhirschel) try adding a little tolerance here
 
-                  for (uint16_t r_to_lower = 0; r_to_lower < 0.9 * r_scan_detection; ++r_to_lower) {
-                    wedge_key_t new_key = std::make_tuple(r_to_lower, theta_iter, phi_iter);
-                    keys_to_lower.push_back(new_key);
+                  for (uint16_t r_to_lower = 0; r_to_lower < search_ray_threshold_ * r_scan_detection; ++r_to_lower) {
+                    wedge_key_t key_to_lower = std::make_tuple(r_to_lower, theta_iter, phi_iter);
 
                     // We lower the probability of all points in this wedge
-                    for (auto &p : global_wedge_map[new_key].wedge_points) {
+                    for (auto &p : global_wedge_map[key_to_lower].wedge_points) {
                       p.probability -= static_cast<float>(probability_reduction_factor_);
-                      total_to_be_lowered++;
                     }
                   }
             }
@@ -284,6 +277,7 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
         if (open_view_deletion_) {
           for (auto &wedge : global_wedge_map) {
             if (std::get<0>(wedge.first) > r_segments_) {
+              // Skip points that are too far away (outside maximal number of range segments)
               continue;
             }
 
@@ -295,71 +289,55 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
                                                             std::get<2>(this_key))];
 
             if (scan_wedge_cardinality == -1) {
-              // Scan wedge doesn't have any significant detections for this direction of theta, phi
-              keys_to_lower.push_back(this_key);
-
+              // Scan wedge doesn't have any significant detections for this direction of theta & phi
               // Lower the probability of all points in this wedge
               for (auto &p : wedge.second.wedge_points) {
                 p.probability -= static_cast<float>(probability_reduction_factor_);
-                total_to_be_lowered++;
               }
             }
           }
         }
 
-        // Remove the points from the global map and from all local batches
-        // Remove from the global map
+        // Add those points to the global map from the global wedge map, which have a probability
+        // high enough. Apply backwards transformation since wedge map points are in the robot frame
         map_.clear();
         for (auto &wedge : global_wedge_map) {
           for (auto &p : wedge.second.wedge_points) {
             if (p.probability >= static_cast<float>(dynamic_object_probability_threshold_)) {
               // Apply backwards transformation back to map frame
-              Eigen::Vector3f new_point = robot_translation_.inverse() * p.position;
-              map_.push_back({new_point, p.probability, p.index, p.intensity, p.color});
+              map_.push_back({robot_translation_.inverse() * p});
             } else {
               // Point was not taken over since its probability is too low. Will be removed from the map and batches
               total_number_removed_points++;
             }
           }
         }
-        // Remove from the list of batches
-        // iterate the list of batches reverse because it is observable that
-        // the last batch often is the main contributor to a dynamic objects' remaining
-        // spurious trail. Count the number of points from the global map and break the loop if
-        // this number was removed in total for all the individual batches
-        //        int depth_counter = 0;
-        //        for (auto batch_iter = list_of_batches_.rbegin(); batch_iter != list_of_batches_.rend();
-        //             ++batch_iter) {
-        //          ++depth_counter;
-        //          if (max_search_depth_ != -1 && depth_counter >= max_search_depth_) {
-        //            break;
-        //          }
-        //
-        //          already_lowered += lower_prob_in_batch(keys_to_lower, *batch_iter, robot_translation_);
-        //
-        //          if (already_lowered >= total_to_be_lowered) {
-        //            break;
-        //          }
-        //        }
         LOG(INFO) << "Total number of removed points: " << total_number_removed_points;
       }
 
       // Add all points from the current scan to the full map
-      // IMPORTANT: First clear the full map and add all points from the global wedge map since
-      // there the dynamic points have been removed while they are still in map_ ! This is done at
-      // the deletion step above
+      // Apply backwards transformation since wedge map points are in the robot frame
       for (auto & wedge : scan_wedge_map) {
         for (auto & point : wedge.second.wedge_points) {
-          Eigen::Vector3f scan_position = robot_translation_.inverse() * point.position;
-          map_.push_back({scan_position, point.probability, point.index, point.intensity, point.color});
+          map_.push_back({robot_translation_.inverse() * point.position});
         }
       }
 
-      // Add the current batch to the list of batches for later sending
+      // Add the current batch to the list of batches for later sending, but clear fields that are
+      // saved in the map_
       batch->points.clear();
       batch->intensities.clear();
       batch->colors.clear();
       list_of_batches_.push_back(*batch);
+
+      sensor::PointCloud eval_pc;
+      transform::Rigid3d trans;
+      for (auto & p : map_) {
+        eval_pc.push_back({p.position});
+      }
+      evaluation::GridDrawer gd;
+      gd.DrawPointcloud(eval_pc, trans); // TODO
+      gd.ToFile("DOR_cut.png");
 
       LOG(INFO) << "Total Map points: " << map_.size();
       break;
@@ -483,7 +461,7 @@ void DynamicObjectsRemovalPointsProcessor::initialize_scan_map(sensor::CustomPoi
   for (size_t i = 0; i < batch->points.size(); ++i) {
     float intensity = batch->intensities.empty() ? NAN : batch->intensities[i];
     FloatColor color = batch->colors.empty() ? nan_color : batch->colors[i];
-    scan_map.push_back({batch->points[i].position, 1.0f, index, intensity, color});
+    scan_map.push_back({{batch->points[i].position}, 1.0f, index, intensity, color});
   }
 }
 
