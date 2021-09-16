@@ -252,9 +252,9 @@ namespace cartographer {
 
                 float gridVoxelSideLength_highRes = (float) luaParameterDictionary->GetDouble("absoluteHighResVoxelSize");
                 float gridVoxelSideLength_lowRes = (float) luaParameterDictionary->GetDouble("absoluteLowResVoxelSize");
+
                 int numberOfVoxels_highRes = (int) (ranges.x() * ranges.y() * ranges.z() / pow(gridVoxelSideLength_highRes, 3));
                 std::cout << "Created HighRes-VoxelGrid with " << numberOfVoxels_highRes << " possible voxels." << std::endl;
-
                 std::shared_ptr<open3d::geometry::VoxelGrid> pclVoxelGridPointer =
                         open3d::geometry::VoxelGrid::CreateFromPointCloud(*myPointCloudPointer, gridVoxelSideLength_highRes);
 
@@ -266,32 +266,34 @@ namespace cartographer {
                 // Build a HybridGridTSDF = cartographer's representation of a TSDF
 
 
-                float absoluteTruncationDistance =
-                        (float) luaParameterDictionary->GetDouble("absoluteTruncationDistance");
+                float relativeHighResTruncationDistance =
+                        (float) luaParameterDictionary->GetDouble("relativeHighResTruncationDistance");
+                float relativeLowResTruncationDistance =
+                        (float) luaParameterDictionary->GetDouble("relativeLowResTruncationDistance");
                 float maxWeight = 100.0;
-                float relativeTruncationDistance_highRes = absoluteTruncationDistance / gridVoxelSideLength_highRes;
-                float relativeTruncationDistance_lowRes = absoluteTruncationDistance / gridVoxelSideLength_lowRes;
+                float absoluteHighResTruncationDistance = relativeHighResTruncationDistance * gridVoxelSideLength_highRes;
+                float absoluteLowResTruncationDistance = relativeLowResTruncationDistance * gridVoxelSideLength_lowRes;
 
                 cartographer::mapping::ValueConversionTables myValueConversionTable;
 
                 std::unique_ptr<GridInterface> myHighResHybridGridTSDF = absl::make_unique<HybridGridTSDF>(
-                        gridVoxelSideLength_highRes, relativeTruncationDistance_highRes, maxWeight, &myValueConversionTable);
+                        gridVoxelSideLength_highRes, relativeHighResTruncationDistance, maxWeight, &myValueConversionTable);
 
                 std::unique_ptr<GridInterface> myLowResHybridGridTSDF = absl::make_unique<HybridGridTSDF>(
-                        gridVoxelSideLength_lowRes, relativeTruncationDistance_lowRes, maxWeight, &myValueConversionTable);
+                        gridVoxelSideLength_lowRes, relativeLowResTruncationDistance, maxWeight, &myValueConversionTable);
 
                 // Build the TSDF by raytracing every point/normal pair from the point cloud
                 for (long unsigned int i = 0; i < myPointCloudPointer->points_.size(); i++) {
                     raycastPointWithNormal(
                             myPointCloudPointer->points_.at(i).cast<float>(),
                             myPointCloudPointer->normals_.at(i).cast<float>(),
-                            absoluteTruncationDistance,
+                            absoluteHighResTruncationDistance,
                             dynamic_cast<HybridGridTSDF *>(myHighResHybridGridTSDF.get()));
 
                     raycastPointWithNormal(
                             myPointCloudPointer->points_.at(i).cast<float>(),
                             myPointCloudPointer->normals_.at(i).cast<float>(),
-                            absoluteTruncationDistance,
+                            absoluteLowResTruncationDistance,
                             dynamic_cast<HybridGridTSDF *>(myLowResHybridGridTSDF.get()));
                 }
 
@@ -302,7 +304,7 @@ namespace cartographer {
                 // Show the VoxelGrid of the TSDF
                 std::shared_ptr<open3d::geometry::VoxelGrid> tsdfVoxelGridPointer = convertHybridGridToVoxelGrid(
                         dynamic_cast<HybridGridTSDF *>(myHighResHybridGridTSDF.get()), gridVoxelSideLength_highRes,
-                        absoluteTruncationDistance);
+                        absoluteHighResTruncationDistance);
 //                  myTSDFDrawer.drawTSDF(tsdfVoxelGridPointer);
 
 

@@ -21,8 +21,9 @@ options = {
     normalOrientationNearestNeighbours = 40,
 
     absoluteHighResVoxelSize = 0.1,
-    absoluteLowResVoxelSize = 0.3,
-    absoluteTruncationDistance = 0.3,
+    absoluteLowResVoxelSize = 0.4,
+    relativeHighResTruncationDistance = 2.5,
+    relativeLowResTruncationDistance = 2.5,
 
     imageSliceIndex = -55,
 
