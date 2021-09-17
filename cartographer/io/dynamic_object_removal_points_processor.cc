@@ -117,14 +117,17 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
 //  if (map_.empty()) {
 //    std::this_thread::sleep_for(std::chrono::seconds(10));
 //  }
+  eval_total_time_begin_ = std::chrono::high_resolution_clock::now();
   ++iteration_;
 
   switch (run_state_) {
     case RunState::kInitialRun: {
-      LOG(INFO) << "Iteration: " << iteration_
-      << "\tBatch points: " << batch->points.size();
-            LOG(INFO) << "Batch origin:      x: " << batch->origin.x() << "\ty: " << batch->origin.y() << "\tz: " << batch->origin.z();
-            LOG(INFO) << "Batch transformation: " << batch->sensor_to_map.DebugString();
+      auto begin = std::chrono::high_resolution_clock::now();
+
+      LOG(INFO) << "Iteration: " << iteration_;
+//      << "\tBatch points: " << batch->points.size();
+//            LOG(INFO) << "Batch origin:      x: " << batch->origin.x() << "\ty: " << batch->origin.y() << "\tz: " << batch->origin.z();
+//            LOG(INFO) << "Batch transformation: " << batch->sensor_to_map.DebugString();
 
       //      if (list_of_batches_.size() == end_of_file_-1) {
       //        std::vector<std::string> comments;
@@ -137,7 +140,7 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
       //                             file_.get());
       //      }
       robot_translation_ = transform::Rigid3<float>(batch->sensor_to_map.translation(), Eigen::Quaternion<float>::Identity()).inverse();
-      LOG(INFO) << "Translation x:" << robot_translation_.translation().x() << ", y: " << robot_translation_.translation().y() << ", z: " << robot_translation_.translation().z();
+//      LOG(INFO) << "Translation x:" << robot_translation_.translation().x() << ", y: " << robot_translation_.translation().y() << ", z: " << robot_translation_.translation().z();
 
       // Create scan wedges
       sensor::CustomPointCloud scan_map;
@@ -305,13 +308,14 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
           for (auto &p : wedge.second.wedge_points) {
             if (p.probability >= static_cast<float>(dynamic_object_probability_threshold_)) {
               // Apply backwards transformation back to map frame
-              map_.push_back({robot_translation_.inverse() * p});
+              map_.push_back(robot_translation_.inverse() * p);
             } else {
               // Point was not taken over since its probability is too low. Will be removed from the map and batches
               total_number_removed_points++;
             }
           }
         }
+        eval_total_points_ += total_number_removed_points;
         LOG(INFO) << "Total number of removed points: " << total_number_removed_points;
       }
 
@@ -319,7 +323,7 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
       // Apply backwards transformation since wedge map points are in the robot frame
       for (auto & wedge : scan_wedge_map) {
         for (auto & point : wedge.second.wedge_points) {
-          map_.push_back({robot_translation_.inverse() * point.position});
+          map_.push_back(robot_translation_.inverse() * point);
         }
       }
 
@@ -330,16 +334,23 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
       batch->colors.clear();
       list_of_batches_.push_back(*batch);
 
-      sensor::PointCloud eval_pc;
-      transform::Rigid3d trans;
-      for (auto & p : map_) {
-        eval_pc.push_back({p.position});
-      }
-      evaluation::GridDrawer gd;
-      gd.DrawPointcloud(eval_pc, trans); // TODO
-      gd.ToFile("DOR_cut.png");
-
       LOG(INFO) << "Total Map points: " << map_.size();
+
+      auto end = std::chrono::high_resolution_clock::now();
+      eval_time_detailed_.push_back(std::chrono::duration_cast<std::chrono::milliseconds>(end-begin));
+      LOG(INFO) << "Time elapsed: " << std::chrono::duration_cast<std::chrono::milliseconds>(end-begin).count() << " ms";
+
+//      sensor::PointCloud eval_pc;
+//      transform::Rigid3d trans;
+//      for (auto & p : map_) {
+//        eval_pc.push_back({p.position});
+//      }
+//      evaluation::GridDrawer gd;
+//      gd.DrawPointcloud(eval_pc, trans);
+//      std::string filename = "pc_cut_" + std::to_string(iteration_) + ".png";
+//      gd.ToFile(filename);
+//      LOG(INFO) << "PNG written";
+
       break;
     }
     case RunState::kSecondRun: {
@@ -357,6 +368,17 @@ PointsProcessor::FlushResult DynamicObjectsRemovalPointsProcessor::Flush() {
   if (run_state_ == RunState::kInitialRun) {
     flush_points_to_batch();
     run_state_ = RunState::kSecondRun;
+
+    auto end = std::chrono::high_resolution_clock::now();
+    LOG(INFO) << "Total time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end-eval_total_time_begin_).count() << " ms";
+    LOG(INFO) << "Total number removed points: " << eval_total_points_ << " from " << map_.size() << " (ratio: " << (eval_total_points_ / (eval_total_points_ + map_.size())) << ")";
+    std::ostringstream out;
+    for (auto & time : eval_time_detailed_) {
+      out << time.count() << ";";
+    }
+    LOG(INFO) << "Detailed timing: " << out.str();
+
+
     return FlushResult::kRestartStream;
   } else {
     return next_->Flush();
@@ -461,7 +483,7 @@ void DynamicObjectsRemovalPointsProcessor::initialize_scan_map(sensor::CustomPoi
   for (size_t i = 0; i < batch->points.size(); ++i) {
     float intensity = batch->intensities.empty() ? NAN : batch->intensities[i];
     FloatColor color = batch->colors.empty() ? nan_color : batch->colors[i];
-    scan_map.push_back({{batch->points[i].position}, 1.0f, index, intensity, color});
+    scan_map.push_back({batch->points[i].position, 1.0f, index, intensity, color});
   }
 }
 

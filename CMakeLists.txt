@@ -16,6 +16,9 @@ cmake_minimum_required(VERSION 3.2)
 
 project(cartographer)
 
+#set(CMAKE_BUILD_TYPE Debug)
+#set(FORCE_DEBUG_BUILD True)
+
 set(CARTOGRAPHER_MAJOR_VERSION 1)
 set(CARTOGRAPHER_MINOR_VERSION 0)
 set(CARTOGRAPHER_PATCH_VERSION 0)
@@ -28,7 +31,7 @@ option(BUILD_PROMETHEUS "build Prometheus monitoring support" false)
 option(WITH_OPEN3D "build with open3d support" false)
 option(WITH_PCL "build with pcl support" false)
 option(WITH_RK4_INTEGRATOR "build with rk4 integrator" false)
-option(BUILD_EVALUATION_TOOLS "build with evaluation tool" false)
+option(BUILD_EVALUATION_TOOLS "build with evaluation tool" true)
 
 
 #set(CMAKE_CXX_STANDARD 14)
@@ -121,10 +124,12 @@ file(GLOB_RECURSE TEST_LIBRARY_HDRS "cartographer/fake_*.h" "cartographer/*test_
 file(GLOB_RECURSE TEST_LIBRARY_SRCS "cartographer/fake_*.cc" "cartographer/*test_helpers*.cc" "cartographer/mock_*.cc")
 file(GLOB_RECURSE ALL_TESTS "cartographer/*_test.cc")
 file(GLOB_RECURSE ALL_EXECUTABLES "cartographer/*_main.cc")
-file(GLOB_RECURSE ALL_EVALUATION_SRCS "cartographer/evaluation/*")
+file(GLOB_RECURSE ALL_EVALUATION_HDRS "cartographer/evaluation/*.h")
+file(GLOB_RECURSE ALL_EVALUATION_SRCS "cartographer/evaluation/*.cc")
 
 # remove evaluation tools from src list if not explicitly enabled
 if (NOT ${BUILD_EVALUATION_TOOLS})
+  list(REMOVE_ITEM ALL_LIBRARY_HDRS ${ALL_EVALUATION_HDRS})
   list(REMOVE_ITEM ALL_LIBRARY_SRCS ${ALL_EVALUATION_SRCS})
 endif()
 

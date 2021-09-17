@@ -36,8 +36,8 @@ GridDrawer::GridDrawer(const cartographer::mapping::HybridGridTSDF& grid)
   axis0_ = 0;
   axis1_ = 1;
   axis2_ = 2;
-  min_limits_ = {1.0, -12.0, 1.0};
-  max_limits_ = {1.1, 12.0, 2.0};
+  min_limits_ = {-100.0, -100.0, -2.0};
+  max_limits_ = {100.0, 100.0, 2.0};
   scaled_num_cells_ =
       ((scale_ / resolution_) * (max_limits_ - min_limits_)).cast<int>();
   grid_surface_ =
@@ -178,9 +178,9 @@ void GridDrawer::DrawPointcloud(
       cartographer::sensor::TransformPointCloud(range_data,
                                                 transform.cast<float>());
   cairo_set_source_rgb(grid_surface_context_, 0.0, 0.0, 0);
-  float z_range = 0.6;
+  float z_range = -0.6;
   for (auto& scan : matched_range_data) {
-    if (std::abs(scan.position[axis2_]) < z_range) {
+    if (scan.position[axis2_] > z_range) {
       float x = (scan.position[0] - min_limits_[axis0_]) *
                 scaled_num_cells_[axis0_] /
                 (max_limits_[axis0_] - min_limits_[axis0_]);

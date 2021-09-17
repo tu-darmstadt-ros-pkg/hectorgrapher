@@ -68,6 +68,11 @@ class DynamicObjectsRemovalPointsProcessor : public PointsProcessor {
   uint16_t scan_batch_max_range_;
   int iteration_ = -1;
 
+  // Evaluation measurements
+  size_t eval_total_points_;
+  std::chrono::system_clock::time_point eval_total_time_begin_;
+  std::vector<std::chrono::milliseconds> eval_time_detailed_;
+
   static uint16_t cantor_pairing(uint16_t a, uint16_t b);
 
   typedef std::tuple<uint16_t, uint16_t, uint16_t> wedge_key_t;
