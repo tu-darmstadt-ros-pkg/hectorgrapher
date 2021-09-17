@@ -110,6 +110,7 @@ DynamicObjectsRemovalPointsProcessor::DynamicObjectsRemovalPointsProcessor(std::
 
   // Initialize max range for scan batch
   scan_batch_max_range_ = static_cast<uint16_t>(r_segments_);
+  eval_total_points_ = 0;
 }
 
 void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> batch) {
@@ -370,17 +371,19 @@ PointsProcessor::FlushResult DynamicObjectsRemovalPointsProcessor::Flush() {
     run_state_ = RunState::kSecondRun;
 
     auto end = std::chrono::high_resolution_clock::now();
-    LOG(INFO) << "Total time: " << std::chrono::duration_cast<std::chrono::milliseconds>(end-eval_total_time_begin_).count() << " ms";
-    LOG(INFO) << "Total number removed points: " << eval_total_points_ << " from " << map_.size() << " (ratio: " << (eval_total_points_ / (eval_total_points_ + map_.size())) << ")";
+    eval_total_time_elapsed_ = std::chrono::duration_cast<std::chrono::milliseconds>(end-eval_total_time_begin_);
+
+    return FlushResult::kRestartStream;
+  } else {
+
+    LOG(INFO) << "Total time: " << eval_total_time_elapsed_.count() << " ms";
+    LOG(INFO) << "Total number removed points: " << eval_total_points_ << " from " << map_.size() << " (ratio: " << (static_cast<double>(eval_total_points_) / (eval_total_points_ + map_.size())) << ")";
     std::ostringstream out;
     for (auto & time : eval_time_detailed_) {
       out << time.count() << ";";
     }
     LOG(INFO) << "Detailed timing: " << out.str();
 
-
-    return FlushResult::kRestartStream;
-  } else {
     return next_->Flush();
   }
 }

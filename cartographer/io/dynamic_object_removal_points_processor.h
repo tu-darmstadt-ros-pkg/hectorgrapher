@@ -70,7 +70,8 @@ class DynamicObjectsRemovalPointsProcessor : public PointsProcessor {
 
   // Evaluation measurements
   size_t eval_total_points_;
-  std::chrono::system_clock::time_point eval_total_time_begin_;
+  static std::chrono::system_clock::time_point eval_total_time_begin_;
+  std::chrono::milliseconds eval_total_time_elapsed_;
   std::vector<std::chrono::milliseconds> eval_time_detailed_;
 
   static uint16_t cantor_pairing(uint16_t a, uint16_t b);
