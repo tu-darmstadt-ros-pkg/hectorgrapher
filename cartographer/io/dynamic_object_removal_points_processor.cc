@@ -111,6 +111,7 @@ DynamicObjectsRemovalPointsProcessor::DynamicObjectsRemovalPointsProcessor(std::
   // Initialize max range for scan batch
   scan_batch_max_range_ = static_cast<uint16_t>(r_segments_);
   eval_total_points_ = 0;
+  eval_total_time_begin_ = std::chrono::high_resolution_clock::now();
 }
 
 void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> batch) {
@@ -118,7 +119,7 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
 //  if (map_.empty()) {
 //    std::this_thread::sleep_for(std::chrono::seconds(10));
 //  }
-  eval_total_time_begin_ = std::chrono::high_resolution_clock::now();
+
   ++iteration_;
 
   switch (run_state_) {
