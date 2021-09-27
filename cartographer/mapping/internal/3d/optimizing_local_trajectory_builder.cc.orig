@@ -1041,14 +1041,10 @@ void OptimizingLocalTrajectoryBuilder::AddOdometryResiduals(
         double rotation_distance =
             std::abs(delta_pose.rotation().angularDistance(
                 Eigen::Quaterniond::Identity()));
-        const double translation_normalization =
-            options_.optimizing_local_trajectory_builder_options()
-                .odometry_translation_normalization() *
-            delta_time;
-        const double rotation_normalization =
-            options_.optimizing_local_trajectory_builder_options()
-                .odometry_rotation_normalization() *
-            delta_time;
+        const double translation_normalization = options_.optimizing_local_trajectory_builder_options()
+            .odometry_translation_normalization() * delta_time;
+        const double rotation_normalization = options_.optimizing_local_trajectory_builder_options()
+            .odometry_rotation_normalization() * delta_time;
         residual_translation_weight =
             options_.optimizing_local_trajectory_builder_options()
                 .odometry_translation_weight() /
@@ -1524,11 +1520,14 @@ State OptimizingLocalTrajectoryBuilder::PredictState(
   if (predict_odom) {
     return PredictStateOdom(start_state, start_time, end_time);
   }
+<<<<<<< Updated upstream
 
   CHECK(options_.optimizing_local_trajectory_builder_options()
             .velocity_in_state())
       << "IMU based state propagation requires velocity_in_state to be "
          "enabled.";
+=======
+>>>>>>> Stashed changes
   switch (
       options_.optimizing_local_trajectory_builder_options().imu_integrator()) {
     case proto::IMUIntegrator::EULER:
