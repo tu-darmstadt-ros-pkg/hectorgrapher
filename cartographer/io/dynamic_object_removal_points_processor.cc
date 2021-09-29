@@ -319,6 +319,7 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
         }
         eval_total_points_ += total_number_removed_points;
         LOG(INFO) << "Total number of removed points: " << total_number_removed_points;
+        eval_number_deleted_points_.push_back(total_number_removed_points);
       }
 
       // Add all points from the current scan to the full map
@@ -341,6 +342,7 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
       auto end = std::chrono::high_resolution_clock::now();
       eval_time_detailed_.push_back(std::chrono::duration_cast<std::chrono::milliseconds>(end-begin));
       LOG(INFO) << "Time elapsed: " << std::chrono::duration_cast<std::chrono::milliseconds>(end-begin).count() << " ms";
+      eval_cumulated_number_of_points_.push_back(map_.size());
 
 //      sensor::PointCloud eval_pc;
 //      transform::Rigid3d trans;
@@ -379,11 +381,21 @@ PointsProcessor::FlushResult DynamicObjectsRemovalPointsProcessor::Flush() {
 
     LOG(INFO) << "Total time: " << eval_total_time_elapsed_.count() << " ms";
     LOG(INFO) << "Total number removed points: " << eval_total_points_ << " from " << map_.size() << " (ratio: " << (static_cast<double>(eval_total_points_) / (eval_total_points_ + map_.size())) << ")";
-    std::ostringstream out;
+    std::ostringstream time_out, cum_points_out, del_points_out;
     for (auto & time : eval_time_detailed_) {
-      out << time.count() << ";";
+      time_out << time.count() << ";";
     }
-    LOG(INFO) << "Detailed timing: " << out.str();
+    LOG(INFO) << "Detailed timing: " << time_out.str();
+
+    for (auto & cum_points : eval_cumulated_number_of_points_) {
+      cum_points_out << cum_points << ";";
+    }
+    LOG(INFO) << "Detailed cumulated n.o. points: " << cum_points_out.str();
+
+    for (auto & del_points : eval_number_deleted_points_) {
+      del_points_out << del_points << ";";
+    }
+    LOG(INFO) << "Detailed n.o. deleted points: " << del_points_out.str();
 
     return next_->Flush();
   }
