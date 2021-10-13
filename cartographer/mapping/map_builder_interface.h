@@ -110,6 +110,7 @@ class MapBuilderInterface {
   GetAllTrajectoryBuilderOptions() const = 0;
 
   virtual void SetMapUpdateEnabled(bool map_update_enabled) = 0;
+  virtual void UseScanMatching(bool use_scan_matching) = 0;
 };
 
 }  // namespace mapping
