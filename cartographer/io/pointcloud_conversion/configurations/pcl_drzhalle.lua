@@ -18,7 +18,7 @@ options = {
     cutRoofZAxis = false,
     cutoffSize = 3.0,
 
-    normalOrientationNearestNeighbours = 40,
+    normalOrientationNearestNeighbours = 100,
 
     absoluteHighResVoxelSize = 0.1,
     absoluteLowResVoxelSize = 0.4,

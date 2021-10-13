@@ -302,34 +302,39 @@ namespace cartographer {
                 // std::cout << "Press the key >o< to change the slicing orientation." << std::endl;
 
                 // Show the VoxelGrid of the TSDF
-                std::shared_ptr<open3d::geometry::VoxelGrid> tsdfVoxelGridPointer = convertHybridGridToVoxelGrid(
+                std::shared_ptr<open3d::geometry::VoxelGrid> tsdfVoxelGridPointer_highRes = convertHybridGridToVoxelGrid(
                         dynamic_cast<HybridGridTSDF *>(myHighResHybridGridTSDF.get()), gridVoxelSideLength_highRes,
                         absoluteHighResTruncationDistance);
-//                  myTSDFDrawer.drawTSDF(tsdfVoxelGridPointer);
+                myTSDFDrawer.drawTSDF(tsdfVoxelGridPointer_highRes);
+
+                std::shared_ptr<open3d::geometry::VoxelGrid> tsdfVoxelGridPointer_lowRes = convertHybridGridToVoxelGrid(
+                        dynamic_cast<HybridGridTSDF *>(myLowResHybridGridTSDF.get()), gridVoxelSideLength_lowRes,
+                        absoluteLowResTruncationDistance);
+                myTSDFDrawer.drawTSDF(tsdfVoxelGridPointer_lowRes);
 
 
 // #################################################################################################################
                 // Save some slices as png
-                std::string imgfilename;
-                imgfilename = path_to_home +
-                              "/hector/src/cartographer/cartographer/io/pointcloud_conversion/images/"
-                              + configuration_name + "_img_x.png";
-                myTSDFDrawer.saveSliceAsPNG(0, 0, imgfilename.c_str(), tsdfVoxelGridPointer);
-
-                imgfilename = path_to_home +
-                              "/hector/src/cartographer/cartographer/io/pointcloud_conversion/images/"
-                              + configuration_name + "_img_y.png";
-                myTSDFDrawer.saveSliceAsPNG(0, 1, imgfilename.c_str(), tsdfVoxelGridPointer);
-
-                for (int i = 0; i < 6; i++) {
-                    imgfilename = path_to_home +
-                                  "/hector/src/cartographer/cartographer/io/pointcloud_conversion/images/"
-                                  + configuration_name + "_img_z" + std::to_string(i) + ".png";
-
-                    myTSDFDrawer.saveSliceAsPNG(luaParameterDictionary->GetInt("imageSliceIndex") + 3 * i, 2,
-                                                imgfilename.c_str(),
-                                                tsdfVoxelGridPointer);
-                }
+//                std::string imgfilename;
+//                imgfilename = path_to_home +
+//                              "/hector/src/cartographer/cartographer/io/pointcloud_conversion/images/"
+//                              + configuration_name + "_img_x.png";
+//                myTSDFDrawer.saveSliceAsPNG(0, 0, imgfilename.c_str(), tsdfVoxelGridPointer_highRes);
+//
+//                imgfilename = path_to_home +
+//                              "/hector/src/cartographer/cartographer/io/pointcloud_conversion/images/"
+//                              + configuration_name + "_img_y.png";
+//                myTSDFDrawer.saveSliceAsPNG(0, 1, imgfilename.c_str(), tsdfVoxelGridPointer_highRes);
+//
+//                for (int i = 0; i < 6; i++) {
+//                    imgfilename = path_to_home +
+//                                  "/hector/src/cartographer/cartographer/io/pointcloud_conversion/images/"
+//                                  + configuration_name + "_img_z" + std::to_string(i) + ".png";
+//
+//                    myTSDFDrawer.saveSliceAsPNG(luaParameterDictionary->GetInt("imageSliceIndex") + 3 * i, 2,
+//                                                imgfilename.c_str(),
+//                                                tsdfVoxelGridPointer_highRes);
+//                }
 
 
 
@@ -373,6 +378,7 @@ namespace cartographer {
 
                 for (const auto& submap_id_pose : posegraph.GetAllSubmapPoses()) {
                     std::cout << "The start_time for the submap is " << submap_id_pose.data.start_time << std::endl;
+                    std::cout << "The version of the submap is " << submap_id_pose.data.version << std::endl;
                 }
 
 
