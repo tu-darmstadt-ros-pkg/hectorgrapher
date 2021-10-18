@@ -112,6 +112,7 @@ class TrajectoryBuilderInterface {
       std::unique_ptr<mapping::LocalSlamResultData> local_slam_result_data) = 0;
 
   virtual void SetMapUpdateEnabled(bool map_update_enabled) = 0;
+  virtual void UseScanMatching(bool use_scan_matching) = 0;
 };
 
 proto::SensorId ToProto(const TrajectoryBuilderInterface::SensorId& sensor_id);

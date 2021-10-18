@@ -79,6 +79,7 @@ class OptimizingLocalTrajectoryBuilder {
   static void RegisterMetrics(metrics::FamilyFactory* family_factory);
 
   void SetMapUpdateEnabled(bool map_update_enabled);
+  void UseScanMatching(bool use_scan_matching);
 
   State PredictState(const State& start_state, common::Time start_time,
                      common::Time end_time);
@@ -168,6 +169,7 @@ class OptimizingLocalTrajectoryBuilder {
   std::unique_ptr<ImuIntegrator> imu_integrator_;
   std::vector<const mapping::HybridGridTSDF*> tsdf_pyramid_;
   bool map_update_enabled_;
+  bool use_scan_matching_;
 
   //Logging
   unsigned int num_insertions;

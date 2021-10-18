@@ -91,6 +91,12 @@ class MapBuilder : public MapBuilderInterface {
     }
   }
 
+  void UseScanMatching(bool use_scan_matching) override {
+    for (auto& trajectory_builder : trajectory_builders_) {
+      trajectory_builder->UseScanMatching(use_scan_matching);
+    }
+  }
+
  private:
   const proto::MapBuilderOptions options_;
   common::ThreadPool thread_pool_;

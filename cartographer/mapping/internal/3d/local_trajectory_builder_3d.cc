@@ -386,6 +386,10 @@ void LocalTrajectoryBuilder3D::SetMapUpdateEnabled(bool map_update_enabled) {
   map_update_enabled_ = map_update_enabled;
 }
 
+void LocalTrajectoryBuilder3D::UseScanMatching(bool use_scan_matching) {
+  LOG(ERROR) << "UseScanMatching not implemented";
+}
+
 void LocalTrajectoryBuilder3D::RegisterMetrics(
     metrics::FamilyFactory* family_factory) {
   auto* latency = family_factory->NewGaugeFamily(
