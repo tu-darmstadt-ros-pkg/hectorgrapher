@@ -32,7 +32,7 @@ Paper
 Thank you for citing `HectorGrapher (SSRR-2021) <https://www.sim.informatik.tu-darmstadt.de/publ/download/2021_daun_ssrr_hectorgrapher.pdf>`_ if you use any of this code. 
 
 
-```latex
+```
 @inproceedings{hectorgrapher21,
 author = {Kevin Daun and Marius Schnaubelt and Stefan Kohlbrecher and Oskar von Stryk},
 title = {HectorGrapher: Continuous-time Lidar SLAM with Multi-resolution Signed Distance Function Registration for Challenging Terrain},
