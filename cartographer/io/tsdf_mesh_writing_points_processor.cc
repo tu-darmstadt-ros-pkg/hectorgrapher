@@ -22,19 +22,22 @@ TsdfMeshWritingPointsProcessor::FromDictionary(
       file_writer_factory(dictionary->GetString("filename")),
       mapping::CreateSubmapsOptions3D(dictionary->GetDictionary("submaps").get()),
       dictionary->HasKey("min_weight") ? dictionary->GetDouble("min_weight") : 0.0,
+      mapping::CreateRangeDataInserterOptions3D(
+          dictionary->GetDictionary("range_data_inserter").get()),
       next);
 }
 
 TsdfMeshWritingPointsProcessor::TsdfMeshWritingPointsProcessor(std::unique_ptr<FileWriter> file_writer,
                                                                mapping::proto::SubmapsOptions3D options,
                                                                float min_weight,
+                                                               const mapping::proto::RangeDataInserterOptions3D& range_data_inserter_3_d_options,
                                                                PointsProcessor *const next)
     : next_(next),
       file_(std::move(file_writer)),
       options_(std::move(options)),
-      min_weight_(min_weight),
-      tsdf_(init()){
-  init();
+      tsdf_range_data_inserter_3_d_(range_data_inserter_3_d_options),
+      tsdf_(init()),
+      min_weight_(min_weight){
 }
 
 mapping::HybridGridTSDF TsdfMeshWritingPointsProcessor::init() {
@@ -50,11 +53,12 @@ mapping::HybridGridTSDF TsdfMeshWritingPointsProcessor::init() {
 
 void TsdfMeshWritingPointsProcessor::Process(std::unique_ptr<PointsBatch> batch) {
   //TODO need to check for option WITH_PCL
-
+  tsdf_range_data_inserter_3_d_.Insert({batch->origin, batch->points, {}}, &tsdf_);
 
   next_->Process(std::move(batch));
 }
 PointsProcessor::FlushResult TsdfMeshWritingPointsProcessor::Flush() {
+  LOG(INFO) << "Created a TSDF map with " << tsdf_.grid_size() << " voxel";
   return PointsProcessor::FlushResult::kFinished;
 }
 }

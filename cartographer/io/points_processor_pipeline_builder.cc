@@ -26,6 +26,7 @@
 #include "cartographer/io/min_max_range_filtering_points_processor.h"
 #include "cartographer/io/follower_filtering_points_processor.h"
 #include "cartographer/io/mesh_writing_points_processor.h"
+#include "cartographer/io/tsdf_mesh_writing_points_processor.h"
 #include "cartographer/io/null_points_processor.h"
 #include "cartographer/io/outlier_removing_points_processor.h"
 #include "cartographer/io/pcd_writing_points_processor.h"
@@ -93,6 +94,8 @@ void RegisterBuiltInPointsProcessors(
   RegisterFileWritingPointsProcessor<PcdWritingPointsProcessor>(
       file_writer_factory, builder);
   RegisterFileWritingPointsProcessor<MeshWritingPointsProcessor>(
+      file_writer_factory, builder);
+  RegisterFileWritingPointsProcessor<TsdfMeshWritingPointsProcessor>(
       file_writer_factory, builder);
   RegisterFileWritingPointsProcessor<PlyWritingPointsProcessor>(
       file_writer_factory, builder);

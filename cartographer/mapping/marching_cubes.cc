@@ -10,6 +10,7 @@
 namespace cartographer {
 namespace mapping {
 
+#ifdef WITH_PCL
 pcl::PointXYZ MarchingCubes::InterpolateVertex(float isolevel,
                                                pcl::PointXYZ p1,
                                                pcl::PointXYZ p2,
@@ -271,6 +272,7 @@ void MarchingCubes::ProcessTSDFMesh(pcl::PolygonMesh &mesh,
     }
   }
 }
+#endif
 
 } //namespace mapping
 } // namespace cartographer

@@ -5,10 +5,12 @@
 #ifndef CARTOGRAPHER_CARTOGRAPHER_MAPPING_MARCHING_CUBES_H_
 #define CARTOGRAPHER_CARTOGRAPHER_MAPPING_MARCHING_CUBES_H_
 
+#include "pose_graph_interface.h"
+#ifdef WITHPCL
 #include <pcl/PolygonMesh.h>
 #include <pcl/conversions.h>
 #include <pcl/point_types.h>
-#include "pose_graph_interface.h"
+#endif
 
 namespace cartographer {
 namespace mapping {
@@ -17,6 +19,7 @@ class MarchingCubes {
  public:
   MarchingCubes() = default;
 
+#ifdef WITH_PCL
   /**
  * Giving an address to a pcl::PolygonMesh object, the function creates a mesh surface
  * representation of the TSDF map within a certain cut-off-distance and cut-off-height from
@@ -381,6 +384,7 @@ class MarchingCubes {
        {0, 9, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1},
        {0, 3, 8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1},
        {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}};
+#endif
 };
 }
 }
