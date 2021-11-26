@@ -22,7 +22,7 @@ class TsdfMeshWritingPointsProcessor : public PointsProcessor {
   TsdfMeshWritingPointsProcessor(std::unique_ptr<FileWriter> file_writer,
                                  mapping::proto::SubmapsOptions3D options,
                                  float min_weight,
-                                 const mapping::proto::RangeDataInserterOptions3D& range_data_inserter_3_d_options,
+                                 const mapping::proto::TSDFRangeDataInserterOptions3D& range_data_inserter_3_d_options,
                                  PointsProcessor *const next);
 
   static std::unique_ptr<TsdfMeshWritingPointsProcessor> FromDictionary(
@@ -43,7 +43,7 @@ class TsdfMeshWritingPointsProcessor : public PointsProcessor {
   PointsProcessor *const next_;
   std::unique_ptr<FileWriter> file_;
   const mapping::proto::SubmapsOptions3D options_;
-  mapping::ValueConversionTables *conversion_tables_;
+  mapping::ValueConversionTables conversion_tables_;
   mapping::TSDFRangeDataInserter3D tsdf_range_data_inserter_3_d_;
   mapping::HybridGridTSDF tsdf_;
   const float min_weight_;
