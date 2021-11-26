@@ -32,7 +32,7 @@ proto::TSDFRangeDataInserterOptions3D CreateTSDFRangeDataInserterOptions3D(
 class TSDFRangeDataInserter3D : public RangeDataInserterInterface {
  public:
   explicit TSDFRangeDataInserter3D(
-      const proto::RangeDataInserterOptions3D& options);
+      const proto::TSDFRangeDataInserterOptions3D& options);
 
   TSDFRangeDataInserter3D(const TSDFRangeDataInserter3D&) = delete;
   TSDFRangeDataInserter3D& operator=(const TSDFRangeDataInserter3D&) = delete;
@@ -63,7 +63,7 @@ class TSDFRangeDataInserter3D : public RangeDataInserterInterface {
 
   virtual bool RequiresStructuredData() const override { return true; };
 
-  const proto::RangeDataInserterOptions3D options_;
+  const proto::TSDFRangeDataInserterOptions3D options_;
 };
 
 }  // namespace mapping
