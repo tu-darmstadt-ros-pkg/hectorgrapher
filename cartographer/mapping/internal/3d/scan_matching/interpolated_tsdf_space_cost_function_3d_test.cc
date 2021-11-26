@@ -133,26 +133,16 @@ class TSDFSpaceCostFunction3DTest : public ::testing::Test {
   TSDFSpaceCostFunction3DTest() {
     auto parameter_dictionary = common::MakeDictionary(R"text(
         return {
-      range_data_inserter_type = "TSDF_INSERTER_3D",
-      probability_grid_range_data_inserter = {
-        hit_probability = 0.55,
-        miss_probability = 0.49,
-        num_free_space_voxels = 2,
-      },
-      tsdf_range_data_inserter = {
         relative_truncation_distance = 4,
         maximum_weight = 1000.,
         num_free_space_voxels = 0,
         project_sdf_distance_to_scan_normal = false,
-      },})text");
-    options_ = CreateRangeDataInserterOptions3D(parameter_dictionary.get());
+      })text");
+    options_ = CreateTSDFRangeDataInserterOptions3D(parameter_dictionary.get());
     range_data_inserter_ = absl::make_unique<TSDFRangeDataInserter3D>(options_);
     tsdf_ = absl::make_unique<HybridGridTSDF>(
-        0.05,
-        options_.tsdf_range_data_inserter_options_3d()
-            .relative_truncation_distance(),
-        options_.tsdf_range_data_inserter_options_3d().maximum_weight(),
-        &conversion_tables_);
+        0.05, options_.relative_truncation_distance(),
+        options_.maximum_weight(), &conversion_tables_);
   }
 
   void InsertPointcloud() {
@@ -167,7 +157,7 @@ class TSDFSpaceCostFunction3DTest : public ::testing::Test {
   }
 
   ValueConversionTables conversion_tables_;
-  ::cartographer::mapping::proto::RangeDataInserterOptions3D options_;
+  ::cartographer::mapping::proto::TSDFRangeDataInserterOptions3D options_;
   std::unique_ptr<HybridGridTSDF> tsdf_;
   std::unique_ptr<TSDFRangeDataInserter3D> range_data_inserter_;
 };

@@ -79,7 +79,7 @@ proto::TSDFRangeDataInserterOptions3D CreateTSDFRangeDataInserterOptions3D(
 }
 
 TSDFRangeDataInserter3D::TSDFRangeDataInserter3D(
-    const proto::RangeDataInserterOptions3D& options)
+    const proto::TSDFRangeDataInserterOptions3D& options)
     : options_(options) {}
 
 void TSDFRangeDataInserter3D::InsertTriangle(const Eigen::Vector3f& v0,
@@ -100,8 +100,7 @@ void TSDFRangeDataInserter3D::InsertTriangle(const Eigen::Vector3f& v0,
   int max_idx;
 
   int relative_truncation_distance =
-      std::round(options_.tsdf_range_data_inserter_options_3d()
-                     .relative_truncation_distance());
+      std::round(options_.relative_truncation_distance());
   for (int i = -relative_truncation_distance; i <= relative_truncation_distance;
        ++i) {
     float tsd_offset = resolution * i;
@@ -128,9 +127,7 @@ void TSDFRangeDataInserter3D::RasterTriangle(
     const Eigen::Vector3f& v2, const Eigen::Vector3f& triangle_normal,
     float tsd_offset, HybridGridTSDF* tsdf) const {
   const float truncation_distance =
-      options_.tsdf_range_data_inserter_options_3d()
-          .relative_truncation_distance() *
-      tsdf->resolution();
+      options_.relative_truncation_distance() * tsdf->resolution();
 
   //  Eigen::Vector3f v01 = v1 - v0;
   //  Eigen::Vector3f v02 = v2 - v0;
@@ -206,12 +203,10 @@ void TSDFRangeDataInserter3D::InsertHitWithNormal(const Eigen::Vector3f& hit,
   const Eigen::Vector3f ray = hit - origin;
   const float range = ray.norm();
   const float truncation_distance =
-      options_.tsdf_range_data_inserter_options_3d()
-          .relative_truncation_distance() *
-      tsdf->resolution();
+      options_.relative_truncation_distance() * tsdf->resolution();
   if (range < truncation_distance) return;
   //  bool update_free_space =
-  //      options_.tsdf_range_data_inserter_options_3d().num_free_space_voxels()
+  //      options_.num_free_space_voxels()
   //      > 0;  // todo(kdaun) use num free space
   // cells value instead of bool
   float normal_direction = 1.f;
@@ -304,15 +299,12 @@ void TSDFRangeDataInserter3D::InsertHit(const Eigen::Vector3f& hit,
   const Eigen::Vector3f ray = hit - origin;
   const float range = ray.norm();
   const float truncation_distance =
-      options_.tsdf_range_data_inserter_options_3d()
-          .relative_truncation_distance() *
-      tsdf->resolution();
+      options_.relative_truncation_distance() * tsdf->resolution();
   if (range < truncation_distance) return;
   const float truncation_ratio = truncation_distance / range;
   bool update_free_space =
-      options_.tsdf_range_data_inserter_options_3d().num_free_space_voxels() >
-      0;  // todo(kdaun) use num free space
-          // cells value instead of bool
+      options_.num_free_space_voxels() > 0;  // todo(kdaun) use num free space
+                                             // cells value instead of bool
   const Eigen::Vector3f ray_begin =
       update_free_space ? origin : origin + (1.0f - truncation_ratio) * ray;
   const Eigen::Vector3f ray_end = origin + (1.0f + truncation_ratio) * ray;
@@ -340,13 +332,11 @@ void TSDFRangeDataInserter3D::InsertHit(const Eigen::Vector3f& hit,
       update_tsd =
           common::Clamp(update_tsd, -truncation_distance, truncation_distance);
       float update_weight = 1.0;
-      float epsilon = options_.tsdf_range_data_inserter_options_3d()
-                          .weight_function_epsilon();
+      float epsilon = options_.weight_function_epsilon();
       float normalized_update_tsd = update_tsd / truncation_distance;
       // Exponential weight drop-off behind surface
       if (normalized_update_tsd < -epsilon) {
-        float sigma = options_.tsdf_range_data_inserter_options_3d()
-                          .weight_function_sigma();
+        float sigma = options_.weight_function_sigma();
         update_weight = float(
             std::exp(-sigma * std::pow(-normalized_update_tsd - epsilon, 2)));
       }
@@ -413,10 +403,8 @@ void TSDFRangeDataInserter3D::Insert(const sensor::RangeData& range_data,
   const Eigen::Vector3f origin = range_data.origin.head<3>();
 
   //  LOG(INFO) << "start normal computation";
-  if (options_.tsdf_range_data_inserter_options_3d()
-          .project_sdf_distance_to_scan_normal()) {
-    switch (options_.tsdf_range_data_inserter_options_3d()
-                .normal_computation_method()) {
+  if (options_.project_sdf_distance_to_scan_normal()) {
+    switch (options_.normal_computation_method()) {
       case proto::TSDFRangeDataInserterOptions3D::PCL: {
 #ifdef WITH_PCL
         pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(
@@ -495,10 +483,8 @@ void TSDFRangeDataInserter3D::Insert(const sensor::RangeData& range_data,
             {point.position[0], point.position[1], point.position[2]});
       }
       cloud->EstimateNormals(open3d::geometry::KDTreeSearchParamHybrid(
-          options_.tsdf_range_data_inserter_options_3d()
-              .normal_estimate_radius(),
-          options_.tsdf_range_data_inserter_options_3d()
-              .normal_estimate_max_nn()));
+          options_.normal_estimate_radius(),
+          options_.normal_estimate_max_nn()));
       //        cloud->OrientNormalsTowardsCameraLocation(range_data.origin.cast<double>());
       //    open3d::visualization::DrawGeometries({cloud});
 
@@ -520,16 +506,13 @@ void TSDFRangeDataInserter3D::Insert(const sensor::RangeData& range_data,
       size_t num_inserted_points = 0;
       size_t num_omitted_points = 0;
       const size_t vertical_stride =
-          options_.tsdf_range_data_inserter_options_3d()
-              .normal_computation_vertical_stride();
+          options_.normal_computation_vertical_stride();
       const size_t horizontal_stride =
-          options_.tsdf_range_data_inserter_options_3d()
-              .normal_computation_horizontal_stride() *
-          range_data.width;
+          options_.normal_computation_horizontal_stride() * range_data.width;
       for (size_t point_idx = 0; point_idx < range_data.returns.size();
            ++point_idx) {
         if (double(num_inserted_points) <=
-            options_.tsdf_range_data_inserter_options_3d().insertion_ratio() *
+            options_.insertion_ratio() *
                 double(num_inserted_points + num_omitted_points)) {
           num_inserted_points++;
         } else {
@@ -542,11 +525,11 @@ void TSDFRangeDataInserter3D::Insert(const sensor::RangeData& range_data,
           continue;
         }
         float r0 = (p0 - origin).norm();
-        if (r0 < options_.tsdf_range_data_inserter_options_3d().min_range()) {
+        if (r0 < options_.min_range()) {
           continue;
         }
 
-        if (r0 > options_.tsdf_range_data_inserter_options_3d().max_range()) {
+        if (r0 > options_.max_range()) {
           continue;
         }
         size_t i1 = point_idx + vertical_stride >= range_data.width
@@ -653,7 +636,7 @@ void TSDFRangeDataInserter3D::Insert(const sensor::RangeData& range_data,
     for (const sensor::RangefinderPoint& hit_point : range_data.returns) {
       const Eigen::Vector3f hit = hit_point.position.head<3>();
       if (double(num_inserted_points) <=
-          options_.tsdf_range_data_inserter_options_3d().insertion_ratio() *
+          options_.insertion_ratio() *
               double(num_inserted_points + num_omitted_points)) {
         num_inserted_points++;
       } else {
@@ -663,10 +646,8 @@ void TSDFRangeDataInserter3D::Insert(const sensor::RangeData& range_data,
 
       if (hit.hasNaN()) continue;
       float r0 = (hit - range_data.origin).norm();
-      if (r0 < options_.tsdf_range_data_inserter_options_3d().min_range())
-        continue;
-      if (r0 > options_.tsdf_range_data_inserter_options_3d().max_range())
-        continue;
+      if (r0 < options_.min_range()) continue;
+      if (r0 > options_.max_range()) continue;
 
       if (!hit.hasNaN()) {
         InsertHit(hit, origin, tsdf);
@@ -686,8 +667,7 @@ void TSDFRangeDataInserter3D::UpdateCell(const Eigen::Array3i& cell,
   float updated_weight = old_weight + update_weight;
   float updated_sdf =
       (old_sdf * old_weight + update_sdf * update_weight) / updated_weight;
-  float maximum_weight = static_cast<float>(
-      options_.tsdf_range_data_inserter_options_3d().maximum_weight());
+  float maximum_weight = static_cast<float>(options_.maximum_weight());
   updated_weight = std::min(updated_weight, maximum_weight);
   tsdf->SetCell(cell, updated_sdf, updated_weight);
   if (old_weight == tsdf->GetWeight(cell) &&
