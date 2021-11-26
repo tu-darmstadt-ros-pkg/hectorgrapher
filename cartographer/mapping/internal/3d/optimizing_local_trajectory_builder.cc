@@ -138,6 +138,7 @@ OptimizingLocalTrajectoryBuilder::OptimizingLocalTrajectoryBuilder(
           Eigen::Transform<double, 3, Eigen::Affine>::Identity()),
       motion_filter_(options.motion_filter_options()),
       map_update_enabled_(true),
+      use_scan_matching_(true),
       num_insertions(0),
       total_insertion_duration(0.0),
       num_optimizations(0),
@@ -1041,11 +1042,14 @@ void OptimizingLocalTrajectoryBuilder::AddOdometryResiduals(
         double rotation_distance =
             std::abs(delta_pose.rotation().angularDistance(
                 Eigen::Quaterniond::Identity()));
-
-//        const double translation_normalization = 1.0E-3 * delta_time;
-//        const double rotation_normalization = 5.0E-3 * delta_time;
-        const double translation_normalization = 2.0E-2 * delta_time;
-        const double rotation_normalization = 1.0E-1 * delta_time;
+        const double translation_normalization =
+            options_.optimizing_local_trajectory_builder_options()
+                .odometry_translation_normalization() *
+            delta_time;
+        const double rotation_normalization =
+            options_.optimizing_local_trajectory_builder_options()
+                .odometry_rotation_normalization() *
+            delta_time;
         residual_translation_weight =
             options_.optimizing_local_trajectory_builder_options()
                 .odometry_translation_weight() /
@@ -1245,18 +1249,20 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
     // reverted after solving the optimization problem.
     TransformStates(matching_submap->local_pose().inverse());
 
-    if (options_.optimizing_local_trajectory_builder_options()
-            .use_multi_resolution_matching()) {
-      tsdf_pyramid_ = {dynamic_cast<const HybridGridTSDF*>(
-                           &matching_submap->high_resolution_hybrid_grid()),
-                       dynamic_cast<const HybridGridTSDF*>(
-                           &matching_submap->low_resolution_hybrid_grid())};
-    }
-    if (options_.optimizing_local_trajectory_builder_options()
-            .use_per_point_unwarping()) {
-      AddPerPointMatchingResiduals(problem);
-    } else {
-      AddPerScanMatchingResiduals(problem);
+    if (use_scan_matching_) {
+      if (options_.optimizing_local_trajectory_builder_options()
+              .use_multi_resolution_matching()) {
+        tsdf_pyramid_ = {dynamic_cast<const HybridGridTSDF*>(
+                             &matching_submap->high_resolution_hybrid_grid()),
+                         dynamic_cast<const HybridGridTSDF*>(
+                             &matching_submap->low_resolution_hybrid_grid())};
+      }
+      if (options_.optimizing_local_trajectory_builder_options()
+              .use_per_point_unwarping()) {
+        AddPerPointMatchingResiduals(problem);
+      } else {
+        AddPerScanMatchingResiduals(problem);
+      }
     }
     AddIMUResiduals(problem);
     AddOdometryResiduals(problem);
@@ -1654,6 +1660,10 @@ void OptimizingLocalTrajectoryBuilder::RegisterMetrics(
 void OptimizingLocalTrajectoryBuilder::SetMapUpdateEnabled(
     bool map_update_enabled) {
   map_update_enabled_ = map_update_enabled;
+}
+
+void OptimizingLocalTrajectoryBuilder::UseScanMatching(bool use_scan_matching) {
+  use_scan_matching_ = use_scan_matching;
 }
 
 void OptimizingLocalTrajectoryBuilder::PrintLoggingData() {

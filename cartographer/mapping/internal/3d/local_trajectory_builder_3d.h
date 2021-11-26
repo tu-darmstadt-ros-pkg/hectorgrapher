@@ -74,6 +74,7 @@ class LocalTrajectoryBuilder3D {
   void AddOdometryData(const sensor::OdometryData& odometry_data);
 
   void SetMapUpdateEnabled(bool map_update_enabled);
+  void UseScanMatching(bool use_scan_matching);
 
   static void RegisterMetrics(metrics::FamilyFactory* family_factory);
 

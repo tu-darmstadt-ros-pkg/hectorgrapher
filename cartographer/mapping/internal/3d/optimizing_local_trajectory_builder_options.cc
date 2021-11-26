@@ -78,7 +78,6 @@ CreateOptimizingLocalTrajectoryBuilderOptions(
          "type: "
       << control_point_sampling_string;
   options.set_control_point_sampling(control_point_sampling_type);
-
   options.set_sampling_max_delta_translation(
       parameter_dictionary->GetDouble("sampling_max_delta_translation"));
   options.set_sampling_max_delta_rotation(
@@ -87,8 +86,11 @@ CreateOptimizingLocalTrajectoryBuilderOptions(
       parameter_dictionary->GetDouble("sampling_min_delta_time"));
   options.set_sampling_max_delta_time(
       parameter_dictionary->GetDouble("sampling_max_delta_time"));
-
   options.set_velocity_in_state(parameter_dictionary->GetBool("velocity_in_state"));
+  options.set_odometry_translation_normalization(
+      parameter_dictionary->GetDouble("odometry_translation_normalization"));
+  options.set_odometry_rotation_normalization(
+      parameter_dictionary->GetDouble("odometry_rotation_normalization"));
 
   return options;
 }
