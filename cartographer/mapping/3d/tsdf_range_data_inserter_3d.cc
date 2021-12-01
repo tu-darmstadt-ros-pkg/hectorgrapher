@@ -566,6 +566,199 @@ void TSDFRangeDataInserter3D::Insert(const sensor::RangeData& range_data,
       //      num_omitted_points;
       break;
     }
+    case proto::TSDFRangeDataInserterOptions3D::
+        CLOUD_STRUCTURE_ADVANCED_NORMALS: {
+      LOG(INFO) << "res " << tsdf->resolution() << " min r "
+                << options_.min_range();
+      LOG(INFO) << "width " << range_data.width;
+      size_t num_inserted_points = 0;
+      size_t num_omitted_points = 0;
+      const size_t vertical_stride =
+          options_.normal_computation_vertical_stride();
+      const size_t horizontal_stride =
+          options_.normal_computation_horizontal_stride() * range_data.width;
+      sensor::PointCloud normals;
+
+      normals.resize(range_data.returns.size(), {{0.f, 0.f, 0.f}});
+      for (size_t point_idx = 0; point_idx < range_data.returns.size();
+           ++point_idx) {
+        if (double(num_inserted_points) <=
+            options_.insertion_ratio() *
+                double(num_inserted_points + num_omitted_points)) {
+          num_inserted_points++;
+        } else {
+          num_omitted_points++;
+          continue;
+        }
+
+        Eigen::Vector3f point = range_data.returns[point_idx].position;
+        if (point.hasNaN()) continue;
+        float point_range = (point - origin).norm();
+        if (point_range < options_.min_range()) {
+          continue;
+        }
+        if (point_range > options_.max_range()) {
+          continue;
+        }
+
+        //        size_t i_left = point_idx < vertical_stride
+        //                            ? std::numeric_limits<size_t>::quiet_NaN()
+        //                            : point_idx - vertical_stride;
+        //        size_t i_right = point_idx + vertical_stride >=
+        //        range_data.width
+        //                             ?
+        //                             std::numeric_limits<size_t>::quiet_NaN()
+        //                             : point_idx + vertical_stride;
+        //        if (std::isnan(i_left) && std::isnan(i_right)) continue;
+        //        size_t i_upper = point_idx < horizontal_stride
+        //                             ?
+        //                             std::numeric_limits<size_t>::quiet_NaN()
+        //                             : point_idx - horizontal_stride;
+        //        size_t i_lower =
+        //            point_idx + horizontal_stride >= range_data.returns.size()
+        //                ? std::numeric_limits<size_t>::quiet_NaN()
+        //                : point_idx + horizontal_stride;
+        //        if (std::isnan(i_upper) && std::isnan(i_lower)) continue;
+        //        const Eigen::Vector3f nan_vector3f =
+        //            Eigen::Vector3f({std::numeric_limits<float>::quiet_NaN(),
+        //                             std::numeric_limits<float>::quiet_NaN(),
+        //                             std::numeric_limits<float>::quiet_NaN()});
+        //
+        //        const Eigen::Vector3f& point_left =
+        //            std::isnan(i_left) ? nan_vector3f
+        //                               : range_data.returns[i_left].position;
+        //        const Eigen::Vector3f& point_right =
+        //            std::isnan(i_right) ? nan_vector3f
+        //                                :
+        //                                range_data.returns[i_right].position;
+        //        if (point_left.hasNaN() && point_right.hasNaN()) continue;
+        //        const Eigen::Vector3f& point_upper =
+        //            std::isnan(i_upper) ? nan_vector3f
+        //                                :
+        //                                range_data.returns[i_upper].position;
+        //        const Eigen::Vector3f& point_lower =
+        //            std::isnan(i_lower) ? nan_vector3f
+        //                                :
+        //                                range_data.returns[i_lower].position;
+        //        if (point_upper.hasNaN() && point_lower.hasNaN()) continue;
+
+        size_t i_left = point_idx < vertical_stride
+                            ? point_idx
+                            : point_idx - vertical_stride;
+        size_t i_right = point_idx + vertical_stride >= range_data.width
+                             ? point_idx
+                             : point_idx + vertical_stride;
+        //        if ( i_left == 0 && i_right==0) continue;
+        size_t i_upper = point_idx < horizontal_stride
+                             ? point_idx
+                             : point_idx - horizontal_stride;
+        size_t i_lower =
+            point_idx + horizontal_stride >= range_data.returns.size()
+                ? point_idx
+                : point_idx + horizontal_stride;
+        //        if (i_upper==0 && i_lower==0) continue;
+        const Eigen::Vector3f nan_vector3f =
+            Eigen::Vector3f({std::numeric_limits<float>::quiet_NaN(),
+                             std::numeric_limits<float>::quiet_NaN(),
+                             std::numeric_limits<float>::quiet_NaN()});
+
+        const Eigen::Vector3f& point_left = range_data.returns[i_left].position;
+        const Eigen::Vector3f& point_right =
+            range_data.returns[i_right].position;
+        if (point_left.hasNaN() && point_right.hasNaN()) continue;
+        const Eigen::Vector3f& point_upper =
+            range_data.returns[i_upper].position;
+        const Eigen::Vector3f& point_lower =
+            range_data.returns[i_lower].position;
+        if (point_upper.hasNaN() && point_lower.hasNaN()) continue;
+
+        //        float r1 = (p1 - origin).norm();
+        //        float r2 = (p2 - origin).norm();
+        //        float max_range_delta = 1.f * tsdf->resolution() / 0.05f;
+        //        if (std::abs(point_range - r1) > max_range_delta ||
+        //        std::abs(point_range - r2) > max_range_delta ||
+        //        std::abs(r1 - r2) > max_range_delta || (point - p1).isZero()
+        //        || (point - p2).isZero()) {
+        //          continue;
+        //        }
+
+        Eigen::Vector3f horizontal_tangent;
+        if (point_left.hasNaN()) {
+          horizontal_tangent = point - point_right;
+        } else if (point_right.hasNaN()) {
+          horizontal_tangent = point_left - point;
+        } else {
+          horizontal_tangent = point_left - point_right;
+        }
+
+        Eigen::Vector3f vertical_tangent;
+        if (point_lower.hasNaN()) {
+          vertical_tangent = point_upper - point;
+        } else if (point_upper.hasNaN()) {
+          vertical_tangent = point - point_lower;
+        } else {
+          vertical_tangent = point_upper - point_lower;
+        }
+
+        const Eigen::Vector3f normal =
+            horizontal_tangent.cross(vertical_tangent).normalized();
+        //                LOG(INFO)<<"point
+        //                "<<point[0]<<"\t"<<point[1]<<"\t"<<point[2];
+        //                LOG(INFO)<<"point_upper
+        //                "<<point_upper[0]<<"\t"<<point_upper[1]<<"\t"<<point_upper[2];
+        //                LOG(INFO)<<"point_lower
+        //                "<<point_lower[0]<<"\t"<<point_lower[1]<<"\t"<<point_lower[2];
+        //                LOG(INFO)<<"point_right
+        //                "<<point_right[0]<<"\t"<<point_right[1]<<"\t"<<point_right[2];
+        //                LOG(INFO)<<"point_left
+        //                "<<point_left[0]<<"\t"<<point_left[1]<<"\t"<<point_left[2];
+        //                LOG(INFO)<<"vertical_tangent
+        //                "<<vertical_tangent[0]<<"\t"<<vertical_tangent[1]<<"\t"<<vertical_tangent[2];
+        //                LOG(INFO)<<"horizontal_tangent
+        //                "<<horizontal_tangent[0]<<"\t"<<horizontal_tangent[1]<<"\t"<<horizontal_tangent[2];
+        //                LOG(INFO)<<"normal
+        //                "<<normal[0]<<"\t"<<normal[1]<<"\t"<<normal[2];
+        //                LOG(INFO)<<"---------------------------------------------------------------------------------------------------";
+        if (normal.isZero()) continue;
+
+        InsertHitWithNormal(point, origin, normal, tsdf);
+        normals[point_idx].position = normal;
+      }
+
+      static int idx = 0;
+      idx++;
+      if (idx % 50 == 0) {
+        std::ofstream file("normal_cloud" + std::to_string(idx) + ".pcd");
+        file << "# .PCD v.7 - Point Cloud Data file format\n";
+        file << "VERSION .7\n";
+        file << "FIELDS x y z normal_x normal_y normal_z\n";
+        file << "SIZE 4 4 4 4 4 4\n";
+        file << "TYPE F F F F F F\n";
+        file << "COUNT 1 1 1 1 1 1\n";
+        file << "WIDTH " << range_data.returns.size() << "\n";
+        file << "HEIGHT 1\n";
+        file << "VIEWPOINT 0 0 0 1 0 0 0\n";
+        file << "POINTS " << range_data.returns.size() << "\n";
+        file << "DATA ascii\n";
+
+        for (size_t point_idx = 0; point_idx < range_data.returns.size();
+             ++point_idx) {
+          const Eigen::Vector3f& p = range_data.returns[point_idx].position;
+          const Eigen::Vector3f& n = normals[point_idx].position;
+          file << p.x() << " " << p.y() << " " << p.z() << " " << n.x() << " "
+               << n.y() << " " << n.z() << "\n";
+        }
+
+        file.close();
+      }
+
+      //      LOG(INFO)<<"res "<<tsdf->resolution()<<" ratio
+      //      "<<double(num_inserted_points)/double(num_inserted_points+
+      //      num_omitted_points+1E-6)<<" num_inserted_points
+      //      "<<num_inserted_points<<" total "<<num_inserted_points+
+      //      num_omitted_points;
+      break;
+    }
     case proto::TSDFRangeDataInserterOptions3D::TRIANGLE_FILL_IN: {
       if (range_data.returns.size() % 28800 == 0) {
         const size_t num_pointclouds = range_data.returns.size() / 28800;
