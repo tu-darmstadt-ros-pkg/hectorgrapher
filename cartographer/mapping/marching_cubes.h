@@ -41,7 +41,6 @@ class MarchingCubes {
                        float min_weight,
                        bool all_submaps);
 
- private:
   /**
    * Struct element representing a TSDF voxel - and in particular its neighbours - in 3D space.
    * Stores the indices of all 8 neighbours, their absolute global position, their tsd weights and
@@ -64,6 +63,18 @@ class MarchingCubes {
   };
 
   /**
+    * Performs Marching Cubes on a MapBuilderBridge::Cube element representing a TSDF voxel in space.
+    * Every found zero-crossing on an edge is registered in the cloud as a 3D point, but always in
+    * triplets so that points 0-1-2, 3-4-5, etc. form a triangle representing the mesh surface.
+    * Implementation inspired by Isaac Zhang: https://github.com/zhangxiaoxuan1/tsdfprocessor/blob/cdbc42300a9f5a72411b052a04c7972cef30f3f5/marching_cubes.cpp
+    * @param cube pointer to an MapBuilderBridge::Cube element representing a TSDF voxel
+    * @param cloud pointer to a PCL pointcloud to store the found triangle vertices
+    * @param isolevel value to represent an object collision in TSDF, standard is 0.0
+    * @return the number of triangles processed
+    */
+  int ProcessCube(Cube &cube, pcl::PointCloud<pcl::PointXYZ> &cloud, float isolevel);
+ private:
+  /**
    * Performs linear interpolation on two cube corners to find the approximate zero crossing
    * (surface) value.
    * Implementation inspired by Isaac Zhang: https://github.com/zhangxiaoxuan1/tsdfprocessor/blob/cdbc42300a9f5a72411b052a04c7972cef30f3f5/marching_cubes.cpp
@@ -79,17 +90,6 @@ class MarchingCubes {
                                          pcl::PointXYZ p2,
                                          float valp1,
                                          float valp2);
-  /**
-   * Performs Marching Cubes on a MapBuilderBridge::Cube element representing a TSDF voxel in space.
-   * Every found zero-crossing on an edge is registered in the cloud as a 3D point, but always in
-   * triplets so that points 0-1-2, 3-4-5, etc. form a triangle representing the mesh surface.
-   * Implementation inspired by Isaac Zhang: https://github.com/zhangxiaoxuan1/tsdfprocessor/blob/cdbc42300a9f5a72411b052a04c7972cef30f3f5/marching_cubes.cpp
-   * @param cube pointer to an MapBuilderBridge::Cube element representing a TSDF voxel
-   * @param cloud pointer to a PCL pointcloud to store the found triangle vertices
-   * @param isolevel value to represent an object collision in TSDF, standard is 0.0
-   * @return the number of triangles processed
-   */
-  int ProcessCube(Cube &cube, pcl::PointCloud<pcl::PointXYZ> &cloud, float isolevel);
 
   int edge_table_[256] = {
       0x0, 0x109, 0x203, 0x30a, 0x406, 0x50f, 0x605, 0x70c,
