@@ -91,11 +91,10 @@ void RegisterBuiltInPointsProcessors(
   RegisterPlainPointsProcessor<OutlierRemovingPointsProcessor>(builder);
   RegisterPlainPointsProcessor<ColoringPointsProcessor>(builder);
   RegisterPlainPointsProcessor<IntensityToColorPointsProcessor>(builder);
+  RegisterPlainPointsProcessor<TsdfMeshWritingPointsProcessor>(builder);
   RegisterFileWritingPointsProcessor<PcdWritingPointsProcessor>(
       file_writer_factory, builder);
   RegisterFileWritingPointsProcessor<MeshWritingPointsProcessor>(
-      file_writer_factory, builder);
-  RegisterFileWritingPointsProcessor<TsdfMeshWritingPointsProcessor>(
       file_writer_factory, builder);
   RegisterFileWritingPointsProcessor<PlyWritingPointsProcessor>(
       file_writer_factory, builder);

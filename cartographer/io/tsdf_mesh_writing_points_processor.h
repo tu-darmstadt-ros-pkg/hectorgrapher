@@ -19,14 +19,13 @@ namespace io {
 class TsdfMeshWritingPointsProcessor : public PointsProcessor {
  public:
   constexpr static const char *kConfigurationFileActionName = "write_tsdf_mesh";
-  TsdfMeshWritingPointsProcessor(std::unique_ptr<FileWriter> file_writer,
+  TsdfMeshWritingPointsProcessor(std::basic_string<char> filename,
                                  mapping::proto::SubmapsOptions3D options,
                                  float min_weight,
-                                 const mapping::proto::TSDFRangeDataInserterOptions3D& range_data_inserter_3_d_options,
-                                 PointsProcessor *const next);
+                                 const mapping::proto::TSDFRangeDataInserterOptions3D &range_data_inserter_3_d_options,
+                                 PointsProcessor *next);
 
   static std::unique_ptr<TsdfMeshWritingPointsProcessor> FromDictionary(
-      const FileWriterFactory &file_writer_factory,
       common::LuaParameterDictionary *dictionary,
       PointsProcessor *next);
 
@@ -41,14 +40,14 @@ class TsdfMeshWritingPointsProcessor : public PointsProcessor {
 
  private:
   PointsProcessor *const next_;
-  std::unique_ptr<FileWriter> file_;
+  std::basic_string<char> filename_;
   const mapping::proto::SubmapsOptions3D options_;
   mapping::ValueConversionTables conversion_tables_;
   mapping::TSDFRangeDataInserter3D tsdf_range_data_inserter_3_d_;
   mapping::HybridGridTSDF tsdf_;
   const float min_weight_;
 
-  mapping::HybridGridTSDF init();
+  mapping::HybridGridTSDF init_hybrid_grid_tsdf();
 };
 }
 }
