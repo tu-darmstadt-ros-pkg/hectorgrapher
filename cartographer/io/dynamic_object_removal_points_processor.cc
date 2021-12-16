@@ -360,7 +360,7 @@ void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> 
     case RunState::kSecondRun: {
       // At the second run, send the batches through the pipeline
       auto this_batch = list_of_batches_[0];
-      LOG(INFO) << "Batch sent. Size: " << this_batch.points.size();
+//      LOG(INFO) << "Batch sent. Size: " << this_batch.points.size();
       next_->Process(std::make_unique<PointsBatch>(this_batch));
       list_of_batches_.erase(list_of_batches_.begin());
     }
