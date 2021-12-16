@@ -74,7 +74,9 @@ class MarchingCubes {
     */
   int ProcessCube(Cube &cube, pcl::PointCloud<pcl::PointXYZ> &cloud, float isolevel);
 
-  void WriteTSDFToPLYFile(std::ofstream &file, pcl::PolygonMesh &mesh);
+  static void WriteTSDFToPLYFile(std::ofstream &file, pcl::PolygonMesh &mesh);
+
+  static void WriteTSDFToStringstream(std::stringstream &stream, pcl::PolygonMesh &mesh);
  private:
   /**
    * Performs linear interpolation on two cube corners to find the approximate zero crossing

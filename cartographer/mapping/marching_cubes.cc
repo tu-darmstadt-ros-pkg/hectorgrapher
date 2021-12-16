@@ -331,5 +331,58 @@ void MarchingCubes::WriteTSDFToPLYFile(std::ofstream &file, pcl::PolygonMesh &me
   }
 }
 
+void MarchingCubes::WriteTSDFToStringstream(std::stringstream &stream, pcl::PolygonMesh &mesh) {
+  pcl::PointCloud<pcl::PointXYZ> cloud;
+  pcl::fromPCLPointCloud2(mesh.cloud, cloud);
+
+  std::size_t cloud_size, polygon_size;
+  const unsigned char count = 3;
+  Eigen::Vector3f u, v, normal;
+  u_char r, g, b;
+  cloud_size = cloud.size();
+  polygon_size = mesh.polygons.size();
+
+  stream << "ply\n";
+  stream << "format binary_little_endian 1.0\n";
+  stream << "comment Created by Cartographer\n";
+  stream << "element vertex " << cloud_size << std::endl;
+  stream << "property float x\n";
+  stream << "property float y\n";
+  stream << "property float z\n";
+  stream << "element face " << polygon_size << std::endl;
+  stream << "property list uchar uint vertex_indices\n";
+  stream << "property uchar red\n";
+  stream << "property uchar green\n";
+  stream << "property uchar blue\n";
+  stream << "end_header\n";
+
+  for (auto &p: cloud.points) {
+    stream.write(reinterpret_cast<const char *>(&(p.x)), sizeof(float));
+    stream.write(reinterpret_cast<const char *>(&(p.y)), sizeof(float));
+    stream.write(reinterpret_cast<const char *>(&(p.z)), sizeof(float));
+  }
+  for (auto &vertice_group: mesh.polygons) {
+    // Write the number of elements
+    stream.write(reinterpret_cast<const char *>(&count), sizeof(unsigned char));
+    stream.write(reinterpret_cast<const char *>(&(vertice_group.vertices[0])), sizeof(uint32_t));
+    stream.write(reinterpret_cast<const char *>(&(vertice_group.vertices[1])), sizeof(uint32_t));
+    stream.write(reinterpret_cast<const char *>(&(vertice_group.vertices[2])), sizeof(uint32_t));
+    // Write the colors
+    u = {cloud[vertice_group.vertices[1]].x - cloud[vertice_group.vertices[0]].x,
+         cloud[vertice_group.vertices[1]].y - cloud[vertice_group.vertices[0]].y,
+         cloud[vertice_group.vertices[1]].z - cloud[vertice_group.vertices[0]].z};
+    v = {cloud[vertice_group.vertices[2]].x - cloud[vertice_group.vertices[0]].x,
+         cloud[vertice_group.vertices[2]].y - cloud[vertice_group.vertices[0]].y,
+         cloud[vertice_group.vertices[2]].z - cloud[vertice_group.vertices[0]].z};
+    normal = u.cross(v).normalized();
+    r = static_cast<u_char>((normal.x() + 1.0f) * 0.5f * 255);
+    g = static_cast<u_char>((normal.y() + 1.0f) * 0.5f * 255);
+    b = static_cast<u_char>((normal.z() + 1.0f) * 0.5f * 255);
+    stream.write(reinterpret_cast<const char *>(&r), 1 * sizeof(u_char));
+    stream.write(reinterpret_cast<const char *>(&g), 1 * sizeof(u_char));
+    stream.write(reinterpret_cast<const char *>(&b), 1 * sizeof(u_char));
+  }
+}
+
 } //namespace mapping
 } // namespace cartographer

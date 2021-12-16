@@ -16,10 +16,11 @@ namespace cartographer {
 namespace io {
 std::unique_ptr<TsdfMeshWritingPointsProcessor>
 TsdfMeshWritingPointsProcessor::FromDictionary(
+    const FileWriterFactory& file_writer_factory,
     common::LuaParameterDictionary *const dictionary,
     PointsProcessor *const next) {
   return absl::make_unique<TsdfMeshWritingPointsProcessor>(
-      dictionary->GetString("filename"),
+      file_writer_factory(dictionary->GetString("filename") + ".ply"),
       mapping::CreateSubmapsOptions3D(dictionary->GetDictionary("submaps").get()),
       dictionary->HasKey("min_weight") ? dictionary->GetDouble("min_weight") : 0.0,
       mapping::CreateTSDFRangeDataInserterOptions3D(
@@ -27,13 +28,13 @@ TsdfMeshWritingPointsProcessor::FromDictionary(
       next);
 }
 
-TsdfMeshWritingPointsProcessor::TsdfMeshWritingPointsProcessor(std::basic_string<char> filename,
+TsdfMeshWritingPointsProcessor::TsdfMeshWritingPointsProcessor(std::unique_ptr<FileWriter> file_writer,
                                                                mapping::proto::SubmapsOptions3D options,
                                                                float min_weight,
                                                                const mapping::proto::TSDFRangeDataInserterOptions3D &range_data_inserter_3_d_options,
                                                                PointsProcessor *next)
     : next_(next),
-      filename_(std::move(filename)),
+      file_writer_(std::move(file_writer)),
       options_(std::move(options)),
       tsdf_range_data_inserter_3_d_(range_data_inserter_3_d_options),
       tsdf_(init_hybrid_grid_tsdf()),
@@ -41,13 +42,15 @@ TsdfMeshWritingPointsProcessor::TsdfMeshWritingPointsProcessor(std::basic_string
 }
 
 mapping::HybridGridTSDF TsdfMeshWritingPointsProcessor::init_hybrid_grid_tsdf() {
-  return mapping::HybridGridTSDF(options_.high_resolution(),
-                                 options_.high_resolution_range_data_inserter_options()
+  return mapping::HybridGridTSDF(static_cast<float>(options_.high_resolution()),
+                                 static_cast<float>(options_
+                                     .high_resolution_range_data_inserter_options()
                                      .tsdf_range_data_inserter_options_3d()
-                                     .relative_truncation_distance(),
-                                 options_.high_resolution_range_data_inserter_options()
+                                     .relative_truncation_distance()),
+                                 static_cast<float>(options_
+                                     .high_resolution_range_data_inserter_options()
                                      .tsdf_range_data_inserter_options_3d()
-                                     .maximum_weight(),
+                                     .maximum_weight()),
                                  &conversion_tables_);
 }
 
@@ -113,11 +116,17 @@ PointsProcessor::FlushResult TsdfMeshWritingPointsProcessor::Flush() {
     mesh.polygons.push_back(v);
   }
 
-  std::ofstream file(filename_ + ".ply", std::ofstream::out | std::ofstream::binary);
-  marching_cubes_handler.WriteTSDFToPLYFile(file, mesh);
-  file.close();
-  LOG(INFO) << "Exported TSDF Mesh as PLY to "
-            << boost::filesystem::complete(filename_ + ".ply").string();
+//  std::ofstream file(filename_ + ".ply", std::ofstream::out | std::ofstream::binary);
+//  cartographer::mapping::MarchingCubes::WriteTSDFToPLYFile(file, mesh);
+//  file.close();
+
+  std::stringstream stream;
+  cartographer::mapping::MarchingCubes::WriteTSDFToStringstream(stream, mesh);
+  stream.seekg(0, std::ios::end);
+  file_writer_->Write(stream.str().data(), stream.tellg());
+  file_writer_->Close();
+//  LOG(INFO) << "Exported TSDF Mesh as PLY to "
+//            << boost::filesystem::complete(filename_ + ".ply").string();
 
   return PointsProcessor::FlushResult::kFinished;
 }
