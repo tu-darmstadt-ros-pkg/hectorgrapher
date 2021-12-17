@@ -66,7 +66,6 @@ PointsProcessor::FlushResult TsdfMeshWritingPointsProcessor::Flush() {
   }
   LOG(INFO) << "Created a TSDF map with " << num_voxel << " voxel";
 
-  cartographer::mapping::MarchingCubes marching_cubes_handler;
   pcl::PointCloud<pcl::PointXYZ> cloud;
   pcl::PolygonMesh mesh;
   float isolevel = 0.0f;
@@ -80,8 +79,15 @@ PointsProcessor::FlushResult TsdfMeshWritingPointsProcessor::Flush() {
     const float tsd = tsdf_.ValueConverter().ValueToTSD(voxel.discrete_tsd);
     const Eigen::Vector3f cell_center_global = tsdf_.GetCenterOfCell(it.GetCellIndex());
 
-    if (voxel.discrete_weight <= min_weight_) {
-      // Skip inner-object voxels
+//    LOG(INFO) << "TSD: " << tsd << " in [" << tsdf_.ValueConverter().getMinTSD() << ", " << tsdf_.ValueConverter().getMaxTSD() << "]";
+//    if (tsd <= 0.0f) {
+//      // Skip inner-object voxels with TSD < 0 with TSD in [min_tsd, max_tsd], eg [-0.25, 0.25]
+//      continue;
+//    }
+
+//    LOG(INFO) << "Weight: " << tsdf_.ValueConverter().ValueToWeight(voxel.discrete_weight) << " in [" << tsdf_.ValueConverter().getMinWeight() << ", " << tsdf_.ValueConverter().getMaxWeight() << "]";
+    if (tsdf_.ValueConverter().ValueToWeight(voxel.discrete_weight) <= min_weight_) {
+      // Skip voxels with low weight with weight in [min_weight = 0.0, max_weight], eg [0.0, 1000.0]
       continue;
     }
 
@@ -100,9 +106,9 @@ PointsProcessor::FlushResult TsdfMeshWritingPointsProcessor::Flush() {
       cube.tsd_weights[i] = tsdf_.GetWeight(cube.vertice_ids[i]);
 
       cube.tsd_values[i] =
-          cube.tsd_weights[i] <= 0.0f ? tsd : tsdf_.GetTSD(cube.vertice_ids[i]);
+          (cube.tsd_weights[i] <= 0.0f) ? tsd : tsdf_.GetTSD(cube.vertice_ids[i]);
     }
-    triangle_count += marching_cubes_handler.ProcessCube(cube, cloud, isolevel);
+    triangle_count += cartographer::mapping::MarchingCubes::ProcessCube(cube, cloud, isolevel);
   }
 
   pcl::toPCLPointCloud2(cloud, mesh.cloud);

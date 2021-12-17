@@ -28,11 +28,11 @@ class MarchingCubes {
  * values indicate no cut-off along this dimension
  * @param cut_off_height float as cut-off-height above the robots current height. Negative values
  * indicate no cut-off along this dimension
- * @param min_weight minimal weight of TSD value TO BE DISCARDED when iterating the TSDF voxels
+ * @param min_weight minimal weight of voxel to be considered when iterating the TSDF voxels
  * @param all_submaps if true, all submaps will be iterated, possible having duplicates. Otherwise
  * the second last submap will be used except if there is only one
  */
-  void ProcessTSDFMesh(pcl::PolygonMesh &mesh,
+  static void ProcessTSDFMesh(pcl::PolygonMesh &mesh,
                        const MapById<SubmapId, PoseGraphInterface::SubmapData> &all_submap_data,
                        const Eigen::Matrix<float, 3, 1> &robot_position,
                        bool high_res_mesh,
@@ -72,7 +72,7 @@ class MarchingCubes {
     * @param isolevel value to represent an object collision in TSDF, standard is 0.0
     * @return the number of triangles processed
     */
-  int ProcessCube(Cube &cube, pcl::PointCloud<pcl::PointXYZ> &cloud, float isolevel);
+  static int ProcessCube(Cube &cube, pcl::PointCloud<pcl::PointXYZ> &cloud, float isolevel);
 
   static void WriteTSDFToPLYFile(std::ofstream &file, pcl::PolygonMesh &mesh);
 
@@ -95,7 +95,7 @@ class MarchingCubes {
                                          float valp1,
                                          float valp2);
 
-  int edge_table_[256] = {
+  inline constexpr static int edge_table_[256] = {
       0x0, 0x109, 0x203, 0x30a, 0x406, 0x50f, 0x605, 0x70c,
       0x80c, 0x905, 0xa0f, 0xb06, 0xc0a, 0xd03, 0xe09, 0xf00,
       0x190, 0x99, 0x393, 0x29a, 0x596, 0x49f, 0x795, 0x69c,
@@ -129,7 +129,7 @@ class MarchingCubes {
       0xf00, 0xe09, 0xd03, 0xc0a, 0xb06, 0xa0f, 0x905, 0x80c,
       0x70c, 0x605, 0x50f, 0x406, 0x30a, 0x203, 0x109, 0x0};
 
-  int triangle_table_[256][16] =
+  inline constexpr static int triangle_table_[256][16] =
       {{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1},
        {0, 8, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1},
        {0, 1, 9, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1},

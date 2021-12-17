@@ -222,8 +222,8 @@ void MarchingCubes::ProcessTSDFMesh(pcl::PolygonMesh &mesh,
         const Eigen::Vector3f
             cell_center_global = submap3d->local_pose().cast<float>() * cell_center_submap;
 
-        if (voxel.discrete_weight <= min_weight) {
-          // Skip inner-object voxels
+        if (tsdf->ValueConverter().ValueToWeight(voxel.discrete_weight) <= min_weight) {
+          // Skip inner-object voxels with low weight
           continue;
         }
 
@@ -254,7 +254,7 @@ void MarchingCubes::ProcessTSDFMesh(pcl::PolygonMesh &mesh,
           cube.tsd_weights[i] = tsdf->GetWeight(cube.vertice_ids[i]);
 
           cube.tsd_values[i] =
-              cube.tsd_weights[i] <= 0.0f ? tsd : tsdf->GetTSD(cube.vertice_ids[i]);
+              (cube.tsd_weights[i] <= 0.0f) ? tsd : tsdf->GetTSD(cube.vertice_ids[i]);
         }
         count += ProcessCube(cube, cloud, isolevel);
 
