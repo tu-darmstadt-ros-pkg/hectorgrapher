@@ -19,27 +19,36 @@ class MarchingCubes {
   MarchingCubes() = default;
 
   /**
- * Giving an address to a pcl::PolygonMesh object, the function creates a mesh surface
- * representation of the TSDF map within a certain cut-off-distance and cut-off-height from
- * the robot
- * TODO add new parameters
- * @param mesh pcl::PolygonMesh object to store the mesh surface
- * @param cut_off_distance float as cut-off-distance from the robots current position. Negative
- * values indicate no cut-off along this dimension
- * @param cut_off_height float as cut-off-height above the robots current height. Negative values
- * indicate no cut-off along this dimension
- * @param min_weight minimal weight of voxel to be considered when iterating the TSDF voxels
- * @param all_submaps if true, all submaps will be iterated, possible having duplicates. Otherwise
- * the second last submap will be used except if there is only one
- */
+   * Giving an address to a pcl::PolygonMesh object, the function creates a mesh surface
+   * representation of the TSDF map within a certain cut-off-distance and cut-off-height from
+   * the robot. Depending on the setting, either all submaps can be iterated or only the second last
+   * submap will be used. Additionally, the resolution can be toggled between high- and low-res and
+   * low weighted voxels can be disregarded.
+   * @param mesh pcl::PolygonMesh object to store the mesh surface
+   * @param all_submap_data map structure as MapById<SubmapId, PoseGraphInterface::SubmapData>
+   * containing all submaps
+   * @param robot_position The robots position as an Eigen3f Matrix to cut-off voxels that are to far
+   * away from the robots position
+   * @param high_res_mesh boolean to toggle whether to use the high-res or low-res tsdf grid to
+   * create the mesh
+   * @param cut_off_distance float as cut-off-distance from the robots current position. Negative
+  * values indicate no cut-off along this dimension
+   * @param cut_off_height float as cut-off-height above the robots current height. Negative values
+  * indicate no cut-off along this dimension
+   * @param min_weight minimal weight of voxel to be considered when iterating the TSDF voxels
+   * @param all_submaps if true, all submaps will be iterated, possibly having duplicate surfaces.
+   * This is preferably used when writing to a file. Otherwise the second last submap will be used
+   * except if there is only one
+   */
   static void ProcessTSDFMesh(pcl::PolygonMesh &mesh,
-                       const MapById<SubmapId, PoseGraphInterface::SubmapData> &all_submap_data,
-                       const Eigen::Matrix<float, 3, 1> &robot_position,
-                       bool high_res_mesh,
-                       float cut_off_distance,
-                       float cut_off_height,
-                       float min_weight,
-                       bool all_submaps);
+                              const MapById<SubmapId,
+                                            PoseGraphInterface::SubmapData> &all_submap_data,
+                              const Eigen::Matrix<float, 3, 1> &robot_position,
+                              bool high_res_mesh,
+                              float cut_off_distance,
+                              float cut_off_height,
+                              float min_weight,
+                              bool all_submaps);
 
   /**
    * Struct element representing a TSDF voxel - and in particular its neighbours - in 3D space.
@@ -74,8 +83,13 @@ class MarchingCubes {
     */
   static int ProcessCube(Cube &cube, pcl::PointCloud<pcl::PointXYZ> &cloud, float isolevel);
 
-  static void WriteTSDFToPLYFile(std::ofstream &file, pcl::PolygonMesh &mesh);
-
+  /**
+   * Writes a PolygonMesh to a given std::stringstream object in binary PLY format. This includes
+   * vertices and faces with colors according to the surface normal. Writing the string stream to a
+   * file is in the responsibility of the calling function.
+   * @param stream std::stringstream to write the output
+   * @param mesh pcl::PolygonMesh containing the mesh information.
+   */
   static void WriteTSDFToStringstream(std::stringstream &stream, pcl::PolygonMesh &mesh);
  private:
   /**

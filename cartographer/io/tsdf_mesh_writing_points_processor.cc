@@ -79,13 +79,6 @@ PointsProcessor::FlushResult TsdfMeshWritingPointsProcessor::Flush() {
     const float tsd = tsdf_.ValueConverter().ValueToTSD(voxel.discrete_tsd);
     const Eigen::Vector3f cell_center_global = tsdf_.GetCenterOfCell(it.GetCellIndex());
 
-//    LOG(INFO) << "TSD: " << tsd << " in [" << tsdf_.ValueConverter().getMinTSD() << ", " << tsdf_.ValueConverter().getMaxTSD() << "]";
-//    if (tsd <= 0.0f) {
-//      // Skip inner-object voxels with TSD < 0 with TSD in [min_tsd, max_tsd], eg [-0.25, 0.25]
-//      continue;
-//    }
-
-//    LOG(INFO) << "Weight: " << tsdf_.ValueConverter().ValueToWeight(voxel.discrete_weight) << " in [" << tsdf_.ValueConverter().getMinWeight() << ", " << tsdf_.ValueConverter().getMaxWeight() << "]";
     if (tsdf_.ValueConverter().ValueToWeight(voxel.discrete_weight) <= min_weight_) {
       // Skip voxels with low weight with weight in [min_weight = 0.0, max_weight], eg [0.0, 1000.0]
       continue;
@@ -122,17 +115,13 @@ PointsProcessor::FlushResult TsdfMeshWritingPointsProcessor::Flush() {
     mesh.polygons.push_back(v);
   }
 
-//  std::ofstream file(filename_ + ".ply", std::ofstream::out | std::ofstream::binary);
-//  cartographer::mapping::MarchingCubes::WriteTSDFToPLYFile(file, mesh);
-//  file.close();
-
   std::stringstream stream;
   cartographer::mapping::MarchingCubes::WriteTSDFToStringstream(stream, mesh);
   stream.seekg(0, std::ios::end);
   file_writer_->Write(stream.str().data(), stream.tellg());
   file_writer_->Close();
-//  LOG(INFO) << "Exported TSDF Mesh as PLY to "
-//            << boost::filesystem::complete(filename_ + ".ply").string();
+  LOG(INFO) << "Exported TSDF Mesh as PLY to "
+            << boost::filesystem::complete(file_writer_->GetFilename()).string();
 
   return PointsProcessor::FlushResult::kFinished;
 }

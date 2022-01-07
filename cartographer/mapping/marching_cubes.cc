@@ -188,13 +188,18 @@ void MarchingCubes::ProcessTSDFMesh(pcl::PolygonMesh &mesh,
   pcl::PointCloud<pcl::PointXYZ> cloud;
   float isolevel = 0.0f;
   size_t count = 0;
-  bool skipped_current_submap = false;
+  bool iterated_second_last_submap = false;
 
   if (!all_submap_data.empty()) {
     for (auto const &submap_data: all_submap_data) {
-      if (!all_submaps && all_submap_data.size() > 1 && !skipped_current_submap) {
-        skipped_current_submap = true;
+      if (!all_submaps && all_submap_data.size() > 1
+          && submap_data.id.submap_index != all_submap_data.size() - 1) {
+        // If in live debug, we only want the second last submap, if available
         continue;
+      } else if (!all_submaps && all_submap_data.size() > 1 && iterated_second_last_submap) {
+        continue;
+      } else if (!all_submaps && all_submap_data.size() > 1) {
+        iterated_second_last_submap = true;
       }
 
       auto submap3d =
@@ -260,7 +265,7 @@ void MarchingCubes::ProcessTSDFMesh(pcl::PolygonMesh &mesh,
 
       }
     }
-    LOG(INFO) << "[TSDF Mesh] Triangles in Cloud: " << cloud.size() / 3;
+    LOG(INFO) << "[TSDF Mesh] Number of Triangles: " << cloud.size() / 3;
 
     pcl::toPCLPointCloud2(cloud, mesh.cloud);
 
@@ -271,63 +276,6 @@ void MarchingCubes::ProcessTSDFMesh(pcl::PolygonMesh &mesh,
       v.vertices.push_back(i * 3 + 1);
       mesh.polygons.push_back(v);
     }
-  }
-}
-void MarchingCubes::WriteTSDFToPLYFile(std::ofstream &file, pcl::PolygonMesh &mesh) {
-  pcl::PointCloud<pcl::PointXYZ> cloud;
-  pcl::fromPCLPointCloud2(mesh.cloud, cloud);
-
-  if (file.is_open()) {
-    std::size_t cloud_size, polygon_size;
-    const unsigned char count = 3;
-    Eigen::Vector3f u, v, normal;
-    u_char r, g, b;
-    cloud_size = cloud.size();
-    polygon_size = mesh.polygons.size();
-
-    file << "ply\n";
-    file << "format binary_little_endian 1.0\n";
-    file << "comment Created by Cartographer\n";
-    file << "element vertex " << cloud_size << std::endl;
-    file << "property float x\n";
-    file << "property float y\n";
-    file << "property float z\n";
-    file << "element face " << polygon_size << std::endl;
-    file << "property list uchar uint vertex_indices\n";
-    file << "property uchar red\n";
-    file << "property uchar green\n";
-    file << "property uchar blue\n";
-    file << "end_header\n";
-
-    for (auto &p: cloud.points) {
-      file.write(reinterpret_cast<const char *>(&(p.x)), sizeof(float));
-      file.write(reinterpret_cast<const char *>(&(p.y)), sizeof(float));
-      file.write(reinterpret_cast<const char *>(&(p.z)), sizeof(float));
-    }
-    for (auto &vertice_group: mesh.polygons) {
-      // Write the number of elements
-      file.write(reinterpret_cast<const char *>(&count), sizeof(unsigned char));
-      file.write(reinterpret_cast<const char *>(&(vertice_group.vertices[0])), sizeof(uint32_t));
-      file.write(reinterpret_cast<const char *>(&(vertice_group.vertices[1])), sizeof(uint32_t));
-      file.write(reinterpret_cast<const char *>(&(vertice_group.vertices[2])), sizeof(uint32_t));
-      // Write the colors
-      u = {cloud[vertice_group.vertices[1]].x - cloud[vertice_group.vertices[0]].x,
-           cloud[vertice_group.vertices[1]].y - cloud[vertice_group.vertices[0]].y,
-           cloud[vertice_group.vertices[1]].z - cloud[vertice_group.vertices[0]].z};
-      v = {cloud[vertice_group.vertices[2]].x - cloud[vertice_group.vertices[0]].x,
-           cloud[vertice_group.vertices[2]].y - cloud[vertice_group.vertices[0]].y,
-           cloud[vertice_group.vertices[2]].z - cloud[vertice_group.vertices[0]].z};
-      normal = u.cross(v).normalized();
-      r = static_cast<u_char>((normal.x() + 1.0f) * 0.5f * 255);
-      g = static_cast<u_char>((normal.y() + 1.0f) * 0.5f * 255);
-      b = static_cast<u_char>((normal.z() + 1.0f) * 0.5f * 255);
-      file.write(reinterpret_cast<const char *>(&r), 1 * sizeof(u_char));
-      file.write(reinterpret_cast<const char *>(&g), 1 * sizeof(u_char));
-      file.write(reinterpret_cast<const char *>(&b), 1 * sizeof(u_char));
-    }
-  } else {
-    file.close();
-    LOG(ERROR) << "Cannot write file. Make sure the std::ofstream handle is opened.";
   }
 }
 
