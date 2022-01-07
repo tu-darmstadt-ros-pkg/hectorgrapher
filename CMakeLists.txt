@@ -15,6 +15,8 @@
 cmake_minimum_required(VERSION 3.2)
 
 project(cartographer)
+#set(CMAKE_BUILD_TYPE Debug)
+#set(FORCE_DEBUG_BUILD True)
 
 set(CARTOGRAPHER_MAJOR_VERSION 1)
 set(CARTOGRAPHER_MINOR_VERSION 0)
@@ -26,7 +28,7 @@ set(CARTOGRAPHER_HAS_GRPC ${BUILD_GRPC})
 option(BUILD_PROMETHEUS "build Prometheus monitoring support" false)
 
 option(WITH_OPEN3D "build with open3d support" false)
-option(WITH_PCL "build with pcl support" false)
+option(WITH_PCL "build with pcl support" true)
 option(WITH_RK4_INTEGRATOR "build with rk4 integrator" false)
 option(BUILD_EVALUATION_TOOLS "build with evaluation tool" false)
 
@@ -83,7 +85,7 @@ endif()
 
 # PCL
 if(${WITH_PCL})
-find_package(PCL REQUIRED common kdtree search features)
+find_package(PCL REQUIRED common)
 endif()
 
 # Open3D
