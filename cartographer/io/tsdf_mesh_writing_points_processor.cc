@@ -1,5 +1,5 @@
 //
-// Created by bastian on 12.11.21.
+// Created by bhirschel on 12.11.21.
 //
 
 #include "tsdf_mesh_writing_points_processor.h"

@@ -323,7 +323,6 @@ foreach(DEFINITION ${PCL_DEFINITIONS})
     continue()
   endif()
   set(TARGET_COMPILE_FLAGS "${TARGET_COMPILE_FLAGS} ${DEFINITION}")
-  message(${TARGET_COMPILE_FLAGS} ${DEFINITION})
 endforeach()
 endif()
 

@@ -1,5 +1,5 @@
 //
-// Created by bastian on 12.11.21.
+// Created by bhirschel on 12.11.21.
 //
 
 #ifndef CARTOGRAPHER_CARTOGRAPHER_IO_TSDF_MESH_WRITING_POINTS_PROCESSOR_H_
