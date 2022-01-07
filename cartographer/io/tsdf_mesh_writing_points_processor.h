@@ -23,21 +23,24 @@ class TsdfMeshWritingPointsProcessor : public PointsProcessor {
    * Points Processor that constructs a TSDF map during the processing phase of the pipeline and
    * exports a surface mesh as ply file during flushing. All voxels below a TSD value of min_weight
    * are dropped.
-   * @param filename filename to which the mesh will be exported. File ending ".ply" will be added
-   * automatically
-   * @param options as SubmapsOptions3D
+   * @param file_writer cartographer file_writer handle getting initialized by the filename
+   * dictionary entry
    * @param min_weight float specifying the minimum TSD value of voxels
+   * @param use_high_res bool whether to use high-res or low-res tsdf specification.
+   * RangeDataInserterOptions have to be adjusted accordingly
+   * @param options as SubmapsOptions3D
    * @param range_data_inserter_3_d_options as mapping::proto::TSDFRangeDataInserterOptions3D
    * @param next pointer to the next points processor
    */
   TsdfMeshWritingPointsProcessor(std::unique_ptr<FileWriter> file_writer,
-                                 mapping::proto::SubmapsOptions3D options,
                                  float min_weight,
+                                 bool use_high_res,
+                                 mapping::proto::SubmapsOptions3D options,
                                  const mapping::proto::TSDFRangeDataInserterOptions3D &range_data_inserter_3_d_options,
                                  PointsProcessor *next);
 
   static std::unique_ptr<TsdfMeshWritingPointsProcessor> FromDictionary(
-      const FileWriterFactory& file_writer_factory,
+      const FileWriterFactory &file_writer_factory,
       common::LuaParameterDictionary *dictionary,
       PointsProcessor *next);
 
@@ -53,11 +56,12 @@ class TsdfMeshWritingPointsProcessor : public PointsProcessor {
  private:
   PointsProcessor *const next_;
   std::unique_ptr<FileWriter> file_writer_;
+  const float min_weight_;
+  const bool use_high_res_;
   const mapping::proto::SubmapsOptions3D options_;
   mapping::ValueConversionTables conversion_tables_;
   mapping::TSDFRangeDataInserter3D tsdf_range_data_inserter_3_d_;
   mapping::HybridGridTSDF tsdf_;
-  const float min_weight_;
 
   mapping::HybridGridTSDF init_hybrid_grid_tsdf();
 };
