@@ -14,6 +14,7 @@
 #include "cartographer/mapping/value_conversion_tables.h"
 
 // Classes for the lua dictionary
+#include "cartographer/common/config.h"
 #include "cartographer/common/configuration_file_resolver.h"
 
 // Classes for the ProtoBuffer
@@ -45,7 +46,6 @@ namespace cartographer {
         class TSDFBuilder {
 
             cartographer::common::LuaParameterDictionary *luaParameterDictionary;
-            std::string configuration_name;
 
             /**
              * Generate a point cloud in shape of a cube and convert it into a shared pointer of an open3d point cloud.
@@ -70,7 +70,7 @@ namespace cartographer {
                 // Convert the Point Cloud to a Vector of 3D-Eigen-Points.
                 // This data format is more universal than the cartographer Point Cloud
                 std::vector<Eigen::Vector3d> listOfPoints;
-                for (cartographer::sensor::RangefinderPoint point : cartographer_cloud) {
+                for (cartographer::sensor::RangefinderPoint point: cartographer_cloud) {
                     listOfPoints.emplace_back(
                             Eigen::Vector3d{point.position.x(), point.position.y(), point.position.z()});
                 }
@@ -138,7 +138,7 @@ namespace cartographer {
                         std::make_shared<open3d::geometry::VoxelGrid>(open3d::geometry::VoxelGrid());
                 voxelGrid->voxel_size_ = voxelSideLength;
 
-                for (std::pair<Eigen::Array<int, 3, 1>, TSDFVoxel> nextVoxel : *hybridGrid) {
+                for (std::pair<Eigen::Array<int, 3, 1>, TSDFVoxel> nextVoxel: *hybridGrid) {
                     Eigen::Vector3i cellIndex = nextVoxel.first;
 
                     Eigen::Vector3d color;
@@ -161,7 +161,6 @@ namespace cartographer {
                 auto file_resolver =
                         absl::make_unique<cartographer::common::ConfigurationFileResolver>(
                                 std::vector<std::string>{config_directory});
-                configuration_name = config_filename;
                 const std::string code = file_resolver->GetFileContentOrDie(config_filename);
                 luaParameterDictionary = new cartographer::common::LuaParameterDictionary(code,
                                                                                           std::move(file_resolver));
@@ -244,19 +243,23 @@ namespace cartographer {
                 Eigen::Vector3d minValues = myPointCloudPointer->GetMinBound();
                 Eigen::Vector3d ranges = maxValues - minValues;
                 if (!myPointCloudPointer->HasColors()) {
-                    for (const Eigen::Vector3d &p : myPointCloudPointer->points_) {
+                    for (const Eigen::Vector3d &p: myPointCloudPointer->points_) {
                         myPointCloudPointer->colors_.emplace_back(
                                 Eigen::Vector3d{(p.x() - minValues.x()) * 1.0 / ranges.x(), 0.0, 0.0});
                     }
                 }
 
-                float gridVoxelSideLength_highRes = (float) luaParameterDictionary->GetDouble("absoluteHighResVoxelSize");
+                float gridVoxelSideLength_highRes = (float) luaParameterDictionary->GetDouble(
+                        "absoluteHighResVoxelSize");
                 float gridVoxelSideLength_lowRes = (float) luaParameterDictionary->GetDouble("absoluteLowResVoxelSize");
 
-                int numberOfVoxels_highRes = (int) (ranges.x() * ranges.y() * ranges.z() / pow(gridVoxelSideLength_highRes, 3));
-                std::cout << "Created HighRes-VoxelGrid with " << numberOfVoxels_highRes << " possible voxels." << std::endl;
+                int numberOfVoxels_highRes = (int) (ranges.x() * ranges.y() * ranges.z() /
+                                                    pow(gridVoxelSideLength_highRes, 3));
+                std::cout << "Created HighRes-VoxelGrid with " << numberOfVoxels_highRes << " possible voxels."
+                          << std::endl;
                 std::shared_ptr<open3d::geometry::VoxelGrid> pclVoxelGridPointer =
-                        open3d::geometry::VoxelGrid::CreateFromPointCloud(*myPointCloudPointer, gridVoxelSideLength_highRes);
+                        open3d::geometry::VoxelGrid::CreateFromPointCloud(*myPointCloudPointer,
+                                                                          gridVoxelSideLength_highRes);
 
                 //             myTSDFDrawer.drawTSDF(pclVoxelGridPointer);
 
@@ -271,16 +274,19 @@ namespace cartographer {
                 float relativeLowResTruncationDistance =
                         (float) luaParameterDictionary->GetDouble("relativeLowResTruncationDistance");
                 float maxWeight = 100.0;
-                float absoluteHighResTruncationDistance = relativeHighResTruncationDistance * gridVoxelSideLength_highRes;
+                float absoluteHighResTruncationDistance =
+                        relativeHighResTruncationDistance * gridVoxelSideLength_highRes;
                 float absoluteLowResTruncationDistance = relativeLowResTruncationDistance * gridVoxelSideLength_lowRes;
 
                 cartographer::mapping::ValueConversionTables myValueConversionTable;
 
                 std::unique_ptr<GridInterface> myHighResHybridGridTSDF = absl::make_unique<HybridGridTSDF>(
-                        gridVoxelSideLength_highRes, relativeHighResTruncationDistance, maxWeight, &myValueConversionTable);
+                        gridVoxelSideLength_highRes, relativeHighResTruncationDistance, maxWeight,
+                        &myValueConversionTable);
 
                 std::unique_ptr<GridInterface> myLowResHybridGridTSDF = absl::make_unique<HybridGridTSDF>(
-                        gridVoxelSideLength_lowRes, relativeLowResTruncationDistance, maxWeight, &myValueConversionTable);
+                        gridVoxelSideLength_lowRes, relativeLowResTruncationDistance, maxWeight,
+                        &myValueConversionTable);
 
                 // Build the TSDF by raytracing every point/normal pair from the point cloud
                 for (long unsigned int i = 0; i < myPointCloudPointer->points_.size(); i++) {
@@ -318,18 +324,18 @@ namespace cartographer {
 //                std::string imgfilename;
 //                imgfilename = path_to_home +
 //                              "/hector/src/cartographer/cartographer/io/pointcloud_conversion/images/"
-//                              + configuration_name + "_img_x.png";
+//                              + config_filename + "_img_x.png";
 //                myTSDFDrawer.saveSliceAsPNG(0, 0, imgfilename.c_str(), tsdfVoxelGridPointer_highRes);
 //
 //                imgfilename = path_to_home +
 //                              "/hector/src/cartographer/cartographer/io/pointcloud_conversion/images/"
-//                              + configuration_name + "_img_y.png";
+//                              + config_filename + "_img_y.png";
 //                myTSDFDrawer.saveSliceAsPNG(0, 1, imgfilename.c_str(), tsdfVoxelGridPointer_highRes);
 //
 //                for (int i = 0; i < 6; i++) {
 //                    imgfilename = path_to_home +
 //                                  "/hector/src/cartographer/cartographer/io/pointcloud_conversion/images/"
-//                                  + configuration_name + "_img_z" + std::to_string(i) + ".png";
+//                                  + config_filename + "_img_z" + std::to_string(i) + ".png";
 //
 //                    myTSDFDrawer.saveSliceAsPNG(luaParameterDictionary->GetInt("imageSliceIndex") + 3 * i, 2,
 //                                                imgfilename.c_str(),
@@ -357,26 +363,36 @@ namespace cartographer {
 
                 my_submap.set_insertion_finished(true);
 
-                // --- Build a pose graph for the submap (with some dummy values) ---
-                proto::PoseGraphOptions my_posegraph_options;
-                const optimization::proto::OptimizationProblemOptions my_opt_prob_options;
-                std::unique_ptr<optimization::OptimizationProblem3D> my_opt_prob =
-                        absl::make_unique<optimization::OptimizationProblem3D>(my_opt_prob_options);
-                cartographer::common::ThreadPool my_thread_pool(1);
+                // --- Build a pose graph for the submap (use the values from map_builder.lua!) ---
+                const std::string code_pbstream = R"text(
+                    include "map_builder.lua"
+                    MAP_BUILDER.use_trajectory_builder_3d = true
+                    return MAP_BUILDER)text";
 
-                my_posegraph_options.set_global_sampling_ratio(0.1);
-                my_posegraph_options.mutable_constraint_builder_options()->set_sampling_ratio(0.1);
+                // Copied from map_builder_test.cc in SetUp()
+                auto file_resolver_pbstream =
+                        absl::make_unique<::cartographer::common::ConfigurationFileResolver>(
+                                std::vector<std::string>{
+                                        std::string(::cartographer::common::kSourceDirectory) +
+                                        "/configuration_files"});
+                std::unique_ptr<common::LuaParameterDictionary> dict_pbstream =
+                        std::make_unique<common::LuaParameterDictionary>(code_pbstream,
+                                                                         std::move(file_resolver_pbstream));
 
+                proto::MapBuilderOptions map_builder_options_ = CreateMapBuilderOptions(dict_pbstream.get());
+                cartographer::common::ThreadPool my_thread_pool(map_builder_options_.num_background_threads());
+
+                // Copied from map_builder.cc, line 106
                 cartographer::mapping::PoseGraph3D posegraph(
-                        my_posegraph_options,
-                        std::move(my_opt_prob),
+                        map_builder_options_.pose_graph_options(),
+                        absl::make_unique<optimization::OptimizationProblem3D>(
+                                map_builder_options_.pose_graph_options().optimization_problem_options()),
                         &my_thread_pool
                 );
-
                 // --- Put the submap in the pose graph ---
                 posegraph.AddSubmapFromProto(my_transform, my_submap.ToProto(true));
 
-                for (const auto& submap_id_pose : posegraph.GetAllSubmapPoses()) {
+                for (const auto &submap_id_pose: posegraph.GetAllSubmapPoses()) {
                     std::cout << "The start_time for the submap is " << submap_id_pose.data.start_time << std::endl;
                     std::cout << "The version of the submap is " << submap_id_pose.data.version << std::endl;
                 }
