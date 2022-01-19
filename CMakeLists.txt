@@ -83,7 +83,7 @@ endif()
 
 # PCL
 if(${WITH_PCL})
-find_package(PCL REQUIRED common kdtree search features)
+  find_package(PCL REQUIRED COMPONENTS common io)
 endif()
 
 # Open3D
