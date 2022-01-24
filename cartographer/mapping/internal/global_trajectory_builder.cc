@@ -126,6 +126,10 @@ class GlobalTrajectoryBuilder : public mapping::TrajectoryBuilderInterface {
     local_trajectory_builder_->SetMapUpdateEnabled(map_update_enabled);
   }
 
+  void UseScanMatching(bool use_scan_matching) override {
+    local_trajectory_builder_->UseScanMatching(use_scan_matching);
+  };
+
  private:
   const int trajectory_id_;
   PoseGraph* const pose_graph_;

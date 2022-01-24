@@ -462,12 +462,16 @@ ActiveSubmaps3D::CreateRangeDataInserter(
       return absl::make_unique<OccupancyGridRangeDataInserter3D>(
           inserter_options);
     case proto::RangeDataInserterOptions3D::TSDF_INSERTER_3D:
-      return absl::make_unique<TSDFRangeDataInserter3D>(inserter_options);
+      return absl::make_unique<TSDFRangeDataInserter3D>(
+          inserter_options.tsdf_range_data_inserter_options_3d());
     default:
       LOG(FATAL) << "Unknown RangeDataInserterType.";
       return absl::make_unique<TSDFRangeDataInserter3D>(
-          inserter_options);  // todo(kdaun) fix error: control reaches end of
-                              // non-void function
+          inserter_options
+              .tsdf_range_data_inserter_options_3d());  // todo(kdaun) fix
+                                                        // error: control
+                                                        // reaches end of
+                                                        // non-void function
   }
 }
 

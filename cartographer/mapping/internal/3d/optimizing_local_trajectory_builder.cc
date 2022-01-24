@@ -138,6 +138,7 @@ OptimizingLocalTrajectoryBuilder::OptimizingLocalTrajectoryBuilder(
           Eigen::Transform<double, 3, Eigen::Affine>::Identity()),
       motion_filter_(options.motion_filter_options()),
       map_update_enabled_(true),
+      use_scan_matching_(true),
       num_insertions(0),
       total_insertion_duration(0.0),
       num_optimizations(0),
@@ -203,34 +204,36 @@ OptimizingLocalTrajectoryBuilder::AddRangeData(
     return nullptr;
   }
 
-  if (initial_data_time_ >
-      range_data_in_tracking.time +
-          common::FromSeconds(range_data_in_tracking.ranges.front().time)) {
-    LOG(INFO) << "Not enough data, skipping this cloud.";
-    return nullptr;
-  }
-
-  if (!odometer_data_.empty() &&
-      odometer_data_.front().time >
-          range_data_in_tracking.time +
-              common::FromSeconds(range_data_in_tracking.ranges.front().time)) {
-    LOG(INFO) << "Not enough odom data, skipping this cloud.";
-    return nullptr;
-  }
   PointCloudSet point_cloud_set;
   point_cloud_set.time = range_data_in_tracking.time;
   point_cloud_set.origin = range_data_in_tracking.origin;
   point_cloud_set.original_cloud = range_data_in_tracking.ranges;
   point_cloud_set.width = range_data_in_tracking.width;
+  point_cloud_set.min_point_timestamp = std::numeric_limits<float>::max();
+  point_cloud_set.max_point_timestamp = std::numeric_limits<float>::min();
   for (const auto& hit : range_data_in_tracking.ranges) {
     if (hit.position.hasNaN()) continue;
     const Eigen::Vector3f delta = hit.position - range_data_in_tracking.origin;
     const float range = delta.norm();
-    if (range >= options_.min_range()) {
-      if (range <= options_.max_range()) {
-        point_cloud_set.points.push_back(hit);
+    if (range >= options_.min_range() && range <= options_.max_range()) {
+      point_cloud_set.points.push_back(hit);
+      if (hit.time > point_cloud_set.max_point_timestamp) {
+        point_cloud_set.max_point_timestamp = hit.time;
+      }
+      if (hit.time < point_cloud_set.min_point_timestamp) {
+        point_cloud_set.min_point_timestamp = hit.time;
       }
     }
+  }
+
+  if (initial_data_time_ > point_cloud_set.StartTime()) {
+    LOG(INFO) << "Not enough data, skipping this cloud.";
+    return nullptr;
+  }
+
+  if (odometer_data_.front().time > point_cloud_set.StartTime()) {
+    LOG(INFO) << "Not enough odom data, skipping this cloud.";
+    return nullptr;
   }
 
   auto high_resolution_options =
@@ -1039,11 +1042,14 @@ void OptimizingLocalTrajectoryBuilder::AddOdometryResiduals(
         double rotation_distance =
             std::abs(delta_pose.rotation().angularDistance(
                 Eigen::Quaterniond::Identity()));
-
-//        const double translation_normalization = 1.0E-3 * delta_time;
-//        const double rotation_normalization = 5.0E-3 * delta_time;
-        const double translation_normalization = 2.0E-2 * delta_time;
-        const double rotation_normalization = 1.0E-1 * delta_time;
+        const double translation_normalization =
+            options_.optimizing_local_trajectory_builder_options()
+                .odometry_translation_normalization() *
+            delta_time;
+        const double rotation_normalization =
+            options_.optimizing_local_trajectory_builder_options()
+                .odometry_rotation_normalization() *
+            delta_time;
         residual_translation_weight =
             options_.optimizing_local_trajectory_builder_options()
                 .odometry_translation_weight() /
@@ -1243,18 +1249,20 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
     // reverted after solving the optimization problem.
     TransformStates(matching_submap->local_pose().inverse());
 
-    if (options_.optimizing_local_trajectory_builder_options()
-            .use_multi_resolution_matching()) {
-      tsdf_pyramid_ = {dynamic_cast<const HybridGridTSDF*>(
-                           &matching_submap->high_resolution_hybrid_grid()),
-                       dynamic_cast<const HybridGridTSDF*>(
-                           &matching_submap->low_resolution_hybrid_grid())};
-    }
-    if (options_.optimizing_local_trajectory_builder_options()
-            .use_per_point_unwarping()) {
-      AddPerPointMatchingResiduals(problem);
-    } else {
-      AddPerScanMatchingResiduals(problem);
+    if (use_scan_matching_) {
+      if (options_.optimizing_local_trajectory_builder_options()
+              .use_multi_resolution_matching()) {
+        tsdf_pyramid_ = {dynamic_cast<const HybridGridTSDF*>(
+                             &matching_submap->high_resolution_hybrid_grid()),
+                         dynamic_cast<const HybridGridTSDF*>(
+                             &matching_submap->low_resolution_hybrid_grid())};
+      }
+      if (options_.optimizing_local_trajectory_builder_options()
+              .use_per_point_unwarping()) {
+        AddPerPointMatchingResiduals(problem);
+      } else {
+        AddPerScanMatchingResiduals(problem);
+      }
     }
     AddIMUResiduals(problem);
     AddOdometryResiduals(problem);
@@ -1520,9 +1528,12 @@ State OptimizingLocalTrajectoryBuilder::PredictState(
     return PredictStateOdom(start_state, start_time, end_time);
   }
 
+  CHECK(options_.optimizing_local_trajectory_builder_options()
+            .velocity_in_state())
+      << "IMU based state propagation requires velocity_in_state to be "
+         "enabled.";
   switch (
       options_.optimizing_local_trajectory_builder_options().imu_integrator()) {
-    CHECK(options_.optimizing_local_trajectory_builder_options().velocity_in_state())<<"IMU based state propagation requires velocity_in_state to be enabled.";
     case proto::IMUIntegrator::EULER:
       return PredictStateEuler(start_state, start_time, end_time);
     case proto::IMUIntegrator::RK4:
@@ -1649,6 +1660,10 @@ void OptimizingLocalTrajectoryBuilder::RegisterMetrics(
 void OptimizingLocalTrajectoryBuilder::SetMapUpdateEnabled(
     bool map_update_enabled) {
   map_update_enabled_ = map_update_enabled;
+}
+
+void OptimizingLocalTrajectoryBuilder::UseScanMatching(bool use_scan_matching) {
+  use_scan_matching_ = use_scan_matching;
 }
 
 void OptimizingLocalTrajectoryBuilder::PrintLoggingData() {

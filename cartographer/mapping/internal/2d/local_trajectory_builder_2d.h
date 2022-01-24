@@ -82,6 +82,10 @@ class LocalTrajectoryBuilder2D {
         << "LocalTrajectoryBuilder2D::SetMapUpdateEnabled is not implemented";
   };
 
+  void UseScanMatching(bool use_scan_matching) {
+    LOG(ERROR) << "UseScanMatching is not implemented";
+  };
+
  private:
   std::unique_ptr<MatchingResult> AddAccumulatedRangeData(
       common::Time time, const sensor::RangeData& gravity_aligned_range_data,

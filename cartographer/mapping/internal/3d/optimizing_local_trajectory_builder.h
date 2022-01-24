@@ -79,6 +79,7 @@ class OptimizingLocalTrajectoryBuilder {
   static void RegisterMetrics(metrics::FamilyFactory* family_factory);
 
   void SetMapUpdateEnabled(bool map_update_enabled);
+  void UseScanMatching(bool use_scan_matching);
 
   State PredictState(const State& start_state, common::Time start_time,
                      common::Time end_time);
@@ -100,15 +101,17 @@ class OptimizingLocalTrajectoryBuilder {
     sensor::TimedPointCloud low_resolution_filtered_points;
     sensor::TimedPointCloud original_cloud;
     size_t width;
+    float min_point_timestamp;
+    float max_point_timestamp;
 
     common::Time StartTime() {
       CHECK(!original_cloud.empty());
-      return time + common::FromSeconds(original_cloud.front().time);
+      return time + common::FromSeconds(min_point_timestamp);
     };
 
     common::Time EndTime() {
       CHECK(!original_cloud.empty());
-      return time + common::FromSeconds(original_cloud.back().time);
+      return time + common::FromSeconds(max_point_timestamp);
     };
   };
 
@@ -166,6 +169,7 @@ class OptimizingLocalTrajectoryBuilder {
   std::unique_ptr<ImuIntegrator> imu_integrator_;
   std::vector<const mapping::HybridGridTSDF*> tsdf_pyramid_;
   bool map_update_enabled_;
+  bool use_scan_matching_;
 
   //Logging
   unsigned int num_insertions;

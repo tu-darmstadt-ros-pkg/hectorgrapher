@@ -58,4 +58,6 @@ message OptimizingLocalTrajectoryBuilderOptions {
   double sampling_min_delta_time = 29;
   double sampling_max_delta_time = 30;
   bool velocity_in_state = 31;
+  double odometry_translation_normalization = 32;
+  double odometry_rotation_normalization = 33;
 }

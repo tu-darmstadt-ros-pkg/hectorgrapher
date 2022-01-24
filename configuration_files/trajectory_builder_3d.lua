@@ -129,15 +129,20 @@ TRAJECTORY_BUILDER_3D = {
       calibrate_imu = false,
       ct_window_horizon = 0.9,
       ct_window_rate = 0.1,
-      initialization_duration = 2.0,
       imu_integrator = "RK4",
       imu_cost_term = "PREINTEGRATION",
-      control_point_sampling = "CONSTANT",
       initialization_duration = 3.0,
       use_adaptive_odometry_weights = true,
       use_per_point_unwarping = false,
       use_multi_resolution_matching = false,
       num_points_per_subdivision = 4,
+      control_point_sampling = "CONSTANT",
+      sampling_max_delta_translation = 0.2;
+      sampling_max_delta_rotation = 0.1;
+      sampling_min_delta_time = 0.025;
+      sampling_max_delta_time = 0.25;
       velocity_in_state = true,
+      odometry_translation_normalization = 2.0e-2;
+      odometry_rotation_normalization = 1.0e-1;
   },
 }
