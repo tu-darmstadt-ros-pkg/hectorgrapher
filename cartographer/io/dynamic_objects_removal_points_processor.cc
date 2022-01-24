@@ -87,183 +87,176 @@ DynamicObjectsRemovalPointsProcessor::DynamicObjectsRemovalPointsProcessor(
 void DynamicObjectsRemovalPointsProcessor::Process(std::unique_ptr<PointsBatch> batch) {
   ++iteration_;
 
-  switch (run_state_) {
-    case RunState::kInitialRun: {
-      auto begin = std::chrono::high_resolution_clock::now();
+  if (run_state_ == RunState::kInitialRun) {
+    auto begin = std::chrono::high_resolution_clock::now();
 
-      robot_translation_ =
-          transform::Rigid3<float>(batch->sensor_to_map.translation(),
-                                   Eigen::Quaternion<float>::Identity()).inverse();
+    robot_translation_ =
+        transform::Rigid3<float>(batch->sensor_to_map.translation(),
+                                 Eigen::Quaternion<float>::Identity()).inverse();
 
-      // Create scan wedges
-      sensor::CustomPointCloud scan_map;
-      initialize_scan_map(scan_map, batch.get(), iteration_);
-      wedge_map_t scan_wedge_map =
-          create_wedge_map(sensor::TransformCustomPointCloud(scan_map,
+    // Create scan wedges
+    sensor::CustomPointCloud scan_map;
+    initialize_scan_map(scan_map, batch.get(), iteration_);
+    wedge_map_t scan_wedge_map =
+        create_wedge_map(sensor::TransformCustomPointCloud(scan_map,
+                                                           robot_translation_),
+                         true);
+
+    if (!map_.empty()) {
+      // Create global wedges
+      wedge_map_t global_wedge_map =
+          create_wedge_map(sensor::TransformCustomPointCloud(map_,
                                                              robot_translation_),
-                           true);
+                           false);
 
-      if (!map_.empty()) {
-        // Create global wedges
-        wedge_map_t global_wedge_map =
-            create_wedge_map(sensor::TransformCustomPointCloud(map_,
-                                                               robot_translation_),
-                             false);
+      // Dynamic objects detection
+      size_t total_number_removed_points = 0;
 
-        // Dynamic objects detection
-        size_t total_number_removed_points = 0;
+      // Detection of points of type 2 (delete map points in front of current
+      // detection points)
+      std::unordered_map<std::pair<uint16_t, uint16_t>,
+                         int,
+                         key_hash_pair,
+                         key_equal_pair>
+          scan_wedge_map_cardinalities;
 
-        // Detection of points of type 2 (delete map points in front of current
-        // detection points)
-        std::unordered_map<std::pair<uint16_t, uint16_t>,
-                           int,
-                           key_hash_pair,
-                           key_equal_pair>
-            scan_wedge_map_cardinalities;
+      for (uint16_t theta_iter = 0; theta_iter < theta_segments_;
+           ++theta_iter) {
+        for (uint16_t phi_iter = 0; phi_iter < phi_segments_; ++phi_iter) {
+          // Iterate over all scan wedges with same theta and phi but
+          // increasing distance r starting at 0 to determine wedge with
+          // greatest cardinality
+          std::pair<int, int> max_cardinality = std::make_pair(-1, -1);
 
-        for (uint16_t theta_iter = 0; theta_iter < theta_segments_;
-             ++theta_iter) {
-          for (uint16_t phi_iter = 0; phi_iter < phi_segments_; ++phi_iter) {
-            // Iterate over all scan wedges with same theta and phi but
-            // increasing distance r starting at 0 to determine wedge with
-            // greatest cardinality
-            std::pair<int, int> max_cardinality = std::make_pair(-1, -1);
+          for (uint16_t r_iter = 0; r_iter < scan_batch_max_range_;
+               ++r_iter) {
+            wedge_key_t
+                search_key = std::make_tuple(r_iter, theta_iter, phi_iter);
 
-            for (uint16_t r_iter = 0; r_iter < scan_batch_max_range_;
-                 ++r_iter) {
-              wedge_key_t
-                  search_key = std::make_tuple(r_iter, theta_iter, phi_iter);
-
-              auto search = scan_wedge_map.find(search_key);
-              if (search != scan_wedge_map.end()) {
-                // Wedge exists
-                // Cardinality check: find wedge with greatest cardinality
-                if (max_cardinality.first < 0 || max_cardinality.second < 0 ||
-                    1.2f * max_cardinality.second
-                        < static_cast<float>(search->second.wedge_points.size())) {
-                  max_cardinality = std::make_pair(r_iter,
-                                                   search->second.wedge_points.size());
-                }
-              }
-            }
-
-            scan_wedge_map_cardinalities[std::make_pair(theta_iter, phi_iter)] =
-                max_cardinality.first;
-
-            if (max_cardinality.first >= 0
-                && max_cardinality.first <= r_segments_
-                && max_cardinality.second >= 0) {
-              // Significant detection perceived. Check if dynamic object
-              uint16_t r_scan_detection = max_cardinality.first;
-
-              for (uint16_t r_to_lower = 0;
-                   r_to_lower < search_ray_threshold_ * r_scan_detection;
-                   ++r_to_lower) {
-                wedge_key_t key_to_lower =
-                    std::make_tuple(r_to_lower, theta_iter, phi_iter);
-
-                // We lower the probability of all points in this wedge
-                for (auto &p : global_wedge_map[key_to_lower].wedge_points) {
-                  p.probability -=
-                      static_cast<float>(probability_reduction_factor_);
-                }
+            auto search = scan_wedge_map.find(search_key);
+            if (search != scan_wedge_map.end()) {
+              // Wedge exists
+              // Cardinality check: find wedge with greatest cardinality
+              if (max_cardinality.first < 0 || max_cardinality.second < 0 ||
+                  1.2f * max_cardinality.second
+                      < static_cast<float>(search->second.wedge_points.size())) {
+                max_cardinality = std::make_pair(r_iter,
+                                                 search->second.wedge_points.size());
               }
             }
           }
-        }
 
-        //Detection of points of type 3 (delete map points with empty scan ray)
-        if (open_view_deletion_) {
-          for (auto &wedge : global_wedge_map) {
-            if (std::get<0>(wedge.first) > r_segments_) {
-              // Skip points that are too far away
-              // (outside maximal number of range segments)
-              continue;
-            }
+          scan_wedge_map_cardinalities[std::make_pair(theta_iter, phi_iter)] =
+              max_cardinality.first;
 
-            wedge_key_t this_key;
-            int scan_wedge_cardinality;
-            this_key = wedge.first;
-            scan_wedge_cardinality =
-                scan_wedge_map_cardinalities[std::make_pair(std::get<1>(this_key),
-                                                            std::get<2>(this_key))];
+          if (max_cardinality.first >= 0
+              && max_cardinality.first <= r_segments_
+              && max_cardinality.second >= 0) {
+            // Significant detection perceived. Check if dynamic object
+            uint16_t r_scan_detection = max_cardinality.first;
 
-            if (scan_wedge_cardinality == -1) {
-              // Scan wedge doesn't have any significant detections for this
-              // direction of theta & phi. Lower the probability of all points
-              // in this wedge
-              for (auto &p : wedge.second.wedge_points) {
+            for (uint16_t r_to_lower = 0;
+                 r_to_lower < search_ray_threshold_ * r_scan_detection;
+                 ++r_to_lower) {
+              wedge_key_t key_to_lower =
+                  std::make_tuple(r_to_lower, theta_iter, phi_iter);
+
+              // We lower the probability of all points in this wedge
+              for (auto &p : global_wedge_map[key_to_lower].wedge_points) {
                 p.probability -=
                     static_cast<float>(probability_reduction_factor_);
               }
             }
           }
         }
+      }
 
-        // Add those points to the global map from the global wedge map, which
-        // have a probability high enough. Apply backwards transformation since
-        // wedge map points are in the robot frame
-        map_.clear();
+      //Detection of points of type 3 (delete map points with empty scan ray)
+      if (open_view_deletion_) {
         for (auto &wedge : global_wedge_map) {
-          for (auto &p : wedge.second.wedge_points) {
-            if (p.probability
-                >= static_cast<float>(dynamic_object_probability_threshold_)) {
-              // Apply backwards transformation back to map frame
-              map_.push_back(robot_translation_.inverse() * p);
-            } else {
-              // Point was not taken over since its probability is too low.
-              // Will be removed from the map and batches
-              total_number_removed_points++;
+          if (std::get<0>(wedge.first) > r_segments_) {
+            // Skip points that are too far away
+            // (outside maximal number of range segments)
+            continue;
+          }
+
+          wedge_key_t this_key;
+          int scan_wedge_cardinality;
+          this_key = wedge.first;
+          scan_wedge_cardinality =
+              scan_wedge_map_cardinalities[std::make_pair(std::get<1>(this_key),
+                                                          std::get<2>(this_key))];
+
+          if (scan_wedge_cardinality == -1) {
+            // Scan wedge doesn't have any significant detections for this
+            // direction of theta & phi. Lower the probability of all points
+            // in this wedge
+            for (auto &p : wedge.second.wedge_points) {
+              p.probability -=
+                  static_cast<float>(probability_reduction_factor_);
             }
           }
         }
-        eval_total_points_ += total_number_removed_points;
-        LOG(INFO) << "Total number of removed points in iteration "
-                  << iteration_ << ": " << total_number_removed_points;
-        eval_number_deleted_points_.push_back(total_number_removed_points);
       }
 
-      // Add all points from the current scan to the full map. Apply backwards
-      // transformation since wedge map points are in the robot frame
-      for (auto &wedge : scan_wedge_map) {
-        for (auto &point : wedge.second.wedge_points) {
-          map_.push_back(robot_translation_.inverse() * point);
+      // Add those points to the global map from the global wedge map, which
+      // have a probability high enough. Apply backwards transformation since
+      // wedge map points are in the robot frame
+      map_.clear();
+      for (auto &wedge : global_wedge_map) {
+        for (auto &p : wedge.second.wedge_points) {
+          if (p.probability
+              >= static_cast<float>(dynamic_object_probability_threshold_)) {
+            // Apply backwards transformation back to map frame
+            map_.push_back(robot_translation_.inverse() * p);
+          } else {
+            // Point was not taken over since its probability is too low.
+            // Will be removed from the map and batches
+            total_number_removed_points++;
+          }
         }
       }
+      eval_total_points_ += total_number_removed_points;
+      eval_number_deleted_points_.push_back(total_number_removed_points);
+    }
 
-      // Add the current batch to the list of batches for later sending and
-      // clear fields that are saved in the map_
-      batch->points.clear();
-      batch->intensities.clear();
-      batch->colors.clear();
-      list_of_batches_.push_back(*batch);
-
-      LOG(INFO) << "Total Map points: " << map_.size();
-
-      auto end = std::chrono::high_resolution_clock::now();
-      eval_time_detailed_.push_back(std::chrono::duration_cast<std::chrono::milliseconds>(
-          end - begin));
-      if (show_extended_debug_information_) {
-        LOG(INFO) << "Time elapsed: "
-                  << std::chrono::duration_cast<std::chrono::milliseconds>(
-                      end - begin).count() << " ms";
+    // Add all points from the current scan to the full map. Apply backwards
+    // transformation since wedge map points are in the robot frame
+    for (auto &wedge : scan_wedge_map) {
+      for (auto &point : wedge.second.wedge_points) {
+        map_.push_back(robot_translation_.inverse() * point);
       }
-
-      eval_cumulated_number_of_points_.push_back(map_.size());
-
-      break;
     }
-    case RunState::kSecondRun: {
-      // At the second run, send the batches through the pipeline
-      auto this_batch = list_of_batches_[0];
-      next_->Process(std::make_unique<PointsBatch>(this_batch));
-      list_of_batches_.erase(list_of_batches_.begin());
+
+    // Add the current batch to the list of batches for later sending and
+    // clear fields that are saved in the map_
+    batch->points.clear();
+    batch->intensities.clear();
+    batch->colors.clear();
+    list_of_batches_.push_back(*batch);
+
+    auto end = std::chrono::high_resolution_clock::now();
+    eval_time_detailed_.push_back(std::chrono::duration_cast<std::chrono::milliseconds>(
+        end - begin));
+    if (show_extended_debug_information_) {
+      LOG(INFO) << "[DORPP - Iteration " << iteration_ << "]: "
+                << "Total n.o. points: " << map_.size()
+                << ", time elapsed: "
+                << std::chrono::duration_cast<std::chrono::milliseconds>(
+                    end - begin).count() << " ms";
     }
+
+    eval_cumulated_number_of_points_.push_back(map_.size());
+
+  }else {
+    // At the second run, send the batches through the pipeline
+    auto this_batch = list_of_batches_[iteration_-1];
+    next_->Process(std::make_unique<PointsBatch>(this_batch));
+//    list_of_batches_.erase(list_of_batches_.begin());
   }
 }
 
 PointsProcessor::FlushResult DynamicObjectsRemovalPointsProcessor::Flush() {
-  LOG(INFO) << "Flushing dynamic_object_removal_points_processor";
   if (run_state_ == RunState::kInitialRun) {
     flush_points_to_batch();
     run_state_ = RunState::kSecondRun;
@@ -272,9 +265,11 @@ PointsProcessor::FlushResult DynamicObjectsRemovalPointsProcessor::Flush() {
     eval_total_time_elapsed_ =
         std::chrono::duration_cast<std::chrono::milliseconds>(
             end - eval_total_time_begin_);
+    iteration_ = 0;
 
     return FlushResult::kRestartStream;
   } else {
+    iteration_ = 0;
     if (show_extended_debug_information_) {
       LOG(INFO) << "Total time: " << eval_total_time_elapsed_.count() << " ms";
       LOG(INFO) << "Total number removed points: " << eval_total_points_
