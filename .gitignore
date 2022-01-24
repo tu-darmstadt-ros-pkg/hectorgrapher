@@ -1,6 +1,5 @@
 build
 bazel-*
 .idea/
-
 cmake-*
 *.vscode
