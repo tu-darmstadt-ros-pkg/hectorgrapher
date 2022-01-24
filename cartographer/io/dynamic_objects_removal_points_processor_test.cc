@@ -1,8 +1,8 @@
 //
-// Created by ubuntu on 13.04.21.
+// Created by bhirschel on 13.04.21.
 //
 
-#include "cartographer/io/dynamic_object_removal_points_processor.h"
+#include "cartographer/io/dynamic_objects_removal_points_processor.h"
 
 #include <string>
 
@@ -67,7 +67,7 @@ CreatePipelineFromDictionary(
           common::LuaParameterDictionary* const dictionary,
           PointsProcessor* const next) -> std::unique_ptr<PointsProcessor> {
         return DynamicObjectsRemovalPointsProcessor::FromDictionary(
-            file_writer_factory, dictionary, next);
+            dictionary, next);
       });
 
   return builder->CreatePipeline(pipeline_dictionary);
@@ -85,11 +85,11 @@ std::unique_ptr<common::LuaParameterDictionary> CreateParameterDictionary() {
               theta_segments = 63,
               phi_segments = 127,
               sensor_range_limit = 5,
-              end_of_file = 445,
               probability_reduction_factor = 0.1,
               dynamic_object_probability_threshold = 1.0,
               search_ray_threshold = 0.9,
-              open_view_deletion = false
+              open_view_deletion = false,
+              show_extended_debug_information = true
             }
           }
           return pipeline
@@ -98,9 +98,9 @@ std::unique_ptr<common::LuaParameterDictionary> CreateParameterDictionary() {
   return parameter_dictionary;
 }
 
-class DynamicObjectRemovalPointsProcessorTest : public ::testing::Test {
+class DynamicObjectsRemovalPointsProcessorTest : public ::testing::Test {
  protected:
-  DynamicObjectRemovalPointsProcessorTest()
+  DynamicObjectsRemovalPointsProcessorTest()
       : pipeline_dictionary_(CreateParameterDictionary()) {}
 
   void Run(const std::string& expected_filename) {
@@ -138,12 +138,12 @@ class DynamicObjectRemovalPointsProcessorTest : public ::testing::Test {
   sensor::CustomPointCloud map_;
 };
 
-TEST_F(DynamicObjectRemovalPointsProcessorTest, NumberOfPointsCheck) {
+TEST_F(DynamicObjectsRemovalPointsProcessorTest, NumberOfPointsCheck) {
   Run("test_wedge.ply");
   EXPECT_EQ(map_.size(), 10);
 }
 
-TEST_F(DynamicObjectRemovalPointsProcessorTest, PointsValueCheck) {
+TEST_F(DynamicObjectsRemovalPointsProcessorTest, PointsValueCheck) {
   Run("test_wedge.ply");
   // Map to std vector
   std::vector<std::vector<float>> map_points_std, static_points_std;
