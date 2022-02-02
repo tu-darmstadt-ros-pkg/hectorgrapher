@@ -24,11 +24,9 @@
 #include "glog/logging.h"
 
 #ifdef WITH_PCL
-#include "pcl/features/normal_3d.h"
 #include "pcl/io/pcd_io.h"
 #include "pcl/point_cloud.h"
 #include "pcl/point_types.h"
-#include "pcl/search/kdtree.h"
 #endif
 
 #ifdef WITH_OPEN3D
@@ -402,7 +400,6 @@ void TSDFRangeDataInserter3D::Insert(const sensor::RangeData& range_data,
 
   const Eigen::Vector3f origin = range_data.origin.head<3>();
 
-  //  LOG(INFO) << "start normal computation";
   if (options_.project_sdf_distance_to_scan_normal()) {
     switch (options_.normal_computation_method()) {
       case proto::TSDFRangeDataInserterOptions3D::PCL: {
@@ -525,39 +522,107 @@ void TSDFRangeDataInserter3D::Insert(const sensor::RangeData& range_data,
           continue;
         }
         float r0 = (p0 - origin).norm();
-        if (r0 < options_.min_range()) {
+        if (r0 < options_.min_range() || r0 > options_.max_range()) {
           continue;
         }
 
-        if (r0 > options_.max_range()) {
-          continue;
-        }
-        size_t i1 = point_idx + vertical_stride >= range_data.width
-                        ? point_idx - vertical_stride
-                        : point_idx + vertical_stride;
-        size_t i2 = point_idx + horizontal_stride >= range_data.returns.size()
-                        ? point_idx - horizontal_stride
-                        : point_idx + horizontal_stride;
-        Eigen::Vector3f p1 = range_data.returns[i1].position;
-        Eigen::Vector3f p2 = range_data.returns[i2].position;
-        if (p1.hasNaN() || p2.hasNaN()) {
-          continue;
-        }
-        float r1 = (p1 - origin).norm();
-        float r2 = (p2 - origin).norm();
         float max_range_delta = 1.f * tsdf->resolution() / 0.05f;
-        if (std::abs(r0 - r1) > max_range_delta ||
-            std::abs(r0 - r2) > max_range_delta ||
-            std::abs(r1 - r2) > max_range_delta || (p0 - p1).isZero() ||
-            (p0 - p2).isZero()) {
+        // upper vertical
+        size_t offset = vertical_stride;
+        // Reduce until we found a suitable point or reached the center again
+        while (
+            offset > 0 &&
+            ((point_idx + offset >= range_data.returns.size()) ||
+             range_data.returns[point_idx + offset].position.hasNaN() ||
+             (std::abs(r0 - (range_data.returns[point_idx + offset].position -
+                             origin)
+                                .norm()) > max_range_delta))) {
+          --offset;
+        }
+        size_t i_vertical_upper = point_idx + offset;
+
+        // lower vertical
+        offset = vertical_stride;
+        while (
+            offset > 0 &&
+            ((point_idx - offset < 0) ||
+             range_data.returns[point_idx - offset].position.hasNaN() ||
+             (std::abs(r0 - (range_data.returns[point_idx - offset].position -
+                             origin)
+                                .norm()) > max_range_delta))) {
+          --offset;
+        }
+        size_t i_vertical_lower = point_idx - offset;
+
+        if (i_vertical_lower == i_vertical_upper) continue;
+
+        // upper horizontal
+        offset = horizontal_stride;
+        while (offset > 0 &&
+               (point_idx + offset >= range_data.returns.size() ||
+                range_data.returns[point_idx + offset].position.hasNaN() ||
+                std::abs(r0 - (range_data.returns[point_idx + offset].position -
+                               origin)
+                                  .norm()) > max_range_delta)) {
+          offset -= range_data.width;
+        }
+        size_t i_horizontal_upper = point_idx + offset;
+
+        // lower vertical
+        offset = horizontal_stride;
+        while (offset > 0 &&
+               (point_idx - offset < 0 ||
+                range_data.returns[point_idx - offset].position.hasNaN() ||
+                std::abs(r0 - (range_data.returns[point_idx - offset].position -
+                               origin)
+                                  .norm()) > max_range_delta)) {
+          offset -= range_data.width;
+        }
+        size_t i_horizontal_lower = point_idx - offset;
+
+        if (i_horizontal_lower == i_horizontal_upper) {
           continue;
         }
-        const Eigen::Vector3f normal = (p0 - p1).cross(p0 - p2).normalized();
-        if (normal.isZero()) {
+
+        Eigen::Vector3f p_horizontal_lower =
+            range_data.returns[i_horizontal_lower].position;
+        Eigen::Vector3f p_horizontal_upper =
+            range_data.returns[i_horizontal_upper].position;
+        Eigen::Vector3f p_vertical_lower =
+            range_data.returns[i_vertical_lower].position;
+        Eigen::Vector3f p_vertical_upper =
+            range_data.returns[i_vertical_upper].position;
+
+        if ((p_horizontal_lower - p_horizontal_upper).isZero() ||
+            (p_vertical_lower - p_vertical_upper).isZero()) {
           continue;
         }
+        const Eigen::Vector3f normal =
+            (p_horizontal_lower - p_horizontal_upper)
+                .cross(p_vertical_lower - p_vertical_upper)
+                .normalized();
+        if (normal.isZero()) continue;
+
         InsertHitWithNormal(p0, origin, normal, tsdf);
       }
+
+      //      pcl::PointCloud<pcl::PointXYZINormal>::Ptr pcl_cloud(
+      //          new pcl::PointCloud<pcl::PointXYZINormal>);
+      //      pcl_cloud->width = range_data.width;
+      //      pcl_cloud->height = range_data.returns.size() / range_data.width;
+      //      pcl_cloud->is_dense = false;
+      //      pcl_cloud->points.resize(pcl_cloud->width * pcl_cloud->height);
+      //      for (size_t point_idx = 0; point_idx < range_data.returns.size();
+      //           ++point_idx) {
+      //        pcl_cloud->at(point_idx).intensity = float(point_idx);
+      //      }
+      //      static int cloud_idx = 0;
+      //      ++cloud_idx;
+      //      if (cloud_idx == 18) {
+      //        pcl::io::savePCDFileASCII(
+      //            "test_pcd_normals" + std::to_string(cloud_idx) + ".pcd",
+      //            *pcl_cloud);
+      //      }
 
       //      LOG(INFO)<<"res "<<tsdf->resolution()<<" ratio
       //      "<<double(num_inserted_points)/double(num_inserted_points+
@@ -661,19 +726,14 @@ void TSDFRangeDataInserter3D::UpdateCell(const Eigen::Array3i& cell,
                                          float update_sdf, float update_weight,
                                          HybridGridTSDF* tsdf) const {
   if (update_weight == 0.f) return;
-
   const float old_weight = tsdf->GetWeight(cell);
   const float old_sdf = tsdf->GetTSD(cell);
   float updated_weight = old_weight + update_weight;
   float updated_sdf =
       (old_sdf * old_weight + update_sdf * update_weight) / updated_weight;
-  float maximum_weight = static_cast<float>(options_.maximum_weight());
-  updated_weight = std::min(updated_weight, maximum_weight);
+  updated_weight =
+      std::min(updated_weight, static_cast<float>(options_.maximum_weight()));
   tsdf->SetCell(cell, updated_sdf, updated_weight);
-  if (old_weight == tsdf->GetWeight(cell) &&
-      old_weight < 0.999 * maximum_weight) {
-    LOG(WARNING) << "Weight underflow " << update_weight;
-  }
 }
 
 }  // namespace mapping
