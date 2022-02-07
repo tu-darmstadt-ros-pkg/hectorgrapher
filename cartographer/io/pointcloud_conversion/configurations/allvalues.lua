@@ -1,6 +1,9 @@
 
 
 options = {
+    generateTSDF = true,        -- otherwise an occupancy grid is generated
+    outputName = "myTSDF",
+
     generateCubicPointcloud = true,
     sidelengthCubicPointcloud = 0.1,
     distancePointsCubicPointcloud = 0.004,

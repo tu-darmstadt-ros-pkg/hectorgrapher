@@ -20,10 +20,13 @@
 // Classes for the ProtoBuffer
 #include "cartographer/io/internal/mapping_state_serialization.cc"
 #include "cartographer/io/proto_stream.h"
+#include "cartographer/io/proto_stream_deserializer.h"
 #include "cartographer/mapping/internal/3d/pose_graph_3d.h"
 #include "cartographer/mapping/proto/map_builder_options.pb.h"
 #include "cartographer/mapping/map_builder.h"
 #include "cartographer/mapping/internal/testing/test_helpers.h"
+#include "cartographer/mapping/internal/3d/scan_matching/rotational_scan_matcher.h"
+
 
 // Header file
 #include "cartographer/io/pointcloud_conversion/tsdf_drawer.h"
@@ -155,8 +158,155 @@ namespace cartographer {
                 return voxelGrid;
             }
 
+            /**
+             * Builds a predefined world to test the generation of the grids in a simple environment.
+             *
+             * The method builds a world consisting of two blocks, samples points from them and writes
+             * the point cloud in a file in the Downloads-folder.
+             * This method should be used entirely independent from the rest of the program.
+             */
+            static void buildTestWorldPointCloud() {
+                double resolution = 0.1;
+                std::vector<Eigen::Vector3d> pos = {{0.0, 0.0, 1.5},
+                                                    {2.0, 3.0, 0.5}};
+                std::vector<Eigen::Vector3d> size = {{5.0, 7.0, 3.0},
+                                                     {1.0, 1.0, 1.0}};
+                std::vector<bool> create_roof = {false, true};
+
+                std::vector<Eigen::Vector3d> listOfPoints;
+
+                std::vector<Eigen::Vector3d> mins;
+                std::vector<Eigen::Vector3d> maxs;
+
+                for (int i = 0; i < (int)pos.size(); i++) {
+                    mins.emplace_back(Eigen::Vector3d(-size[i] / 2.0 + pos[i]));
+                    maxs.emplace_back(Eigen::Vector3d(size[i] / 2.0 + pos[i]));
+                }
+
+                for (int i = 0; i < (int)pos.size(); i++) {
+                    for (int ix = 0; ix < size[i].x() / resolution + 1e-5; ix++) {
+                        for (int iy = 0; iy < size[i].y() / resolution + 1e-5; iy++) {
+                            listOfPoints.emplace_back(
+                                    Eigen::Vector3d(mins[i].x() + resolution * ix, mins[i].y() + iy * resolution,
+                                                    mins[i].z()));
+                            if (create_roof[i])
+                                listOfPoints.emplace_back(
+                                        Eigen::Vector3d(mins[i].x() + ix * resolution, mins[i].y() + iy * resolution,
+                                                        maxs[i].z()));
+                        }
+                    }
+
+                    for (int ix = 0; ix < size[i].x() / resolution + 1e-5; ix++) {
+                        for (int iz = 0; iz < size[i].z() / resolution + 1e-5; iz++) {
+                            listOfPoints.emplace_back(Eigen::Vector3d(mins[i].x() + resolution * ix, mins[i].y(),
+                                                                      mins[i].z() + iz * resolution));
+                            listOfPoints.emplace_back(Eigen::Vector3d(mins[i].x() + resolution * ix, maxs[i].y(),
+                                                                      mins[i].z() + iz * resolution));
+                        }
+                    }
+
+                    for (int iz = 0; iz < size[i].z() / resolution + 1e-5; iz++) {
+                        for (int iy = 0; iy < size[i].y() / resolution + 1e-5; iy++) {
+                            listOfPoints.emplace_back(Eigen::Vector3d(mins[i].x(), mins[i].y() + iy * resolution,
+                                                                      mins[i].z() + iz * resolution));
+                            listOfPoints.emplace_back(Eigen::Vector3d(maxs[i].x(), mins[i].y() + iy * resolution,
+                                                                      mins[i].z() + iz * resolution));
+                        }
+                    }
+                }
+
+                open3d::geometry::PointCloud myPointCloud(listOfPoints);
+                open3d::io::WritePointCloudOption options;
+                open3d::io::WritePointCloudToPLY(path_to_home
+                                                 + "/Downloads/test_world.ply", myPointCloud, options);
+            }
+
+            /**
+             * Creates a posegraph object and writes it out as protocol buffer.
+             *
+             * The method creates a posegraph-object and fills it with the submap. It then chooses fitting parameters
+             * or dummy values to convert the posegraph to a file ending with .pbstream.
+             *
+             * @param submap pointer to a submap3d-object containing the created grid.
+             * @param filename name of the file to be created.
+             */
+            static void writeSubmapOut(cartographer::mapping::Submap3D *submap, const std::string &filename) {
+                submap->set_insertion_finished(true);
+
+                // --- Build a pose graph for the submap (use the values from map_builder.lua!) ---
+                const std::string code_pbstream = R"text(
+                    include "map_builder.lua"
+                    MAP_BUILDER.use_trajectory_builder_3d = true
+                    return MAP_BUILDER)text";
+
+                // Copied from map_builder_test.cc in SetUp()
+                auto file_resolver_pbstream =
+                        absl::make_unique<::cartographer::common::ConfigurationFileResolver>(
+                                std::vector<std::string>{
+                                        std::string(::cartographer::common::kSourceDirectory) +
+                                        "/configuration_files"});
+                std::unique_ptr<common::LuaParameterDictionary> dict_pbstream =
+                        std::make_unique<common::LuaParameterDictionary>(code_pbstream,
+                                                                         std::move(file_resolver_pbstream));
+
+                proto::MapBuilderOptions map_builder_options_ = CreateMapBuilderOptions(dict_pbstream.get());
+                cartographer::common::ThreadPool my_thread_pool(map_builder_options_.num_background_threads());
+
+                // Copied from map_builder.cc, line 106
+                cartographer::mapping::PoseGraph3D posegraph(
+                        map_builder_options_.pose_graph_options(),
+                        absl::make_unique<optimization::OptimizationProblem3D>(
+                                map_builder_options_.pose_graph_options().optimization_problem_options()),
+                        &my_thread_pool
+                );
+
+                proto::Submap proto = submap->ToProto(true);
+                for (Eigen::VectorXf::Index i = 0; i != submap->rotational_scan_matcher_histogram().size(); ++i) {
+                    proto.mutable_submap_3d()->add_rotational_scan_matcher_histogram(
+                            submap->rotational_scan_matcher_histogram()[i]);
+                }
+
+//                std::cout << "Size of histogram before proto: " << my_submap.rotational_scan_matcher_histogram().size()
+//                          << std::endl;
+//                std::cout << "Size of histogram after proto: "
+//                          << proto.submap_3d().rotational_scan_matcher_histogram().size() << std::endl;
+
+                // --- Put the submap in the pose graph ---
+                const cartographer::transform::Rigid3<double> my_transform(
+                        Eigen::Vector3d(0., 0., 0.),
+                        Eigen::Quaterniond(0., 0., 0., 1.));
+
+                posegraph.AddSubmapFromProto(my_transform, proto);
+
+//                const cartographer::mapping::Submap3D *new_submap;
+//                new_submap = dynamic_cast<const Submap3D *>(posegraph.GetAllSubmapData().begin()->data.submap.get());
+//                std::cout << "Size of histogram in posegraph: "
+//                          << new_submap->rotational_scan_matcher_histogram().size() << std::endl;
+
+                // --- Write the pose graph as protoBuffer ---
+                proto::TrajectoryBuilderOptionsWithSensorIds my_traj_builder_options;
+                std::vector<proto::TrajectoryBuilderOptionsWithSensorIds> trajectory_builder_options;
+                trajectory_builder_options.push_back(my_traj_builder_options);
+
+                cartographer::io::ProtoStreamWriter writer(filename);
+                cartographer::io::WritePbStream(posegraph, trajectory_builder_options, &writer, true);
+                writer.Close();
+
+//                io::ProtoStreamReader stream(
+//                        path_to_home + "/hector/src/cartographer/cartographer/io/pointcloud_conversion/" +
+//                        "ProtoBuffers/OccupancyProtoBufferTest.pbstream");
+//                io::ProtoStreamDeserializer deserializer(&stream);
+//                io::SerializedData serialized_data;
+//                while (deserializer.ReadNextSerializedData(&serialized_data)) {
+//                    std::cout << "Added submap from proto with rot_histo-size "
+//                              << serialized_data.submap().submap_3d().rotational_scan_matcher_histogram().size()
+//                              << std::endl;
+//                }
+            }
+
 
         public:
+
             TSDFBuilder(const std::string &config_directory, const std::string &config_filename) {
                 auto file_resolver =
                         absl::make_unique<cartographer::common::ConfigurationFileResolver>(
@@ -169,7 +319,18 @@ namespace cartographer {
 
             void run() {
 
+//                buildTestWorldPointCloud();
+//                return;
+
                 cartographer::mapping::TSDFDrawer myTSDFDrawer;
+
+                std::unique_ptr<GridInterface> myHighResHybridGridTSDF;
+                std::unique_ptr<GridInterface> myLowResHybridGridTSDF;
+                std::unique_ptr<HybridGrid> myHighResHybridGrid;
+                std::unique_ptr<HybridGrid> myLowResHybridGrid;
+
+                std::shared_ptr<open3d::geometry::VoxelGrid> grid_highRes;
+                std::shared_ptr<open3d::geometry::VoxelGrid> grid_lowRes;
 
                 std::shared_ptr<open3d::geometry::PointCloud> myPointCloudPointer =
                         std::make_shared<open3d::geometry::PointCloud>();
@@ -221,22 +382,22 @@ namespace cartographer {
                               << std::endl;
                 }
 
+                if (luaParameterDictionary->GetBool("generateTSDF")) {
+                    myPointCloudPointer->EstimateNormals();
+                    std::cout << "Estimated all normals for the point cloud." << std::endl;
 
-                myPointCloudPointer->EstimateNormals();
-                std::cout << "Estimated all normals for the point cloud." << std::endl;
-
-                myPointCloudPointer->OrientNormalsConsistentTangentPlane(
-                        luaParameterDictionary->GetInt("normalOrientationNearestNeighbours"));
-                std::cout << "Oriented all normals by using the tangent plane." << std::endl;
+                    myPointCloudPointer->OrientNormalsConsistentTangentPlane(
+                            luaParameterDictionary->GetInt("normalOrientationNearestNeighbours"));
+                    std::cout << "Oriented all normals by using the tangent plane." << std::endl;
+                }
 
 
-                // Draw all points of the filtered point cloud
+                // Draw all points of the filtered point cloud + their normals
 //                open3d::visualization::DrawGeometries({myPointCloudPointer});
 
 
 // #################################################################################################################
                 // Show the VoxelGrid of the loaded point cloud
-
 
                 // Apply colors to the points
                 Eigen::Vector3d maxValues = myPointCloudPointer->GetMaxBound();
@@ -268,161 +429,182 @@ namespace cartographer {
 // #################################################################################################################
                 // Build a HybridGridTSDF = cartographer's representation of a TSDF
 
+                if (luaParameterDictionary->GetBool("generateTSDF")) {
 
-                float relativeHighResTruncationDistance =
-                        (float) luaParameterDictionary->GetDouble("relativeHighResTruncationDistance");
-                float relativeLowResTruncationDistance =
-                        (float) luaParameterDictionary->GetDouble("relativeLowResTruncationDistance");
-                float maxWeight = 100.0;
-                float absoluteHighResTruncationDistance =
-                        relativeHighResTruncationDistance * gridVoxelSideLength_highRes;
-                float absoluteLowResTruncationDistance = relativeLowResTruncationDistance * gridVoxelSideLength_lowRes;
+                    float relativeHighResTruncationDistance =
+                            (float) luaParameterDictionary->GetDouble("relativeHighResTruncationDistance");
+                    float relativeLowResTruncationDistance =
+                            (float) luaParameterDictionary->GetDouble("relativeLowResTruncationDistance");
+                    float maxWeight = 100.0;
+                    float absoluteHighResTruncationDistance =
+                            relativeHighResTruncationDistance * gridVoxelSideLength_highRes;
+                    float absoluteLowResTruncationDistance =
+                            relativeLowResTruncationDistance * gridVoxelSideLength_lowRes;
 
-                cartographer::mapping::ValueConversionTables myValueConversionTable;
+                    cartographer::mapping::ValueConversionTables myValueConversionTable;
 
-                std::unique_ptr<GridInterface> myHighResHybridGridTSDF = absl::make_unique<HybridGridTSDF>(
-                        gridVoxelSideLength_highRes, relativeHighResTruncationDistance, maxWeight,
-                        &myValueConversionTable);
+                    myHighResHybridGridTSDF = absl::make_unique<HybridGridTSDF>(
+                            gridVoxelSideLength_highRes, relativeHighResTruncationDistance, maxWeight,
+                            &myValueConversionTable);
 
-                std::unique_ptr<GridInterface> myLowResHybridGridTSDF = absl::make_unique<HybridGridTSDF>(
-                        gridVoxelSideLength_lowRes, relativeLowResTruncationDistance, maxWeight,
-                        &myValueConversionTable);
+                    myLowResHybridGridTSDF = absl::make_unique<HybridGridTSDF>(
+                            gridVoxelSideLength_lowRes, relativeLowResTruncationDistance, maxWeight,
+                            &myValueConversionTable);
 
-                // Build the TSDF by raytracing every point/normal pair from the point cloud
-                for (long unsigned int i = 0; i < myPointCloudPointer->points_.size(); i++) {
-                    raycastPointWithNormal(
-                            myPointCloudPointer->points_.at(i).cast<float>(),
-                            myPointCloudPointer->normals_.at(i).cast<float>(),
-                            absoluteHighResTruncationDistance,
-                            dynamic_cast<HybridGridTSDF *>(myHighResHybridGridTSDF.get()));
+                    // Build the TSDF by raytracing every point/normal pair from the point cloud
+                    for (long unsigned int i = 0; i < myPointCloudPointer->points_.size(); i++) {
+                        raycastPointWithNormal(
+                                myPointCloudPointer->points_.at(i).cast<float>(),
+                                myPointCloudPointer->normals_.at(i).cast<float>(),
+                                absoluteHighResTruncationDistance,
+                                dynamic_cast<HybridGridTSDF *>(myHighResHybridGridTSDF.get()));
 
-                    raycastPointWithNormal(
-                            myPointCloudPointer->points_.at(i).cast<float>(),
-                            myPointCloudPointer->normals_.at(i).cast<float>(),
-                            absoluteLowResTruncationDistance,
-                            dynamic_cast<HybridGridTSDF *>(myLowResHybridGridTSDF.get()));
+                        raycastPointWithNormal(
+                                myPointCloudPointer->points_.at(i).cast<float>(),
+                                myPointCloudPointer->normals_.at(i).cast<float>(),
+                                absoluteLowResTruncationDistance,
+                                dynamic_cast<HybridGridTSDF *>(myLowResHybridGridTSDF.get()));
+                    }
+
+
+                    grid_highRes = convertHybridGridToVoxelGrid(
+                            dynamic_cast<HybridGridTSDF *>(myHighResHybridGridTSDF.get()), gridVoxelSideLength_highRes,
+                            absoluteHighResTruncationDistance);
+
+                    grid_lowRes = convertHybridGridToVoxelGrid(
+                            dynamic_cast<HybridGridTSDF *>(myLowResHybridGridTSDF.get()), gridVoxelSideLength_lowRes,
+                            absoluteLowResTruncationDistance);
                 }
 
 
-                // std::cout << "Press the left/right keys to slice through the voxel grid!" << std::endl;
-                // std::cout << "Press the key >o< to change the slicing orientation." << std::endl;
+// #################################################################################################################
+                    // Build a HybridGrid = cartographer's representation of an occupancy grid
+                else {
 
-                // Show the VoxelGrid of the TSDF
-                std::shared_ptr<open3d::geometry::VoxelGrid> tsdfVoxelGridPointer_highRes = convertHybridGridToVoxelGrid(
-                        dynamic_cast<HybridGridTSDF *>(myHighResHybridGridTSDF.get()), gridVoxelSideLength_highRes,
-                        absoluteHighResTruncationDistance);
-                myTSDFDrawer.drawTSDF(tsdfVoxelGridPointer_highRes);
 
-                std::shared_ptr<open3d::geometry::VoxelGrid> tsdfVoxelGridPointer_lowRes = convertHybridGridToVoxelGrid(
-                        dynamic_cast<HybridGridTSDF *>(myLowResHybridGridTSDF.get()), gridVoxelSideLength_lowRes,
-                        absoluteLowResTruncationDistance);
-                myTSDFDrawer.drawTSDF(tsdfVoxelGridPointer_lowRes);
+                    cartographer::mapping::ValueConversionTables myValueConversionTable;
+
+                    myHighResHybridGrid = absl::make_unique<HybridGrid>(
+                            gridVoxelSideLength_highRes, &myValueConversionTable);
+                    myLowResHybridGrid = absl::make_unique<HybridGrid>(
+                            gridVoxelSideLength_lowRes, &myValueConversionTable);
+
+                    for (const auto &nextPoint: myPointCloudPointer->points_) {
+                        Eigen::Array3i update_cell_index = myHighResHybridGrid->GetCellIndex(nextPoint.cast<float>());
+                        myHighResHybridGrid->SetProbability(update_cell_index, 1.0);
+
+                        update_cell_index = myLowResHybridGrid->GetCellIndex(nextPoint.cast<float>());
+                        myLowResHybridGrid->SetProbability(update_cell_index, 1.0);
+                    }
+
+                    grid_highRes = std::make_shared<open3d::geometry::VoxelGrid>(open3d::geometry::VoxelGrid());
+                    grid_highRes->voxel_size_ = gridVoxelSideLength_highRes;
+                    for (auto nextVoxel: *myHighResHybridGrid) {
+                        Eigen::Vector3i cellIndex = nextVoxel.first;
+                        Eigen::Vector3d color = {0.0, 0.0, myLowResHybridGrid->GetProbability(cellIndex)};
+
+                        open3d::geometry::Voxel newVoxel = open3d::geometry::Voxel(cellIndex, color);
+                        grid_highRes->AddVoxel(newVoxel);
+                    }
+
+                    grid_lowRes = std::make_shared<open3d::geometry::VoxelGrid>(open3d::geometry::VoxelGrid());
+                    grid_lowRes->voxel_size_ = gridVoxelSideLength_lowRes;
+                    for (auto nextVoxel: *myLowResHybridGrid) {
+                        Eigen::Vector3i cellIndex = nextVoxel.first;
+                        Eigen::Vector3d color = {0.0, 0.0, myLowResHybridGrid->GetProbability(cellIndex)};
+
+                        open3d::geometry::Voxel newVoxel = open3d::geometry::Voxel(cellIndex, color);
+                        grid_lowRes->AddVoxel(newVoxel);
+                    }
+                }
 
 
 // #################################################################################################################
-                // Save some slices as png
-//                std::string imgfilename;
-//                imgfilename = path_to_home +
-//                              "/hector/src/cartographer/cartographer/io/pointcloud_conversion/images/"
-//                              + config_filename + "_img_x.png";
-//                myTSDFDrawer.saveSliceAsPNG(0, 0, imgfilename.c_str(), tsdfVoxelGridPointer_highRes);
-//
-//                imgfilename = path_to_home +
-//                              "/hector/src/cartographer/cartographer/io/pointcloud_conversion/images/"
-//                              + config_filename + "_img_y.png";
-//                myTSDFDrawer.saveSliceAsPNG(0, 1, imgfilename.c_str(), tsdfVoxelGridPointer_highRes);
-//
-//                for (int i = 0; i < 6; i++) {
-//                    imgfilename = path_to_home +
-//                                  "/hector/src/cartographer/cartographer/io/pointcloud_conversion/images/"
-//                                  + config_filename + "_img_z" + std::to_string(i) + ".png";
-//
-//                    myTSDFDrawer.saveSliceAsPNG(luaParameterDictionary->GetInt("imageSliceIndex") + 3 * i, 2,
-//                                                imgfilename.c_str(),
-//                                                tsdfVoxelGridPointer_highRes);
-//                }
+                // Draw and show the images of the TSDF or Occupancy Grid
+                // std::cout << "Press the left/right keys to slice through the voxel grid!" << std::endl;
+                // std::cout << "Press the key >o< to change the slicing orientation." << std::endl;
+//                myTSDFDrawer.drawTSDF(grid_highRes);
+//                myTSDFDrawer.drawTSDF(grid_lowRes);
 
+// #################################################################################################################
+                // Save some slices as png (uses the high resolution grid!)
 
+                if (luaParameterDictionary->GetBool("saveSlicesAsPNG")) {
+                    std::string imgfilename;
+                    imgfilename = path_to_home +
+                                  "/hector/src/cartographer/cartographer/io/pointcloud_conversion/images/"
+                                  + "slice_img_x.png";
+                    myTSDFDrawer.saveSliceAsPNG(0, 0, imgfilename.c_str(), grid_highRes);
+
+                    imgfilename = path_to_home +
+                                  "/hector/src/cartographer/cartographer/io/pointcloud_conversion/images/"
+                                  + "slice_img_y.png";
+                    myTSDFDrawer.saveSliceAsPNG(0, 1, imgfilename.c_str(), grid_highRes);
+
+                    for (int i = 0; i < 6; i++) {
+                        imgfilename = path_to_home +
+                                      "/hector/src/cartographer/cartographer/io/pointcloud_conversion/images/"
+                                      + "slice_img_z" + std::to_string(i) + ".png";
+
+                        myTSDFDrawer.saveSliceAsPNG(luaParameterDictionary->GetInt("imageSliceIndex") + 3 * i, 2,
+                                                    imgfilename.c_str(),
+                                                    grid_highRes);
+                    }
+                }
 
 
 // #################################################################################################################
                 // Build a ProtoBuffer
 
-                // --- Build a submap for the TSDF ---
-                const cartographer::transform::Rigid3<double> my_transform;
-                const Eigen::VectorXf rot_sm_histo(1);
+                // --- Build a submap for the grid with dummy values ---
+                const cartographer::transform::Rigid3<double> my_transform(
+                        Eigen::Vector3d(0., 0., 0.),
+                        Eigen::Quaterniond(0., 0., 0., 1.));
+
+                int histogram_size = 120;
+//                Eigen::VectorXf rot_sm_histo(histogram_size);
+//                for(int i=0; i<rot_sm_histo.size(); i++) {
+//                    rot_sm_histo[i] = (float)histogram_size;
+//                }
+
+                sensor::PointCloud sensor_pointcloud;
+                for (auto point: myPointCloudPointer->points_) {
+                    sensor_pointcloud.push_back(
+                            {Eigen::Vector3f((float) point.x(), (float) point.y(), (float) point.z())});
+                }
+                Eigen::VectorXf rot_sm_histo =
+                        scan_matching::RotationalScanMatcher::ComputeHistogram(sensor_pointcloud, histogram_size);
+
                 cartographer::mapping::ValueConversionTables my_vct;
                 const cartographer::common::Time my_time = cartographer::common::FromUniversal(100);
 
-
-                cartographer::mapping::Submap3D my_submap(
-                        my_transform,
-                        std::unique_ptr<GridInterface>(static_cast<GridInterface *>(myLowResHybridGridTSDF.release())),
-                        std::unique_ptr<GridInterface>(static_cast<GridInterface *>(myHighResHybridGridTSDF.release())),
-                        rot_sm_histo, &my_vct, my_time);
-
-                my_submap.set_insertion_finished(true);
-
-                // --- Build a pose graph for the submap (use the values from map_builder.lua!) ---
-                const std::string code_pbstream = R"text(
-                    include "map_builder.lua"
-                    MAP_BUILDER.use_trajectory_builder_3d = true
-                    return MAP_BUILDER)text";
-
-                // Copied from map_builder_test.cc in SetUp()
-                auto file_resolver_pbstream =
-                        absl::make_unique<::cartographer::common::ConfigurationFileResolver>(
-                                std::vector<std::string>{
-                                        std::string(::cartographer::common::kSourceDirectory) +
-                                        "/configuration_files"});
-                std::unique_ptr<common::LuaParameterDictionary> dict_pbstream =
-                        std::make_unique<common::LuaParameterDictionary>(code_pbstream,
-                                                                         std::move(file_resolver_pbstream));
-
-                proto::MapBuilderOptions map_builder_options_ = CreateMapBuilderOptions(dict_pbstream.get());
-                cartographer::common::ThreadPool my_thread_pool(map_builder_options_.num_background_threads());
-
-                // Copied from map_builder.cc, line 106
-                cartographer::mapping::PoseGraph3D posegraph(
-                        map_builder_options_.pose_graph_options(),
-                        absl::make_unique<optimization::OptimizationProblem3D>(
-                                map_builder_options_.pose_graph_options().optimization_problem_options()),
-                        &my_thread_pool
-                );
-                // --- Put the submap in the pose graph ---
-                posegraph.AddSubmapFromProto(my_transform, my_submap.ToProto(true));
-
-                for (const auto &submap_id_pose: posegraph.GetAllSubmapPoses()) {
-                    std::cout << "The start_time for the submap is " << submap_id_pose.data.start_time << std::endl;
-                    std::cout << "The version of the submap is " << submap_id_pose.data.version << std::endl;
+                if (luaParameterDictionary->GetBool("generateTSDF")) {
+                    cartographer::mapping::Submap3D my_submap(
+                            my_transform,
+                            std::unique_ptr<GridInterface>(
+                                    static_cast<GridInterface *>(myLowResHybridGridTSDF.release())),
+                            std::unique_ptr<GridInterface>(
+                                    static_cast<GridInterface *>(myHighResHybridGridTSDF.release())),
+                            rot_sm_histo, &my_vct, my_time);
+                    writeSubmapOut(&my_submap, path_to_home +
+                                               "/hector/src/cartographer/cartographer/io/pointcloud_conversion/ProtoBuffers/" +
+                                               luaParameterDictionary->GetString("outputName") + ".pbstream");
+                } else {
+                    cartographer::mapping::Submap3D my_submap(
+                            my_transform,
+                            std::unique_ptr<GridInterface>(static_cast<GridInterface *>(myLowResHybridGrid.release())),
+                            std::unique_ptr<GridInterface>(static_cast<GridInterface *>(myHighResHybridGrid.release())),
+                            rot_sm_histo, &my_vct, my_time);
+                    writeSubmapOut(&my_submap, path_to_home +
+                                               "/hector/src/cartographer/cartographer/io/pointcloud_conversion/ProtoBuffers/" +
+                                               luaParameterDictionary->GetString("outputName") + ".pbstream");
                 }
-
-
-                // --- Write the pose graph as protoBuffer ---
-                proto::TrajectoryBuilderOptionsWithSensorIds my_traj_builder_options;
-                std::vector<proto::TrajectoryBuilderOptionsWithSensorIds> trajectory_builder_options;
-                trajectory_builder_options.push_back(my_traj_builder_options);
-
-                cartographer::io::ProtoStreamWriter writer(
-                        path_to_home +
-                        "/hector/src/cartographer/cartographer/io/pointcloud_conversion/" +
-                        "ProtoBuffers/TSDFProtoBufferTest.pbstream");
-
-                cartographer::io::WritePbStream(posegraph, trajectory_builder_options, &writer, false);
-                writer.Close();
-
-                // --- Run some tests to make sure we did everything correctly ---
-                CHECK_EQ(
-                        cartographer::io::SerializePoseGraph(posegraph, false).pose_graph().trajectory_size(),
-                        cartographer::io::SerializeTrajectoryBuilderOptions(
-                                trajectory_builder_options,
-                                cartographer::io::GetValidTrajectoryIds(posegraph.GetTrajectoryStates())
-                        ).all_trajectory_builder_options().options_with_sensor_ids_size());
             }
         };
     }  // namespace mapping
 }   // namespace cartographer
 #endif
+
 
 int main(int argc, char **argv) {
     google::InitGoogleLogging(argv[0]);

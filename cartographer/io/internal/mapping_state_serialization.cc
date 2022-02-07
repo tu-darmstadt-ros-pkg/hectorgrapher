@@ -19,6 +19,8 @@
 #include "cartographer/mapping/proto/serialization.pb.h"
 #include "cartographer/transform/transform.h"
 
+#include "cartographer/mapping/3d/submap_3d.h"
+
 namespace cartographer {
 namespace io {
 namespace {
@@ -96,6 +98,15 @@ void SerializeSubmaps(
         submap_id_data.id.trajectory_id);
     submap_proto->mutable_submap_id()->set_submap_index(
         submap_id_data.id.submap_index);
+
+      const mapping::Submap3D* submap_before_proto;
+      submap_before_proto = dynamic_cast<const mapping::Submap3D*>(submap_id_data.data.submap.get());
+      for (Eigen::VectorXf::Index i = 0; i != submap_before_proto->rotational_scan_matcher_histogram().size(); ++i) {
+          submap_proto->mutable_submap_3d()->add_rotational_scan_matcher_histogram(
+                  submap_before_proto->rotational_scan_matcher_histogram()[i]);
+      }
+      std::cout << "Size of histogram after serialization of posegraph: " << proto.submap().submap_3d().rotational_scan_matcher_histogram().size() << std::endl;
+
     writer->WriteProto(proto);
   }
 }

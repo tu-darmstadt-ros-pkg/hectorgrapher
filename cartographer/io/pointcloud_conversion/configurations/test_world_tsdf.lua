@@ -1,27 +1,27 @@
 
 
 options = {
-    generateTSDF = true,        -- otherwise an occupancy grid is generated
-    outputName = "DRZHalleTSDF",
+    generateTSDF = true,
+    outputName = "TestWorldTSDF",
 
     generateCubicPointcloud = false,
 
-    pointcloudPath = "/Downloads/Halle-DRZ-Modell-innen-Flug1-2020-12-09.ply",
+    pointcloudPath = "/Downloads/test_world.ply",
 
     uniformDownSample = true,
-    sampleRateUniformDownSample = 100,
+    sampleRateUniformDownSample = 4,
 
-    voxelDownSample = true,
+    voxelDownSample = false,
     voxelSizeVoxelDownSample = 0.1,
 
-    removeRadiusOutliers = true,
+    removeRadiusOutliers = false,
     sphereSizeRadiusOutliers = 0.3,
     neighborsInSphereRadiusOutlier = 2,
 
     cutRoofZAxis = false,
     cutoffSize = 3.0,
 
-    normalOrientationNearestNeighbours = 100,
+    normalOrientationNearestNeighbours = 10,
 
     absoluteHighResVoxelSize = 0.1,
     absoluteLowResVoxelSize = 0.4,
@@ -30,11 +30,6 @@ options = {
 
     saveSlicesAsPNG = false,
     imageSliceIndex = -55,
-
-
-
-
-
 
 }
 
