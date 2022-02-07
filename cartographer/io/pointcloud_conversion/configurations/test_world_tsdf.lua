@@ -8,7 +8,7 @@ options = {
 
     pointcloudPath = "/Downloads/test_world.ply",
 
-    uniformDownSample = true,
+    uniformDownSample = false,
     sampleRateUniformDownSample = 4,
 
     voxelDownSample = false,

@@ -2,6 +2,9 @@
 #include <fstream>
 #include <string>
 
+#include <random>
+//#include <algorithm>
+
 #include "gflags/gflags.h"
 #include "glog/logging.h"
 
@@ -215,10 +218,13 @@ namespace cartographer {
                     }
                 }
 
+                std::random_device rd;
+                std::default_random_engine rng(rd());
+                std::shuffle(listOfPoints.begin(), listOfPoints.end(), rng);
+
                 open3d::geometry::PointCloud myPointCloud(listOfPoints);
                 open3d::io::WritePointCloudOption options;
-                open3d::io::WritePointCloudToPLY(path_to_home
-                                                 + "/Downloads/test_world.ply", myPointCloud, options);
+                open3d::io::WritePointCloudToPLY(path_to_home + "/Downloads/test_world.ply", myPointCloud, options);
             }
 
             /**
