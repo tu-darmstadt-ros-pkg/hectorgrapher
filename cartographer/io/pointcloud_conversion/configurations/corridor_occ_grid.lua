@@ -2,11 +2,11 @@
 
 options = {
     generateTSDF = false,
-    outputName = "TestWorldOccupancyGrid",
+    outputName = "CorridorOccupancyGrid",
 
     generateCubicPointcloud = false,
 
-    pointcloudPath = "/Downloads/test_world.ply",
+    pointcloudPath = "/Downloads/corridor_world.ply",
 
     uniformDownSample = false,
     sampleRateUniformDownSample = 100,

@@ -171,10 +171,18 @@ namespace cartographer {
             static void buildTestWorldPointCloud() {
                 double resolution = 0.1;
                 std::vector<Eigen::Vector3d> pos = {{0.0, 0.0, 1.5},
-                                                    {2.0, 3.0, 0.5}};
-                std::vector<Eigen::Vector3d> size = {{5.0, 7.0, 3.0},
+                                                    {2.0, 3.0, 0.5},
+                                                    {2.0, 23.0, 0.5},
+                                                    {-1.5, 10.0, 1.0},
+                                                    {-2.0, -7.0, 0.5},
+                                                    {2.0, -23.0, 0.5}};
+                std::vector<Eigen::Vector3d> size = {{5.0, 47.0, 3.0},
+                                                     {1.0, 1.0, 1.0},
+                                                     {1.0, 1.0, 1.0},
+                                                     {2.0, 2.0, 2.0},
+                                                     {1.0, 1.0, 1.0},
                                                      {1.0, 1.0, 1.0}};
-                std::vector<bool> create_roof = {false, true};
+                std::vector<bool> create_roof = {false, true, true, true, true, true};
 
                 std::vector<Eigen::Vector3d> listOfPoints;
 
@@ -224,7 +232,7 @@ namespace cartographer {
 
                 open3d::geometry::PointCloud myPointCloud(listOfPoints);
                 open3d::io::WritePointCloudOption options;
-                open3d::io::WritePointCloudToPLY(path_to_home + "/Downloads/test_world.ply", myPointCloud, options);
+                open3d::io::WritePointCloudToPLY(path_to_home + "/Downloads/corridor_world.ply", myPointCloud, options);
             }
 
             /**
