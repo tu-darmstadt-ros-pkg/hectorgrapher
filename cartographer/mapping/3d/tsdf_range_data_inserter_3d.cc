@@ -571,7 +571,7 @@ void TSDFRangeDataInserter3D::Insert(const sensor::RangeData& range_data,
         // lower vertical
         offset = horizontal_stride;
         while (offset > 0 &&
-               (point_idx - offset < 0 ||
+               (point_idx < offset ||
                 range_data.returns[point_idx - offset].position.hasNaN() ||
                 std::abs(r0 - (range_data.returns[point_idx - offset].position -
                                origin)
