@@ -29,7 +29,7 @@ options = {
     saveSlicesAsPNG = false,
     imageSliceIndex = -55,
 
-    numberOfSubmaps = 10,
+    numberOfSubmaps = 1,
 
 
 

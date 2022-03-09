@@ -148,48 +148,35 @@ namespace cartographer {
             }
 
             /**
-             * Splits the given Occupancy Grid in subgrids.
-             *
-             * The method uses the dimensions of the given hybridGrid to find the most reasonable division.
-             * The grid is approximated with a cuboid and divided into subgrids in the shape of cuboids.
-             * The subgrids are NOT ordered like an array, but instead along a path through the grid.
-             * |__0__|__5__|__6__|
-             * |__1__|__4__|__7__|
-             * |__2__|__3__|__8__|
-             *
-             * @param numberOfSubmaps how many submaps should be created from the full grid.
-             * @param hybridGrid pointer to the HybridGrid that should be divided. Will not be edited in this method.
-             * @param hybridGridSubgrids a map with already existing, empty HybridGrids for every key from 0 - numberOfSubmaps.
-             */
-            static void divideOccupancyGridIntoSubgrids(int numberOfSubmaps,
-                                                        cartographer::mapping::HybridGrid *hybridGrid,
-                                                        std::map<int, std::unique_ptr<HybridGrid>> *hybridGridSubgrids) {
-                Eigen::Vector3i maxIndex = hybridGrid->begin().GetCellIndex();
-                Eigen::Vector3i minIndex = hybridGrid->begin().GetCellIndex();
-                for (auto nextVoxel: *hybridGrid) {
-                    maxIndex = maxIndex.array().max(nextVoxel.first);
-                    minIndex = minIndex.array().min(nextVoxel.first);
-                }
-                Eigen::Vector3i gridSize = maxIndex - minIndex;
-
+            * Finds a good division for the original grid.
+            *
+            * The method uses the given dimensions of a hybridGrid to find the most reasonable division.
+            * The division should be as close to a cube as possible, while also consisting of a maximal number of subgrids.
+            *
+            * @param numberOfSubmaps how many submaps should be created from the full grid.
+            * @param gridSize the size of the original HybridGrid
+            * @return the fragmentation dimension
+            */
+            static Eigen::Vector3i getFragmentationForHybridGrid(int numberOfSubmaps, Eigen::Vector3i gridSize) {
                 Eigen::Vector3i fragmentSize = Eigen::Vector3i::Zero();
+
                 if (gridSize.x() > gridSize.y()) {
                     double relation = (double) gridSize.x() / gridSize.y();
                     fragmentSize.x() = (int) ((relation + 1) / 2 + std::sqrt(
                             std::pow((relation + 1) / 2, 2) - (1 - numberOfSubmaps) * relation));
                     fragmentSize.y() = numberOfSubmaps / (fragmentSize.x() - 1) + 1;
-                    if(fragmentSize.y() < 2) {
+                    if (fragmentSize.y() < 2) {
                         fragmentSize.y() = 2;
-                        fragmentSize.x() = numberOfSubmaps+1;
+                        fragmentSize.x() = numberOfSubmaps + 1;
                     }
                 } else {
                     double relation = (double) gridSize.y() / gridSize.x();
                     fragmentSize.y() = (int) ((relation + 1) / 2 + std::sqrt(
                             std::pow((relation + 1) / 2, 2) - (1 - numberOfSubmaps) * relation));
                     fragmentSize.x() = numberOfSubmaps / (fragmentSize.y() - 1) + 1;
-                    if(fragmentSize.x() < 2) {
+                    if (fragmentSize.x() < 2) {
                         fragmentSize.x() = 2;
-                        fragmentSize.y() = numberOfSubmaps+1;
+                        fragmentSize.y() = numberOfSubmaps + 1;
                     }
                 }
                 fragmentSize.z() = 2;
@@ -199,34 +186,52 @@ namespace cartographer {
                 std::cout << "we created fragments in the shape " << fragmentSize.x() << " x " << fragmentSize.y()
                           << " x " << fragmentSize.z() << "." << std::endl;
 
-                Eigen::Matrix<int, 3, 8> variations;
-                variations << Eigen::Matrix<int, 3, 4>::Identity(), Eigen::Matrix<int, 3, 4>::Ones() -
-                                                                    Eigen::Matrix<int, 3, 4>::Identity();
+                return fragmentSize;
+            }
 
-                for (auto nextVoxel: *hybridGrid) {
-                    Eigen::Vector3i fragment = (nextVoxel.first - minIndex.array()) * fragmentSize.array();
-                    fragment = fragment.array() / (gridSize + Eigen::Vector3i::Ones()).array();
+            /**
+            * Calculates the index of the subgrid for a given voxel.
+            *
+            * The grid is expected to be approximated with a cuboid and divided into subgrids in the shape of cuboids.
+            * The subgrids are NOT ordered like an array, but instead along a path through the grid.
+            * |__0__|__5__|__6__|
+            * |__1__|__4__|__7__|
+            * |__2__|__3__|__8__|
+            *
+            * @param voxel the index of the voxel to be inserted in a subgrid.
+            * @param gridSize the size of the original HybridGrid
+            * @param fragmentSize the dimensions of the division of the original grid into smaller fragments.
+            * @param variations Matrix containing 8 vectors who count from 000 to 111
+            * @return a list of submap indices for the given voxel
+            */
+            static std::vector<int> getSubmapIndicesForVoxel(Eigen::Vector3i voxel,
+                                                             const Eigen::Vector3i &gridSize,
+                                                             Eigen::Vector3i fragmentSize,
+                                                             Eigen::Matrix<int, 3, 8> variations) {
+                Eigen::Vector3i fragment = voxel.array() * fragmentSize.array();
+                fragment = fragment.array() / (gridSize + Eigen::Vector3i::Ones()).array();
 
-                    std::vector<Eigen::Vector3i> blocks;
-                    for(int i=0; i<8; i++) {
-                        Eigen::Vector3i block = fragment - variations.col(i);
-                        if(block.minCoeff() < 0 || (block - fragmentSize + Eigen::Vector3i::Ones()).maxCoeff() >= 0)
-                            continue;
-                        blocks.push_back(block);
-                    }
-
-                    Eigen::Vector3i submapSize =
-                            Eigen::Vector3i::Zero().cwiseMax(fragmentSize - Eigen::Vector3i::Ones());
-                    for(auto block : blocks) {
-                        int submapIndex = block.z() * (submapSize.x() * submapSize.y());
-                        submapIndex += ((submapSize.y() - 1) * (block.z() % 2) +
-                                        block.y() * (int) pow(-1, block.z() % 2)) * submapSize.x();
-                        submapIndex += (submapSize.x() - 1) * ((block.y() % 2) ^ (block.z() % 2)) +
-                                       block.x() * (int) pow(-1, (block.y() % 2) ^ (block.z() % 2));
-
-                        hybridGridSubgrids->at(submapIndex)->SetProbability(nextVoxel.first, 1.0);
-                    }
+                std::vector<Eigen::Vector3i> blocks;
+                for (int i = 0; i < 8; i++) {
+                    Eigen::Vector3i block = fragment - variations.col(i);
+                    if (block.minCoeff() < 0 || (block - fragmentSize + Eigen::Vector3i::Ones()).maxCoeff() >= 0)
+                        continue;
+                    blocks.push_back(block);
                 }
+
+                std::vector<int> submapIndices;
+                Eigen::Vector3i submapSize =
+                        Eigen::Vector3i::Zero().cwiseMax(fragmentSize - Eigen::Vector3i::Ones());
+                for (auto block: blocks) {
+                    int submapIndex = block.z() * (submapSize.x() * submapSize.y());
+                    submapIndex += ((submapSize.y() - 1) * (block.z() % 2) +
+                                    block.y() * (int) pow(-1, block.z() % 2)) * submapSize.x();
+                    submapIndex += (submapSize.x() - 1) * ((block.y() % 2) ^ (block.z() % 2)) +
+                                   block.x() * (int) pow(-1, (block.y() % 2) ^ (block.z() % 2));
+
+                    submapIndices.push_back(submapIndex);
+                }
+                return submapIndices;
             }
 
             /**
@@ -429,6 +434,47 @@ namespace cartographer {
 
 
 
+
+// #################################################################################################################
+                // Decide on a fragmentation of the whole map
+
+                cartographer::mapping::ValueConversionTables myValueConversionTable;
+
+                int numberOfSubmaps = luaParameterDictionary->GetInt("numberOfSubmaps");
+                for (int i = 0; i < numberOfSubmaps; i++) {
+                    myHighResHybridGridSubmaps.insert(std::make_pair(i, absl::make_unique<HybridGrid>(
+                            gridVoxelSideLength_highRes, &myValueConversionTable)));
+                    myLowResHybridGridSubmaps.insert(std::make_pair(i, absl::make_unique<HybridGrid>(
+                            gridVoxelSideLength_lowRes, &myValueConversionTable)));
+                }
+
+                // High Resolution
+                Eigen::Vector3i minIndexHybridGrid_highRes =
+                        (myPointCloudPointer->GetMinBound() /
+                         gridVoxelSideLength_highRes).array().ceil().cast<int>();
+                Eigen::Vector3i maxIndexHybridGrid_highRes =
+                        (myPointCloudPointer->GetMaxBound() /
+                         gridVoxelSideLength_highRes).array().ceil().cast<int>();
+                Eigen::Vector3i gridSizeHybridGrid_highRes =
+                        maxIndexHybridGrid_highRes - minIndexHybridGrid_highRes;
+
+                // Low Resolution
+                Eigen::Vector3i minIndexHybridGrid_lowRes =
+                        (myPointCloudPointer->GetMinBound() /
+                         gridVoxelSideLength_lowRes).array().ceil().cast<int>();
+                Eigen::Vector3i maxIndexHybridGrid_lowRes =
+                        (myPointCloudPointer->GetMaxBound() /
+                         gridVoxelSideLength_lowRes).array().ceil().cast<int>();
+                Eigen::Vector3i gridSizeHybridGrid_lowRes = maxIndexHybridGrid_lowRes - minIndexHybridGrid_lowRes;
+
+                // Fragmentation is the same for low and high resolution
+                Eigen::Vector3i fragmentation = getFragmentationForHybridGrid(numberOfSubmaps,
+                                                                              gridSizeHybridGrid_highRes);
+
+                Eigen::Matrix<int, 3, 8> variations;
+                variations << Eigen::Matrix<int, 3, 4>::Identity(), Eigen::Matrix<int, 3, 4>::Ones() -
+                                                                    Eigen::Matrix<int, 3, 4>::Identity();
+
 // #################################################################################################################
                 // Build a HybridGridTSDF = cartographer's representation of a TSDF
 
@@ -443,8 +489,6 @@ namespace cartographer {
                             relativeHighResTruncationDistance * gridVoxelSideLength_highRes;
                     float absoluteLowResTruncationDistance =
                             relativeLowResTruncationDistance * gridVoxelSideLength_lowRes;
-
-                    cartographer::mapping::ValueConversionTables myValueConversionTable;
 
                     myHighResHybridGridTSDF = absl::make_unique<HybridGridTSDF>(
                             gridVoxelSideLength_highRes, relativeHighResTruncationDistance, maxWeight,
@@ -484,8 +528,6 @@ namespace cartographer {
                     // Build a HybridGrid = cartographer's representation of an occupancy grid
                 else {
 
-                    cartographer::mapping::ValueConversionTables myValueConversionTable;
-
                     myHighResHybridGrid = absl::make_unique<HybridGrid>(
                             gridVoxelSideLength_highRes, &myValueConversionTable);
                     myLowResHybridGrid = absl::make_unique<HybridGrid>(
@@ -499,25 +541,28 @@ namespace cartographer {
                         myLowResHybridGrid->SetProbability(update_cell_index, 1.0);
                     }
 
-                    int numberOfSubmaps = luaParameterDictionary->GetInt("numberOfSubmaps");
-
-                    for (int i = 0; i < numberOfSubmaps; i++) {
-                        myHighResHybridGridSubmaps.insert(std::make_pair(i, absl::make_unique<HybridGrid>(
-                                gridVoxelSideLength_highRes, &myValueConversionTable)));
-                        myLowResHybridGridSubmaps.insert(std::make_pair(i, absl::make_unique<HybridGrid>(
-                                gridVoxelSideLength_lowRes, &myValueConversionTable)));
+                    for (auto nextVoxel: *myHighResHybridGrid) {
+                        std::vector<int> submapIndices =
+                                getSubmapIndicesForVoxel(nextVoxel.first - minIndexHybridGrid_highRes.array(),
+                                                         gridSizeHybridGrid_highRes, fragmentation, variations);
+                        for (int index: submapIndices) {
+                            myHighResHybridGridSubmaps.at(index)->SetProbability(nextVoxel.first, 1.0);
+                        }
                     }
-                    divideOccupancyGridIntoSubgrids(numberOfSubmaps,
-                                                    dynamic_cast<HybridGrid *>(myHighResHybridGrid.get()),
-                                                    &myHighResHybridGridSubmaps);
-                    divideOccupancyGridIntoSubgrids(numberOfSubmaps,
-                                                    dynamic_cast<HybridGrid *>(myLowResHybridGrid.get()),
-                                                    &myLowResHybridGridSubmaps);
+                    for (auto nextVoxel: *myLowResHybridGrid) {
+                        std::vector<int> submapIndices =
+                                getSubmapIndicesForVoxel(nextVoxel.first - minIndexHybridGrid_lowRes.array(),
+                                                         gridSizeHybridGrid_lowRes, fragmentation, variations);
+                        for (int index: submapIndices) {
+                            myLowResHybridGridSubmaps.at(index)->SetProbability(nextVoxel.first, 1.0);
+                        }
+                    }
 
-//                    for(int i=0; i<numberOfSubmaps; i++) {
+//                    for (int i = 0; i < numberOfSubmaps; i++) {
 //                        std::cout << "Subgrid " << i << std::endl;
 //                        std::shared_ptr<open3d::geometry::VoxelGrid> subgrid = convertOccupancyGridToVoxelGrid(
-//                                dynamic_cast<HybridGrid *>(myHighResHybridGridSubmaps.at(i).get()), gridVoxelSideLength_highRes);
+//                                dynamic_cast<HybridGrid *>(myHighResHybridGridSubmaps.at(i).get()),
+//                                gridVoxelSideLength_highRes);
 //                        myTSDFDrawer.drawTSDF(subgrid);
 //                    }
 
@@ -532,8 +577,8 @@ namespace cartographer {
                 // Draw and show the images of the TSDF or Occupancy Grid
                 // std::cout << "Press the left/right keys to slice through the voxel grid!" << std::endl;
                 // std::cout << "Press the key >o< to change the slicing orientation." << std::endl;
-                myTSDFDrawer.drawTSDF(grid_highRes);
-                myTSDFDrawer.drawTSDF(grid_lowRes);
+//                myTSDFDrawer.drawTSDF(grid_highRes);
+//                myTSDFDrawer.drawTSDF(grid_lowRes);
 
 // #################################################################################################################
                 // Save some slices as png (uses the high resolution grid!)
@@ -579,10 +624,36 @@ namespace cartographer {
                 Eigen::VectorXf rot_sm_histo =
                         scan_matching::RotationalScanMatcher::ComputeHistogram(sensor_pointcloud, histogram_size);
 
-//                for(int i=0; i<rot_sm_histo.size(); i++) {
-//                    std::cout << rot_sm_histo[i] << ", ";
+                ////
+                std::vector<sensor::PointCloud> sub_pointclouds;
+                for (int i = 0; i < numberOfSubmaps; i++) {
+                    sub_pointclouds.emplace_back();
+                }
+
+                for (const auto &point: myPointCloudPointer->points_) {
+                    Eigen::Vector3i gridVoxel =
+                            myHighResHybridGrid->GetCellIndex(point.cast<float>()) - minIndexHybridGrid_highRes.array();
+                    std::vector<int> submapIndices = getSubmapIndicesForVoxel(gridVoxel, gridSizeHybridGrid_highRes,
+                                                                              fragmentation, variations);
+                    for (int i: submapIndices) {
+                        sub_pointclouds.at(i).push_back(
+                                {Eigen::Vector3f((float) point.x(), (float) point.y(), (float) point.z())});
+                    }
+                }
+
+                std::vector<Eigen::VectorXf> histograms;
+                for (const auto &subcloud: sub_pointclouds) {
+                    histograms.push_back(
+                            scan_matching::RotationalScanMatcher::ComputeHistogram(subcloud, histogram_size));
+                }
+
+//                for (const auto &histo: histograms) {
+//                    for (int i = 0; i < histo.size(); i++) {
+//                        std::cout << histo[i] << ", ";
+//                    }
+//                    std::cout << std::endl;
 //                }
-//                std::cout << std::endl;
+
 
                 cartographer::mapping::ValueConversionTables my_vct;
                 const cartographer::common::Time my_time = cartographer::common::FromUniversal(100);
