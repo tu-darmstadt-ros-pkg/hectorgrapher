@@ -1,15 +1,15 @@
 
 
 options = {
-    generateTSDF = false,
-    outputName = "TestWorldOccupancyGrid",
+    generateTSDF = true,
+    outputName = "drzWorldTSDF",
 
     generateCubicPointcloud = false,
 
-    pointcloudPath = "/Downloads/test_world.ply",
+    pointcloudPath = "/Downloads/drz_world.ply",
 
     uniformDownSample = false,
-    sampleRateUniformDownSample = 100,
+    sampleRateUniformDownSample = 4,
 
     voxelDownSample = false,
     voxelSizeVoxelDownSample = 0.1,
@@ -21,6 +21,8 @@ options = {
     cutRoofZAxis = false,
     cutoffSize = 3.0,
 
+    normalOrientationNearestNeighbours = 10,
+
     absoluteHighResVoxelSize = 0.1,
     absoluteLowResVoxelSize = 0.4,
     relativeHighResTruncationDistance = 2.5,
@@ -28,15 +30,6 @@ options = {
 
     saveSlicesAsPNG = false,
     imageSliceIndex = -55,
-
-    numberOfSubmaps = 9,
-
-
-
-
-
-
-
 
 }
 

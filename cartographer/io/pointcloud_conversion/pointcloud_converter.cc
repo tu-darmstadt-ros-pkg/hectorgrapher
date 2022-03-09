@@ -2,14 +2,10 @@
 #include <fstream>
 #include <string>
 
-#include <random>
-//#include <algorithm>
-
 #include "gflags/gflags.h"
 #include "glog/logging.h"
 
 // Classes to generate a cubic point cloud
-#include "cartographer/evaluation/scan_cloud_generator.h"
 #include "Eigen/Core"
 
 // Classes to generate a TSDF
@@ -33,6 +29,7 @@
 
 // Header file
 #include "cartographer/io/pointcloud_conversion/tsdf_drawer.h"
+#include "cartographer/io/pointcloud_conversion/pointcloud_creator.h"
 
 
 #ifdef WITH_OPEN3D
@@ -52,39 +49,6 @@ namespace cartographer {
         class TSDFBuilder {
 
             cartographer::common::LuaParameterDictionary *luaParameterDictionary;
-
-            /**
-             * Generate a point cloud in shape of a cube and convert it into a shared pointer of an open3d point cloud.
-             *
-             * The generation of the points is done by the method "generateCube"
-             * by the class cartographer::evaluation::ScanCloudGenerator.
-             *
-             * Most of the method covers the convertion of the cartographer's representation of a point cloud
-             * to the data format of open3d.
-             *
-             * @return open3d's representation of a point cloud in shape of a cube.
-             */
-            static std::shared_ptr<open3d::geometry::PointCloud> generateCubicPointCloud(
-                    float cubeSideLength, float distanceBetweenPoints, float noise = 0.0) {
-                // Initialize an empty Point Cloud in the data format of cartographer
-                cartographer::sensor::PointCloud cartographer_cloud;
-
-                // Fill the Point Cloud with points (shape of a cube)
-                cartographer::evaluation::ScanCloudGenerator myScanCloudGenerator(distanceBetweenPoints);
-                myScanCloudGenerator.generateCube(cartographer_cloud, cubeSideLength, noise);
-
-                // Convert the Point Cloud to a Vector of 3D-Eigen-Points.
-                // This data format is more universal than the cartographer Point Cloud
-                std::vector<Eigen::Vector3d> listOfPoints;
-                for (cartographer::sensor::RangefinderPoint point: cartographer_cloud) {
-                    listOfPoints.emplace_back(
-                            Eigen::Vector3d{point.position.x(), point.position.y(), point.position.z()});
-                }
-
-                // Construct a Point Cloud in the data format of Open3D and fill it with the known points.
-                open3d::geometry::PointCloud myPointCloud(listOfPoints);
-                return std::make_shared<open3d::geometry::PointCloud>(myPointCloud);
-            }
 
             static void raycastPointWithNormal(const Eigen::Vector3f &hit,
                                                const Eigen::Vector3f &normal,
@@ -137,7 +101,7 @@ namespace cartographer {
              * @param voxelSideLength edge length of the voxels of HybridGridTSDF.
              * @return a shared pointer to a VoxelGrid with origin (0,0,0).
              */
-            static std::shared_ptr<open3d::geometry::VoxelGrid> convertHybridGridToVoxelGrid(
+            static std::shared_ptr<open3d::geometry::VoxelGrid> convertTSDFToVoxelGrid(
                     cartographer::mapping::HybridGridTSDF *hybridGrid, float voxelSideLength, float maxTSD) {
 
                 std::shared_ptr<open3d::geometry::VoxelGrid> voxelGrid =
@@ -153,8 +117,6 @@ namespace cartographer {
                     } else {
                         color = {hybridGrid->GetTSD(cellIndex) / -maxTSD, 0.0, 0.0};
                     }
-
-//                    std::cout << cellIndex.x() << " " << cellIndex.y() << " " << cellIndex.z() << std::endl;
                     open3d::geometry::Voxel newVoxel = open3d::geometry::Voxel(cellIndex, color);
                     voxelGrid->AddVoxel(newVoxel);
                 }
@@ -162,77 +124,83 @@ namespace cartographer {
             }
 
             /**
-             * Builds a predefined world to test the generation of the grids in a simple environment.
+             * Prepare the drawing of cartographer's HybridGrid by converting it in open3d's VoxelGrid.
              *
-             * The method builds a world consisting of two blocks, samples points from them and writes
-             * the point cloud in a file in the Downloads-folder.
-             * This method should be used entirely independent from the rest of the program.
+             * The method colors the occupied voxels blue.
+             *
+             * @param hybridGrid pointer to a filled occupancy grid to be converted.
+             * @param voxelSideLength edge length of the voxels of HybridGrid.
+             * @return a shared pointer to a VoxelGrid with origin (0,0,0).
              */
-            static void buildTestWorldPointCloud() {
-                double resolution = 0.1;
-                std::vector<Eigen::Vector3d> pos = {{0.0, 0.0, 1.5},
-                                                    {2.0, 3.0, 0.5},
-                                                    {2.0, 23.0, 0.5},
-                                                    {-1.5, 10.0, 1.0},
-                                                    {-2.0, -7.0, 0.5},
-                                                    {2.0, -23.0, 0.5}};
-                std::vector<Eigen::Vector3d> size = {{5.0, 47.0, 3.0},
-                                                     {1.0, 1.0, 1.0},
-                                                     {1.0, 1.0, 1.0},
-                                                     {2.0, 2.0, 2.0},
-                                                     {1.0, 1.0, 1.0},
-                                                     {1.0, 1.0, 1.0}};
-                std::vector<bool> create_roof = {false, true, true, true, true, true};
+            static std::shared_ptr<open3d::geometry::VoxelGrid> convertOccupancyGridToVoxelGrid(
+                    cartographer::mapping::HybridGrid *hybridGrid, float voxelSideLength) {
+                std::shared_ptr<open3d::geometry::VoxelGrid> voxelGrid =
+                        std::make_shared<open3d::geometry::VoxelGrid>(open3d::geometry::VoxelGrid());
+                voxelGrid->voxel_size_ = voxelSideLength;
+                for (auto nextVoxel: *hybridGrid) {
+                    Eigen::Vector3i cellIndex = nextVoxel.first;
+                    Eigen::Vector3d color = {0.0, 0.0, hybridGrid->GetProbability(cellIndex)};
 
-                std::vector<Eigen::Vector3d> listOfPoints;
-
-                std::vector<Eigen::Vector3d> mins;
-                std::vector<Eigen::Vector3d> maxs;
-
-                for (int i = 0; i < (int)pos.size(); i++) {
-                    mins.emplace_back(Eigen::Vector3d(-size[i] / 2.0 + pos[i]));
-                    maxs.emplace_back(Eigen::Vector3d(size[i] / 2.0 + pos[i]));
+                    open3d::geometry::Voxel newVoxel = open3d::geometry::Voxel(cellIndex, color);
+                    voxelGrid->AddVoxel(newVoxel);
                 }
+                return voxelGrid;
+            }
 
-                for (int i = 0; i < (int)pos.size(); i++) {
-                    for (int ix = 0; ix < size[i].x() / resolution + 1e-5; ix++) {
-                        for (int iy = 0; iy < size[i].y() / resolution + 1e-5; iy++) {
-                            listOfPoints.emplace_back(
-                                    Eigen::Vector3d(mins[i].x() + resolution * ix, mins[i].y() + iy * resolution,
-                                                    mins[i].z()));
-                            if (create_roof[i])
-                                listOfPoints.emplace_back(
-                                        Eigen::Vector3d(mins[i].x() + ix * resolution, mins[i].y() + iy * resolution,
-                                                        maxs[i].z()));
-                        }
-                    }
-
-                    for (int ix = 0; ix < size[i].x() / resolution + 1e-5; ix++) {
-                        for (int iz = 0; iz < size[i].z() / resolution + 1e-5; iz++) {
-                            listOfPoints.emplace_back(Eigen::Vector3d(mins[i].x() + resolution * ix, mins[i].y(),
-                                                                      mins[i].z() + iz * resolution));
-                            listOfPoints.emplace_back(Eigen::Vector3d(mins[i].x() + resolution * ix, maxs[i].y(),
-                                                                      mins[i].z() + iz * resolution));
-                        }
-                    }
-
-                    for (int iz = 0; iz < size[i].z() / resolution + 1e-5; iz++) {
-                        for (int iy = 0; iy < size[i].y() / resolution + 1e-5; iy++) {
-                            listOfPoints.emplace_back(Eigen::Vector3d(mins[i].x(), mins[i].y() + iy * resolution,
-                                                                      mins[i].z() + iz * resolution));
-                            listOfPoints.emplace_back(Eigen::Vector3d(maxs[i].x(), mins[i].y() + iy * resolution,
-                                                                      mins[i].z() + iz * resolution));
-                        }
-                    }
+            /**
+             * Splits the given Occupancy Grid in subgrids.
+             *
+             * The method uses the dimensions of the given hybridGrid to find the most reasonable division.
+             * The grid is approximated with a cuboid and divided into subgrids in the shape of cuboids.
+             * The subgrids are NOT ordered like an array, but instead along a path through the grid.
+             * |__0__|__5__|__6__|
+             * |__1__|__4__|__7__|
+             * |__2__|__3__|__8__|
+             *
+             * @param numberOfSubmaps how many submaps should be created from the full grid.
+             * @param hybridGrid pointer to the HybridGrid that should be divided. Will not be edited in this method.
+             * @param hybridGridSubgrids a map with already existing, empty HybridGrids for every key from 0 - numberOfSubmaps.
+             */
+            static void divideOccupancyGridIntoSubgrids(int numberOfSubmaps,
+                                                        cartographer::mapping::HybridGrid *hybridGrid,
+                                                        std::map<int, std::unique_ptr<HybridGrid>> *hybridGridSubgrids) {
+                Eigen::Vector3i maxIndex = hybridGrid->begin().GetCellIndex();
+                Eigen::Vector3i minIndex = hybridGrid->begin().GetCellIndex();
+                for (auto nextVoxel: *hybridGrid) {
+                    maxIndex = maxIndex.array().max(nextVoxel.first);
+                    minIndex = minIndex.array().min(nextVoxel.first);
                 }
+                Eigen::Vector3i gridSize = maxIndex - minIndex;
 
-                std::random_device rd;
-                std::default_random_engine rng(rd());
-                std::shuffle(listOfPoints.begin(), listOfPoints.end(), rng);
+                Eigen::Vector3i submapBlocks = Eigen::Vector3i::Zero();
+                if (gridSize.x() > gridSize.y()) {
+                    double relation = (double) gridSize.x() / gridSize.y();
+                    submapBlocks.x() = (int)std::sqrt(relation * numberOfSubmaps);
+                    submapBlocks.y() = numberOfSubmaps / (int)std::sqrt(relation * numberOfSubmaps);
+                } else {
+                    double relation = (double) gridSize.y() / gridSize.x();
+                    submapBlocks.x() = numberOfSubmaps / (int)std::sqrt(relation * numberOfSubmaps);
+                    submapBlocks.y() = (int)std::sqrt(relation * numberOfSubmaps);
+                }
+                submapBlocks.z() = 1;
 
-                open3d::geometry::PointCloud myPointCloud(listOfPoints);
-                open3d::io::WritePointCloudOption options;
-                open3d::io::WritePointCloudToPLY(path_to_home + "/Downloads/corridor_world.ply", myPointCloud, options);
+                std::cout << "For " << numberOfSubmaps << " given submaps and a grid size of ";
+                std::cout << gridSize.x() << " x " << gridSize.y() << " x " << gridSize.z() << ", ";
+                std::cout << "we created submaps in the shape " << submapBlocks.x() << " x " << submapBlocks.y()
+                          << " x " << submapBlocks.z() << "." << std::endl;
+
+                for (auto nextVoxel: *hybridGrid) {
+                    Eigen::Vector3i block = (nextVoxel.first - minIndex.array()) * submapBlocks.array();
+                    block = block.array() / (gridSize + Eigen::Vector3i::Ones()).array();
+
+                    int submapIndex = block.z() * (submapBlocks.x() * submapBlocks.y());
+                    submapIndex += ((submapBlocks.y() - 1) * (block.z() % 2) +
+                                    block.y() * (int) pow(-1, block.z() % 2)) * submapBlocks.x();
+                    submapIndex += (submapBlocks.x() - 1) * ((block.y() % 2) ^ (block.z() % 2)) +
+                                   block.x() * (int) pow(-1, (block.y() % 2) ^ (block.z() % 2));
+
+                    hybridGridSubgrids->at(submapIndex)->SetProbability(nextVoxel.first, 1.0);
+                }
             }
 
             /**
@@ -333,15 +301,18 @@ namespace cartographer {
 
             void run() {
 
-//                buildTestWorldPointCloud();
+//                cartographer::mapping::buildTestWorldPointCloud(path_to_home);
 //                return;
 
                 cartographer::mapping::TSDFDrawer myTSDFDrawer;
 
                 std::unique_ptr<GridInterface> myHighResHybridGridTSDF;
                 std::unique_ptr<GridInterface> myLowResHybridGridTSDF;
+
                 std::unique_ptr<HybridGrid> myHighResHybridGrid;
+                std::map<int, std::unique_ptr<HybridGrid>> myHighResHybridGridSubmaps;
                 std::unique_ptr<HybridGrid> myLowResHybridGrid;
+                std::map<int, std::unique_ptr<HybridGrid>> myLowResHybridGridSubmaps;
 
                 std::shared_ptr<open3d::geometry::VoxelGrid> grid_highRes;
                 std::shared_ptr<open3d::geometry::VoxelGrid> grid_lowRes;
@@ -349,20 +320,12 @@ namespace cartographer {
                 std::shared_ptr<open3d::geometry::PointCloud> myPointCloudPointer =
                         std::make_shared<open3d::geometry::PointCloud>();
 
-                // Generate a cloud in shape of a cube. Don't show the input from the .ply-file.
-                if (luaParameterDictionary->GetBool("generateCubicPointcloud")) {
-                    myPointCloudPointer = generateCubicPointCloud(
-                            (float) luaParameterDictionary->GetDouble("sidelengthCubicPointcloud"),
-                            (float) luaParameterDictionary->GetDouble("distancePointsCubicPointcloud"),
-                            (float) luaParameterDictionary->GetDouble("noiseCubicPointcloud"));
-                } else {
-                    // Read and show the input from the .ply-file.
-                    std::string point_cloud_filename =
-                            path_to_home + luaParameterDictionary->GetString("pointcloudPath");
-                    open3d::io::ReadPointCloud(point_cloud_filename, *myPointCloudPointer, {"auto", true, true, true});
-                    std::cout << "Loaded point cloud with exactly " << myPointCloudPointer->points_.size() << " points."
-                              << std::endl;
-                }
+                // Read and show the input from the .ply-file.
+                std::string point_cloud_filename =
+                        path_to_home + luaParameterDictionary->GetString("pointcloudPath");
+                open3d::io::ReadPointCloud(point_cloud_filename, *myPointCloudPointer, {"auto", true, true, true});
+                std::cout << "Loaded point cloud with exactly " << myPointCloudPointer->points_.size() << " points."
+                          << std::endl;
 
                 if (luaParameterDictionary->GetBool("uniformDownSample")) {
                     int sampleRate = luaParameterDictionary->GetInt("sampleRateUniformDownSample");
@@ -436,7 +399,7 @@ namespace cartographer {
                         open3d::geometry::VoxelGrid::CreateFromPointCloud(*myPointCloudPointer,
                                                                           gridVoxelSideLength_highRes);
 
-                //             myTSDFDrawer.drawTSDF(pclVoxelGridPointer);
+//                myTSDFDrawer.drawTSDF(pclVoxelGridPointer);
 
 
 
@@ -481,11 +444,11 @@ namespace cartographer {
                     }
 
 
-                    grid_highRes = convertHybridGridToVoxelGrid(
+                    grid_highRes = convertTSDFToVoxelGrid(
                             dynamic_cast<HybridGridTSDF *>(myHighResHybridGridTSDF.get()), gridVoxelSideLength_highRes,
                             absoluteHighResTruncationDistance);
 
-                    grid_lowRes = convertHybridGridToVoxelGrid(
+                    grid_lowRes = convertTSDFToVoxelGrid(
                             dynamic_cast<HybridGridTSDF *>(myLowResHybridGridTSDF.get()), gridVoxelSideLength_lowRes,
                             absoluteLowResTruncationDistance);
                 }
@@ -494,7 +457,6 @@ namespace cartographer {
 // #################################################################################################################
                     // Build a HybridGrid = cartographer's representation of an occupancy grid
                 else {
-
 
                     cartographer::mapping::ValueConversionTables myValueConversionTable;
 
@@ -511,25 +473,32 @@ namespace cartographer {
                         myLowResHybridGrid->SetProbability(update_cell_index, 1.0);
                     }
 
-                    grid_highRes = std::make_shared<open3d::geometry::VoxelGrid>(open3d::geometry::VoxelGrid());
-                    grid_highRes->voxel_size_ = gridVoxelSideLength_highRes;
-                    for (auto nextVoxel: *myHighResHybridGrid) {
-                        Eigen::Vector3i cellIndex = nextVoxel.first;
-                        Eigen::Vector3d color = {0.0, 0.0, myLowResHybridGrid->GetProbability(cellIndex)};
+                    int numberOfSubmaps = luaParameterDictionary->GetInt("numberOfSubmaps");
 
-                        open3d::geometry::Voxel newVoxel = open3d::geometry::Voxel(cellIndex, color);
-                        grid_highRes->AddVoxel(newVoxel);
+                    for (int i = 0; i < numberOfSubmaps; i++) {
+                        myHighResHybridGridSubmaps.insert(std::make_pair(i, absl::make_unique<HybridGrid>(
+                                gridVoxelSideLength_highRes, &myValueConversionTable)));
+                        myLowResHybridGridSubmaps.insert(std::make_pair(i, absl::make_unique<HybridGrid>(
+                                gridVoxelSideLength_lowRes, &myValueConversionTable)));
                     }
+                    divideOccupancyGridIntoSubgrids(numberOfSubmaps,
+                                                    dynamic_cast<HybridGrid *>(myHighResHybridGrid.get()),
+                                                    &myHighResHybridGridSubmaps);
+                    divideOccupancyGridIntoSubgrids(numberOfSubmaps,
+                                                    dynamic_cast<HybridGrid *>(myLowResHybridGrid.get()),
+                                                    &myLowResHybridGridSubmaps);
 
-                    grid_lowRes = std::make_shared<open3d::geometry::VoxelGrid>(open3d::geometry::VoxelGrid());
-                    grid_lowRes->voxel_size_ = gridVoxelSideLength_lowRes;
-                    for (auto nextVoxel: *myLowResHybridGrid) {
-                        Eigen::Vector3i cellIndex = nextVoxel.first;
-                        Eigen::Vector3d color = {0.0, 0.0, myLowResHybridGrid->GetProbability(cellIndex)};
+//                    for(int i=0; i<numberOfSubmaps; i++) {
+//                        std::cout << "Subgrid " << i << std::endl;
+//                        std::shared_ptr<open3d::geometry::VoxelGrid> subgrid = convertOccupancyGridToVoxelGrid(
+//                                dynamic_cast<HybridGrid *>(myHighResHybridGridSubmaps.at(i).get()), gridVoxelSideLength_highRes);
+//                        myTSDFDrawer.drawTSDF(subgrid);
+//                    }
 
-                        open3d::geometry::Voxel newVoxel = open3d::geometry::Voxel(cellIndex, color);
-                        grid_lowRes->AddVoxel(newVoxel);
-                    }
+                    grid_highRes = convertOccupancyGridToVoxelGrid(
+                            dynamic_cast<HybridGrid *>(myHighResHybridGrid.get()), gridVoxelSideLength_highRes);
+                    grid_lowRes = convertOccupancyGridToVoxelGrid(
+                            dynamic_cast<HybridGrid *>(myLowResHybridGrid.get()), gridVoxelSideLength_lowRes);
                 }
 
 
@@ -537,8 +506,8 @@ namespace cartographer {
                 // Draw and show the images of the TSDF or Occupancy Grid
                 // std::cout << "Press the left/right keys to slice through the voxel grid!" << std::endl;
                 // std::cout << "Press the key >o< to change the slicing orientation." << std::endl;
-//                myTSDFDrawer.drawTSDF(grid_highRes);
-//                myTSDFDrawer.drawTSDF(grid_lowRes);
+                myTSDFDrawer.drawTSDF(grid_highRes);
+                myTSDFDrawer.drawTSDF(grid_lowRes);
 
 // #################################################################################################################
                 // Save some slices as png (uses the high resolution grid!)
@@ -575,19 +544,20 @@ namespace cartographer {
                         Eigen::Vector3d(0., 0., 0.),
                         Eigen::Quaterniond(0., 0., 0., 1.));
 
-                int histogram_size = 120;
-//                Eigen::VectorXf rot_sm_histo(histogram_size);
-//                for(int i=0; i<rot_sm_histo.size(); i++) {
-//                    rot_sm_histo[i] = (float)histogram_size;
-//                }
-
                 sensor::PointCloud sensor_pointcloud;
                 for (auto point: myPointCloudPointer->points_) {
                     sensor_pointcloud.push_back(
                             {Eigen::Vector3f((float) point.x(), (float) point.y(), (float) point.z())});
                 }
+
+                int histogram_size = 120;
                 Eigen::VectorXf rot_sm_histo =
                         scan_matching::RotationalScanMatcher::ComputeHistogram(sensor_pointcloud, histogram_size);
+
+//                for(int i=0; i<rot_sm_histo.size(); i++) {
+//                    std::cout << rot_sm_histo[i] << ", ";
+//                }
+//                std::cout << std::endl;
 
                 cartographer::mapping::ValueConversionTables my_vct;
                 const cartographer::common::Time my_time = cartographer::common::FromUniversal(100);

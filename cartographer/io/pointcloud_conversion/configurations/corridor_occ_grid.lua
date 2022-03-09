@@ -6,7 +6,7 @@ options = {
 
     generateCubicPointcloud = false,
 
-    pointcloudPath = "/Downloads/corridor_world.ply",
+    pointcloudPath = "/Downloads/corridor.ply",
 
     uniformDownSample = false,
     sampleRateUniformDownSample = 100,

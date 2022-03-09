@@ -32,6 +32,8 @@ options = {
 
     saveSlicesAsPNG = false,
 
+    numberOfSubmaps = 1,
+
 
 
 

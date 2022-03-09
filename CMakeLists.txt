@@ -276,6 +276,8 @@ if(${WITH_OPEN3D})
 google_binary(cartographer_pointcloud_converter
         SRCS
         cartographer/io/pointcloud_conversion/pointcloud_converter.cc
+        cartographer/io/pointcloud_conversion/tsdf_drawer.cc
+        cartographer/io/pointcloud_conversion/pointcloud_creator.cc
         )
 endif()
 

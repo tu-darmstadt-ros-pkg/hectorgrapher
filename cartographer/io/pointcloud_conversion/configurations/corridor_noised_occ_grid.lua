@@ -2,11 +2,11 @@
 
 options = {
     generateTSDF = false,
-    outputName = "TestWorldOccupancyGrid",
+    outputName = "CorridorNoisedOccupancyGrid",
 
     generateCubicPointcloud = false,
 
-    pointcloudPath = "/Downloads/test_world.ply",
+    pointcloudPath = "/Downloads/corridor_noised.ply",
 
     uniformDownSample = false,
     sampleRateUniformDownSample = 100,
@@ -28,9 +28,6 @@ options = {
 
     saveSlicesAsPNG = false,
     imageSliceIndex = -55,
-
-    numberOfSubmaps = 9,
-
 
 
 
