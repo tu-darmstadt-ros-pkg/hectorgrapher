@@ -172,34 +172,60 @@ namespace cartographer {
                 }
                 Eigen::Vector3i gridSize = maxIndex - minIndex;
 
-                Eigen::Vector3i submapBlocks = Eigen::Vector3i::Zero();
+                Eigen::Vector3i fragmentSize = Eigen::Vector3i::Zero();
                 if (gridSize.x() > gridSize.y()) {
                     double relation = (double) gridSize.x() / gridSize.y();
-                    submapBlocks.x() = (int)std::sqrt(relation * numberOfSubmaps);
-                    submapBlocks.y() = numberOfSubmaps / (int)std::sqrt(relation * numberOfSubmaps);
+                    fragmentSize.x() = (int) ((relation + 1) / 2 + std::sqrt(
+                            std::pow((relation + 1) / 2, 2) - (1 - numberOfSubmaps) * relation));
+                    fragmentSize.y() = numberOfSubmaps / (fragmentSize.x() - 1) + 1;
+                    if(fragmentSize.y() < 2) {
+                        fragmentSize.y() = 2;
+                        fragmentSize.x() = numberOfSubmaps+1;
+                    }
                 } else {
                     double relation = (double) gridSize.y() / gridSize.x();
-                    submapBlocks.x() = numberOfSubmaps / (int)std::sqrt(relation * numberOfSubmaps);
-                    submapBlocks.y() = (int)std::sqrt(relation * numberOfSubmaps);
+                    fragmentSize.y() = (int) ((relation + 1) / 2 + std::sqrt(
+                            std::pow((relation + 1) / 2, 2) - (1 - numberOfSubmaps) * relation));
+                    fragmentSize.x() = numberOfSubmaps / (fragmentSize.y() - 1) + 1;
+                    if(fragmentSize.x() < 2) {
+                        fragmentSize.x() = 2;
+                        fragmentSize.y() = numberOfSubmaps+1;
+                    }
                 }
-                submapBlocks.z() = 1;
+                fragmentSize.z() = 2;
 
                 std::cout << "For " << numberOfSubmaps << " given submaps and a grid size of ";
                 std::cout << gridSize.x() << " x " << gridSize.y() << " x " << gridSize.z() << ", ";
-                std::cout << "we created submaps in the shape " << submapBlocks.x() << " x " << submapBlocks.y()
-                          << " x " << submapBlocks.z() << "." << std::endl;
+                std::cout << "we created fragments in the shape " << fragmentSize.x() << " x " << fragmentSize.y()
+                          << " x " << fragmentSize.z() << "." << std::endl;
+
+                Eigen::Matrix<int, 3, 8> variations;
+                variations << Eigen::Matrix<int, 3, 4>::Identity(), Eigen::Matrix<int, 3, 4>::Ones() -
+                                                                    Eigen::Matrix<int, 3, 4>::Identity();
 
                 for (auto nextVoxel: *hybridGrid) {
-                    Eigen::Vector3i block = (nextVoxel.first - minIndex.array()) * submapBlocks.array();
-                    block = block.array() / (gridSize + Eigen::Vector3i::Ones()).array();
+                    Eigen::Vector3i fragment = (nextVoxel.first - minIndex.array()) * fragmentSize.array();
+                    fragment = fragment.array() / (gridSize + Eigen::Vector3i::Ones()).array();
 
-                    int submapIndex = block.z() * (submapBlocks.x() * submapBlocks.y());
-                    submapIndex += ((submapBlocks.y() - 1) * (block.z() % 2) +
-                                    block.y() * (int) pow(-1, block.z() % 2)) * submapBlocks.x();
-                    submapIndex += (submapBlocks.x() - 1) * ((block.y() % 2) ^ (block.z() % 2)) +
-                                   block.x() * (int) pow(-1, (block.y() % 2) ^ (block.z() % 2));
+                    std::vector<Eigen::Vector3i> blocks;
+                    for(int i=0; i<8; i++) {
+                        Eigen::Vector3i block = fragment - variations.col(i);
+                        if(block.minCoeff() < 0 || (block - fragmentSize + Eigen::Vector3i::Ones()).maxCoeff() >= 0)
+                            continue;
+                        blocks.push_back(block);
+                    }
 
-                    hybridGridSubgrids->at(submapIndex)->SetProbability(nextVoxel.first, 1.0);
+                    Eigen::Vector3i submapSize =
+                            Eigen::Vector3i::Zero().cwiseMax(fragmentSize - Eigen::Vector3i::Ones());
+                    for(auto block : blocks) {
+                        int submapIndex = block.z() * (submapSize.x() * submapSize.y());
+                        submapIndex += ((submapSize.y() - 1) * (block.z() % 2) +
+                                        block.y() * (int) pow(-1, block.z() % 2)) * submapSize.x();
+                        submapIndex += (submapSize.x() - 1) * ((block.y() % 2) ^ (block.z() % 2)) +
+                                       block.x() * (int) pow(-1, (block.y() % 2) ^ (block.z() % 2));
+
+                        hybridGridSubgrids->at(submapIndex)->SetProbability(nextVoxel.first, 1.0);
+                    }
                 }
             }
 
@@ -544,13 +570,12 @@ namespace cartographer {
                         Eigen::Vector3d(0., 0., 0.),
                         Eigen::Quaterniond(0., 0., 0., 1.));
 
+                int histogram_size = 120;
                 sensor::PointCloud sensor_pointcloud;
                 for (auto point: myPointCloudPointer->points_) {
                     sensor_pointcloud.push_back(
                             {Eigen::Vector3f((float) point.x(), (float) point.y(), (float) point.z())});
                 }
-
-                int histogram_size = 120;
                 Eigen::VectorXf rot_sm_histo =
                         scan_matching::RotationalScanMatcher::ComputeHistogram(sensor_pointcloud, histogram_size);
 
