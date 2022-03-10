@@ -105,7 +105,7 @@ void SerializeSubmaps(
           submap_proto->mutable_submap_3d()->add_rotational_scan_matcher_histogram(
                   submap_before_proto->rotational_scan_matcher_histogram()[i]);
       }
-      std::cout << "Size of histogram after serialization of posegraph: " << proto.submap().submap_3d().rotational_scan_matcher_histogram().size() << std::endl;
+//      std::cout << "Size of histogram after serialization of posegraph: " << proto.submap().submap_3d().rotational_scan_matcher_histogram().size() << std::endl;
 
     writer->WriteProto(proto);
   }

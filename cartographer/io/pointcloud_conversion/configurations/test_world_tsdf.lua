@@ -4,11 +4,9 @@ options = {
     generateTSDF = true,
     outputName = "TestWorldTSDF",
 
-    generateCubicPointcloud = false,
-
     pointcloudPath = "/Downloads/test_world.ply",
 
-    uniformDownSample = false,
+    uniformDownSample = true,
     sampleRateUniformDownSample = 4,
 
     voxelDownSample = false,
@@ -30,6 +28,8 @@ options = {
 
     saveSlicesAsPNG = false,
     imageSliceIndex = -55,
+
+    numberOfSubmaps = 10,
 
 }
 

@@ -158,35 +158,35 @@ namespace cartographer {
             * @return the fragmentation dimension
             */
             static Eigen::Vector3i getFragmentationForHybridGrid(int numberOfSubmaps, Eigen::Vector3i gridSize) {
-                Eigen::Vector3i fragmentSize = Eigen::Vector3i::Zero();
+                Eigen::Vector3i fragmentation = Eigen::Vector3i::Zero();
 
                 if (gridSize.x() > gridSize.y()) {
                     double relation = (double) gridSize.x() / gridSize.y();
-                    fragmentSize.x() = (int) ((relation + 1) / 2 + std::sqrt(
+                    fragmentation.x() = (int) ((relation + 1) / 2 + std::sqrt(
                             std::pow((relation + 1) / 2, 2) - (1 - numberOfSubmaps) * relation));
-                    fragmentSize.y() = numberOfSubmaps / (fragmentSize.x() - 1) + 1;
-                    if (fragmentSize.y() < 2) {
-                        fragmentSize.y() = 2;
-                        fragmentSize.x() = numberOfSubmaps + 1;
+                    fragmentation.y() = numberOfSubmaps / (fragmentation.x() - 1) + 1;
+                    if (fragmentation.y() < 2) {
+                        fragmentation.y() = 2;
+                        fragmentation.x() = numberOfSubmaps + 1;
                     }
                 } else {
                     double relation = (double) gridSize.y() / gridSize.x();
-                    fragmentSize.y() = (int) ((relation + 1) / 2 + std::sqrt(
+                    fragmentation.y() = (int) ((relation + 1) / 2 + std::sqrt(
                             std::pow((relation + 1) / 2, 2) - (1 - numberOfSubmaps) * relation));
-                    fragmentSize.x() = numberOfSubmaps / (fragmentSize.y() - 1) + 1;
-                    if (fragmentSize.x() < 2) {
-                        fragmentSize.x() = 2;
-                        fragmentSize.y() = numberOfSubmaps + 1;
+                    fragmentation.x() = numberOfSubmaps / (fragmentation.y() - 1) + 1;
+                    if (fragmentation.x() < 2) {
+                        fragmentation.x() = 2;
+                        fragmentation.y() = numberOfSubmaps + 1;
                     }
                 }
-                fragmentSize.z() = 2;
+                fragmentation.z() = 2;
 
                 std::cout << "For " << numberOfSubmaps << " given submaps and a grid size of ";
                 std::cout << gridSize.x() << " x " << gridSize.y() << " x " << gridSize.z() << ", ";
-                std::cout << "we created fragments in the shape " << fragmentSize.x() << " x " << fragmentSize.y()
-                          << " x " << fragmentSize.z() << "." << std::endl;
+                std::cout << "we created fragments in the shape " << fragmentation.x() << " x " << fragmentation.y()
+                          << " x " << fragmentation.z() << "." << std::endl;
 
-                return fragmentSize;
+                return fragmentation;
             }
 
             /**
@@ -199,29 +199,29 @@ namespace cartographer {
             * |__2__|__3__|__8__|
             *
             * @param voxel the index of the voxel to be inserted in a subgrid.
-            * @param gridSize the size of the original HybridGrid
-            * @param fragmentSize the dimensions of the division of the original grid into smaller fragments.
+            * @param gridSize the dimensions of the original HybridGrid
+            * @param fragmentation the dimensions of the division of the original grid into smaller fragments.
             * @param variations Matrix containing 8 vectors who count from 000 to 111
             * @return a list of submap indices for the given voxel
             */
-            static std::vector<int> getSubmapIndicesForVoxel(Eigen::Vector3i voxel,
+            static std::vector<int> getSubmapIndicesForVoxel(const Eigen::Vector3i &voxel,
                                                              const Eigen::Vector3i &gridSize,
-                                                             Eigen::Vector3i fragmentSize,
-                                                             Eigen::Matrix<int, 3, 8> variations) {
-                Eigen::Vector3i fragment = voxel.array() * fragmentSize.array();
+                                                             const Eigen::Vector3i &fragmentation,
+                                                             const Eigen::Matrix<int, 3, 8> &variations) {
+                Eigen::Vector3i fragment = voxel.array() * fragmentation.array();
                 fragment = fragment.array() / (gridSize + Eigen::Vector3i::Ones()).array();
 
                 std::vector<Eigen::Vector3i> blocks;
                 for (int i = 0; i < 8; i++) {
                     Eigen::Vector3i block = fragment - variations.col(i);
-                    if (block.minCoeff() < 0 || (block - fragmentSize + Eigen::Vector3i::Ones()).maxCoeff() >= 0)
+                    if (block.minCoeff() < 0 || (block - fragmentation + Eigen::Vector3i::Ones()).maxCoeff() >= 0)
                         continue;
                     blocks.push_back(block);
                 }
 
                 std::vector<int> submapIndices;
                 Eigen::Vector3i submapSize =
-                        Eigen::Vector3i::Zero().cwiseMax(fragmentSize - Eigen::Vector3i::Ones());
+                        Eigen::Vector3i::Zero().cwiseMax(fragmentation - Eigen::Vector3i::Ones());
                 for (auto block: blocks) {
                     int submapIndex = block.z() * (submapSize.x() * submapSize.y());
                     submapIndex += ((submapSize.y() - 1) * (block.z() % 2) +
@@ -243,8 +243,8 @@ namespace cartographer {
              * @param submap pointer to a submap3d-object containing the created grid.
              * @param filename name of the file to be created.
              */
-            static void writeSubmapOut(cartographer::mapping::Submap3D *submap, const std::string &filename) {
-                submap->set_insertion_finished(true);
+            static void
+            writeSubmapsOut(std::vector<cartographer::mapping::Submap3D> &submaps, const std::string &filename) {
 
                 // --- Build a pose graph for the submap (use the values from map_builder.lua!) ---
                 const std::string code_pbstream = R"text(
@@ -273,28 +273,32 @@ namespace cartographer {
                         &my_thread_pool
                 );
 
-                proto::Submap proto = submap->ToProto(true);
-                for (Eigen::VectorXf::Index i = 0; i != submap->rotational_scan_matcher_histogram().size(); ++i) {
-                    proto.mutable_submap_3d()->add_rotational_scan_matcher_histogram(
-                            submap->rotational_scan_matcher_histogram()[i]);
-                }
 
-//                std::cout << "Size of histogram before proto: " << my_submap.rotational_scan_matcher_histogram().size()
-//                          << std::endl;
-//                std::cout << "Size of histogram after proto: "
-//                          << proto.submap_3d().rotational_scan_matcher_histogram().size() << std::endl;
+                // --- Put the submaps in the pose graph ---
 
-                // --- Put the submap in the pose graph ---
-                const cartographer::transform::Rigid3<double> my_transform(
-                        Eigen::Vector3d(0., 0., 0.),
-                        Eigen::Quaterniond(0., 0., 0., 1.));
+                for (int s = 0; s < (int) submaps.size(); s++) {
+                    submaps[s].Finish();
 
-                posegraph.AddSubmapFromProto(my_transform, proto);
+                    proto::Submap proto = submaps[s].ToProto(true);
+                    for (int i = 0; i < submaps[s].rotational_scan_matcher_histogram().size(); i++) {
+                        proto.mutable_submap_3d()->add_rotational_scan_matcher_histogram(
+                                submaps[s].rotational_scan_matcher_histogram()[i]);
+                    }
+                    proto.mutable_submap_id()->set_submap_index(s);
 
-//                const cartographer::mapping::Submap3D *new_submap;
-//                new_submap = dynamic_cast<const Submap3D *>(posegraph.GetAllSubmapData().begin()->data.submap.get());
-//                std::cout << "Size of histogram in posegraph: "
+//                    std::cout << "Size of histogram before proto: " << submap.rotational_scan_matcher_histogram().size()
+//                              << std::endl;
+//                    std::cout << "Size of histogram after proto: "
+//                              << proto.submap_3d().rotational_scan_matcher_histogram().size() << std::endl;
+
+
+                    posegraph.AddSubmapFromProto(cartographer::transform::Rigid3d::Identity(), proto);
+
+//                    const cartographer::mapping::Submap3D *new_submap;
+//                    new_submap = dynamic_cast<const Submap3D *>(posegraph.GetAllSubmapData().begin()->data.submap.get());
+//                    std::cout << "Size of histogram in posegraph: "
 //                          << new_submap->rotational_scan_matcher_histogram().size() << std::endl;
+                }
 
                 // --- Write the pose graph as protoBuffer ---
                 proto::TrajectoryBuilderOptionsWithSensorIds my_traj_builder_options;
@@ -337,13 +341,15 @@ namespace cartographer {
 
                 cartographer::mapping::TSDFDrawer myTSDFDrawer;
 
-                std::unique_ptr<GridInterface> myHighResHybridGridTSDF;
-                std::unique_ptr<GridInterface> myLowResHybridGridTSDF;
+                std::unique_ptr<HybridGridTSDF> myHighResTSDF;
+                std::vector<std::unique_ptr<HybridGridTSDF>> myHighResTSDFSubgrids;
+                std::unique_ptr<HybridGridTSDF> myLowResTSDF;
+                std::vector<std::unique_ptr<HybridGridTSDF>> myLowResTSDFSubgrids;
 
                 std::unique_ptr<HybridGrid> myHighResHybridGrid;
-                std::map<int, std::unique_ptr<HybridGrid>> myHighResHybridGridSubmaps;
+                std::vector<std::unique_ptr<HybridGrid>> myHighResHybridGridSubgrids;
                 std::unique_ptr<HybridGrid> myLowResHybridGrid;
-                std::map<int, std::unique_ptr<HybridGrid>> myLowResHybridGridSubmaps;
+                std::vector<std::unique_ptr<HybridGrid>> myLowResHybridGridSubgrids;
 
                 std::shared_ptr<open3d::geometry::VoxelGrid> grid_highRes;
                 std::shared_ptr<open3d::geometry::VoxelGrid> grid_lowRes;
@@ -438,25 +444,14 @@ namespace cartographer {
 // #################################################################################################################
                 // Decide on a fragmentation of the whole map
 
-                cartographer::mapping::ValueConversionTables myValueConversionTable;
-
-                int numberOfSubmaps = luaParameterDictionary->GetInt("numberOfSubmaps");
-                for (int i = 0; i < numberOfSubmaps; i++) {
-                    myHighResHybridGridSubmaps.insert(std::make_pair(i, absl::make_unique<HybridGrid>(
-                            gridVoxelSideLength_highRes, &myValueConversionTable)));
-                    myLowResHybridGridSubmaps.insert(std::make_pair(i, absl::make_unique<HybridGrid>(
-                            gridVoxelSideLength_lowRes, &myValueConversionTable)));
-                }
+                cartographer::mapping::ValueConversionTables my_vct;
 
                 // High Resolution
                 Eigen::Vector3i minIndexHybridGrid_highRes =
-                        (myPointCloudPointer->GetMinBound() /
-                         gridVoxelSideLength_highRes).array().ceil().cast<int>();
+                        (myPointCloudPointer->GetMinBound() / gridVoxelSideLength_highRes).array().ceil().cast<int>();
                 Eigen::Vector3i maxIndexHybridGrid_highRes =
-                        (myPointCloudPointer->GetMaxBound() /
-                         gridVoxelSideLength_highRes).array().ceil().cast<int>();
-                Eigen::Vector3i gridSizeHybridGrid_highRes =
-                        maxIndexHybridGrid_highRes - minIndexHybridGrid_highRes;
+                        (myPointCloudPointer->GetMaxBound() / gridVoxelSideLength_highRes).array().ceil().cast<int>();
+                Eigen::Vector3i gridSizeHybridGrid_highRes = maxIndexHybridGrid_highRes - minIndexHybridGrid_highRes;
 
                 // Low Resolution
                 Eigen::Vector3i minIndexHybridGrid_lowRes =
@@ -467,9 +462,12 @@ namespace cartographer {
                          gridVoxelSideLength_lowRes).array().ceil().cast<int>();
                 Eigen::Vector3i gridSizeHybridGrid_lowRes = maxIndexHybridGrid_lowRes - minIndexHybridGrid_lowRes;
 
+                int numberOfSubmaps = luaParameterDictionary->GetInt("numberOfSubmaps");
+
                 // Fragmentation is the same for low and high resolution
                 Eigen::Vector3i fragmentation = getFragmentationForHybridGrid(numberOfSubmaps,
                                                                               gridSizeHybridGrid_highRes);
+                numberOfSubmaps = (fragmentation - Eigen::Vector3i::Ones()).prod();
 
                 Eigen::Matrix<int, 3, 8> variations;
                 variations << Eigen::Matrix<int, 3, 4>::Identity(), Eigen::Matrix<int, 3, 4>::Ones() -
@@ -490,13 +488,18 @@ namespace cartographer {
                     float absoluteLowResTruncationDistance =
                             relativeLowResTruncationDistance * gridVoxelSideLength_lowRes;
 
-                    myHighResHybridGridTSDF = absl::make_unique<HybridGridTSDF>(
-                            gridVoxelSideLength_highRes, relativeHighResTruncationDistance, maxWeight,
-                            &myValueConversionTable);
+                    for (int i = 0; i < numberOfSubmaps; i++) {
+                        myHighResTSDFSubgrids.push_back(absl::make_unique<HybridGridTSDF>(
+                                gridVoxelSideLength_highRes, relativeHighResTruncationDistance, maxWeight, &my_vct));
+                        myLowResTSDFSubgrids.push_back(absl::make_unique<HybridGridTSDF>(
+                                gridVoxelSideLength_lowRes, relativeLowResTruncationDistance, maxWeight, &my_vct));
+                    }
 
-                    myLowResHybridGridTSDF = absl::make_unique<HybridGridTSDF>(
-                            gridVoxelSideLength_lowRes, relativeLowResTruncationDistance, maxWeight,
-                            &myValueConversionTable);
+                    myHighResTSDF = absl::make_unique<HybridGridTSDF>(
+                            gridVoxelSideLength_highRes, relativeHighResTruncationDistance, maxWeight, &my_vct);
+
+                    myLowResTSDF = absl::make_unique<HybridGridTSDF>(
+                            gridVoxelSideLength_lowRes, relativeLowResTruncationDistance, maxWeight, &my_vct);
 
                     // Build the TSDF by raytracing every point/normal pair from the point cloud
                     for (long unsigned int i = 0; i < myPointCloudPointer->points_.size(); i++) {
@@ -504,23 +507,49 @@ namespace cartographer {
                                 myPointCloudPointer->points_.at(i).cast<float>(),
                                 myPointCloudPointer->normals_.at(i).cast<float>(),
                                 absoluteHighResTruncationDistance,
-                                dynamic_cast<HybridGridTSDF *>(myHighResHybridGridTSDF.get()));
+                                myHighResTSDF.get());
 
                         raycastPointWithNormal(
                                 myPointCloudPointer->points_.at(i).cast<float>(),
                                 myPointCloudPointer->normals_.at(i).cast<float>(),
                                 absoluteLowResTruncationDistance,
-                                dynamic_cast<HybridGridTSDF *>(myLowResHybridGridTSDF.get()));
+                                myLowResTSDF.get());
                     }
 
+                    for (auto nextVoxel: *myHighResTSDF) {
+                        std::vector<int> submapIndices =
+                                getSubmapIndicesForVoxel(nextVoxel.first - minIndexHybridGrid_highRes.array(),
+                                                         gridSizeHybridGrid_highRes, fragmentation, variations);
+                        for (int index: submapIndices) {
+                            myHighResTSDFSubgrids.at(index)->SetCell(nextVoxel.first,
+                                                                     myHighResTSDF->GetTSD(nextVoxel.first),
+                                                                     myHighResTSDF->GetWeight(nextVoxel.first));
+                        }
+                    }
+                    for (auto nextVoxel: *myLowResTSDF) {
+                        std::vector<int> submapIndices =
+                                getSubmapIndicesForVoxel(nextVoxel.first - minIndexHybridGrid_lowRes.array(),
+                                                         gridSizeHybridGrid_lowRes, fragmentation, variations);
+                        for (int index: submapIndices) {
+                            myLowResTSDFSubgrids.at(index)->SetCell(nextVoxel.first,
+                                                                    myLowResTSDF->GetTSD(nextVoxel.first),
+                                                                    myLowResTSDF->GetWeight(nextVoxel.first));
+                        }
+                    }
+
+//                    for (int i = 0; i < numberOfSubmaps; i++) {
+//                        std::cout << "Subgrid " << i << std::endl;
+//                        std::shared_ptr<open3d::geometry::VoxelGrid> subgrid = convertTSDFToVoxelGrid(
+//                                myHighResTSDFSubgrids.at(i).get(),
+//                                gridVoxelSideLength_highRes, absoluteHighResTruncationDistance);
+//                        myTSDFDrawer.drawTSDF(subgrid);
+//                    }
 
                     grid_highRes = convertTSDFToVoxelGrid(
-                            dynamic_cast<HybridGridTSDF *>(myHighResHybridGridTSDF.get()), gridVoxelSideLength_highRes,
-                            absoluteHighResTruncationDistance);
+                            myHighResTSDF.get(), gridVoxelSideLength_highRes, absoluteHighResTruncationDistance);
 
                     grid_lowRes = convertTSDFToVoxelGrid(
-                            dynamic_cast<HybridGridTSDF *>(myLowResHybridGridTSDF.get()), gridVoxelSideLength_lowRes,
-                            absoluteLowResTruncationDistance);
+                            myLowResTSDF.get(), gridVoxelSideLength_lowRes, absoluteLowResTruncationDistance);
                 }
 
 
@@ -528,10 +557,17 @@ namespace cartographer {
                     // Build a HybridGrid = cartographer's representation of an occupancy grid
                 else {
 
+                    for (int i = 0; i < numberOfSubmaps; i++) {
+                        myHighResHybridGridSubgrids.push_back(absl::make_unique<HybridGrid>(
+                                gridVoxelSideLength_highRes, &my_vct));
+                        myLowResHybridGridSubgrids.push_back(absl::make_unique<HybridGrid>(
+                                gridVoxelSideLength_lowRes, &my_vct));
+                    }
+
                     myHighResHybridGrid = absl::make_unique<HybridGrid>(
-                            gridVoxelSideLength_highRes, &myValueConversionTable);
+                            gridVoxelSideLength_highRes, &my_vct);
                     myLowResHybridGrid = absl::make_unique<HybridGrid>(
-                            gridVoxelSideLength_lowRes, &myValueConversionTable);
+                            gridVoxelSideLength_lowRes, &my_vct);
 
                     for (const auto &nextPoint: myPointCloudPointer->points_) {
                         Eigen::Array3i update_cell_index = myHighResHybridGrid->GetCellIndex(nextPoint.cast<float>());
@@ -546,7 +582,7 @@ namespace cartographer {
                                 getSubmapIndicesForVoxel(nextVoxel.first - minIndexHybridGrid_highRes.array(),
                                                          gridSizeHybridGrid_highRes, fragmentation, variations);
                         for (int index: submapIndices) {
-                            myHighResHybridGridSubmaps.at(index)->SetProbability(nextVoxel.first, 1.0);
+                            myHighResHybridGridSubgrids.at(index)->SetProbability(nextVoxel.first, 1.0);
                         }
                     }
                     for (auto nextVoxel: *myLowResHybridGrid) {
@@ -554,14 +590,14 @@ namespace cartographer {
                                 getSubmapIndicesForVoxel(nextVoxel.first - minIndexHybridGrid_lowRes.array(),
                                                          gridSizeHybridGrid_lowRes, fragmentation, variations);
                         for (int index: submapIndices) {
-                            myLowResHybridGridSubmaps.at(index)->SetProbability(nextVoxel.first, 1.0);
+                            myLowResHybridGridSubgrids.at(index)->SetProbability(nextVoxel.first, 1.0);
                         }
                     }
 
 //                    for (int i = 0; i < numberOfSubmaps; i++) {
 //                        std::cout << "Subgrid " << i << std::endl;
 //                        std::shared_ptr<open3d::geometry::VoxelGrid> subgrid = convertOccupancyGridToVoxelGrid(
-//                                dynamic_cast<HybridGrid *>(myHighResHybridGridSubmaps.at(i).get()),
+//                                dynamic_cast<HybridGrid *>(myHighResHybridGridSubgrids.at(i).get()),
 //                                gridVoxelSideLength_highRes);
 //                        myTSDFDrawer.drawTSDF(subgrid);
 //                    }
@@ -610,31 +646,28 @@ namespace cartographer {
 // #################################################################################################################
                 // Build a ProtoBuffer
 
-                // --- Build a submap for the grid with dummy values ---
-                const cartographer::transform::Rigid3<double> my_transform(
-                        Eigen::Vector3d(0., 0., 0.),
-                        Eigen::Quaterniond(0., 0., 0., 1.));
-
                 int histogram_size = 120;
-                sensor::PointCloud sensor_pointcloud;
-                for (auto point: myPointCloudPointer->points_) {
-                    sensor_pointcloud.push_back(
-                            {Eigen::Vector3f((float) point.x(), (float) point.y(), (float) point.z())});
-                }
-                Eigen::VectorXf rot_sm_histo =
-                        scan_matching::RotationalScanMatcher::ComputeHistogram(sensor_pointcloud, histogram_size);
 
-                ////
                 std::vector<sensor::PointCloud> sub_pointclouds;
                 for (int i = 0; i < numberOfSubmaps; i++) {
                     sub_pointclouds.emplace_back();
                 }
 
                 for (const auto &point: myPointCloudPointer->points_) {
-                    Eigen::Vector3i gridVoxel =
-                            myHighResHybridGrid->GetCellIndex(point.cast<float>()) - minIndexHybridGrid_highRes.array();
-                    std::vector<int> submapIndices = getSubmapIndicesForVoxel(gridVoxel, gridSizeHybridGrid_highRes,
-                                                                              fragmentation, variations);
+                    Eigen::Vector3i gridVoxel;
+                    std::vector<int> submapIndices;
+                    if (luaParameterDictionary->GetBool("generateTSDF")) {
+                        gridVoxel =
+                                myHighResTSDF->GetCellIndex(point.cast<float>()) - minIndexHybridGrid_highRes.array();
+                        submapIndices = getSubmapIndicesForVoxel(gridVoxel, gridSizeHybridGrid_highRes, fragmentation,
+                                                                 variations);
+                    } else {
+                        gridVoxel = myHighResHybridGrid->GetCellIndex(point.cast<float>()) -
+                                    minIndexHybridGrid_highRes.array();
+                        submapIndices = getSubmapIndicesForVoxel(gridVoxel, gridSizeHybridGrid_highRes, fragmentation,
+                                                                 variations);
+                    }
+
                     for (int i: submapIndices) {
                         sub_pointclouds.at(i).push_back(
                                 {Eigen::Vector3f((float) point.x(), (float) point.y(), (float) point.z())});
@@ -654,30 +687,31 @@ namespace cartographer {
 //                    std::cout << std::endl;
 //                }
 
-
-                cartographer::mapping::ValueConversionTables my_vct;
                 const cartographer::common::Time my_time = cartographer::common::FromUniversal(100);
+                std::vector<cartographer::mapping::Submap3D> submaps;
 
                 if (luaParameterDictionary->GetBool("generateTSDF")) {
-                    cartographer::mapping::Submap3D my_submap(
-                            my_transform,
-                            std::unique_ptr<GridInterface>(
-                                    static_cast<GridInterface *>(myLowResHybridGridTSDF.release())),
-                            std::unique_ptr<GridInterface>(
-                                    static_cast<GridInterface *>(myHighResHybridGridTSDF.release())),
-                            rot_sm_histo, &my_vct, my_time);
-                    writeSubmapOut(&my_submap, path_to_home +
-                                               "/hector/src/cartographer/cartographer/io/pointcloud_conversion/ProtoBuffers/" +
-                                               luaParameterDictionary->GetString("outputName") + ".pbstream");
+                    for (int i = 0; i < (int) histograms.size(); i++) {
+                        submaps.emplace_back(
+                                cartographer::transform::Rigid3d::Identity(),
+                                std::move(myLowResTSDFSubgrids.at(i)),
+                                std::move(myHighResTSDFSubgrids.at(i)),
+                                histograms.at(i), &my_vct, my_time);
+                    }
+                    writeSubmapsOut(submaps, path_to_home +
+                                             "/hector/src/cartographer/cartographer/io/pointcloud_conversion/ProtoBuffers/" +
+                                             luaParameterDictionary->GetString("outputName") + ".pbstream");
                 } else {
-                    cartographer::mapping::Submap3D my_submap(
-                            my_transform,
-                            std::unique_ptr<GridInterface>(static_cast<GridInterface *>(myLowResHybridGrid.release())),
-                            std::unique_ptr<GridInterface>(static_cast<GridInterface *>(myHighResHybridGrid.release())),
-                            rot_sm_histo, &my_vct, my_time);
-                    writeSubmapOut(&my_submap, path_to_home +
-                                               "/hector/src/cartographer/cartographer/io/pointcloud_conversion/ProtoBuffers/" +
-                                               luaParameterDictionary->GetString("outputName") + ".pbstream");
+                    for (int i = 0; i < (int) histograms.size(); i++) {
+                        submaps.emplace_back(
+                                cartographer::transform::Rigid3d::Identity(),
+                                std::move(myLowResHybridGridSubgrids.at(i)),
+                                std::move(myHighResHybridGridSubgrids.at(i)),
+                                histograms.at(i), &my_vct, my_time);
+                    }
+                    writeSubmapsOut(submaps, path_to_home +
+                                             "/hector/src/cartographer/cartographer/io/pointcloud_conversion/ProtoBuffers/" +
+                                             luaParameterDictionary->GetString("outputName") + ".pbstream");
                 }
             }
         };

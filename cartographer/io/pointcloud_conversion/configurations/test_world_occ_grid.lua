@@ -4,8 +4,6 @@ options = {
     generateTSDF = false,
     outputName = "TestWorldOccupancyGrid",
 
-    generateCubicPointcloud = false,
-
     pointcloudPath = "/Downloads/test_world.ply",
 
     uniformDownSample = false,
