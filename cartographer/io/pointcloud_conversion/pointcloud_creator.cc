@@ -3,13 +3,13 @@
 namespace cartographer {
     namespace mapping {
 
-/**
- * Builds a predefined world to test the generation of the grids in a simple environment.
- *
- * The method builds a world consisting of two blocks, samples points from them and writes
- * the point cloud in a file in the Downloads-folder.
- * This method should be used entirely independent from the rest of the program.
- */
+        /**
+         * Builds a predefined world to test the generation of the grids in a simple environment.
+         *
+         * The method builds a world consisting of two blocks, samples points from them and writes
+         * the point cloud in a file in the Downloads-folder.
+         * This method should be used entirely independent from the rest of the program.
+         */
         void buildTestWorldPointCloud(const std::string &path_to_home) {
             double resolution = 0.1;
             float std_dev = 0.01;

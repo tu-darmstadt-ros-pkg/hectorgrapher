@@ -16,17 +16,17 @@
 namespace cartographer {
     namespace mapping {
 
-        class TSDFDrawer {
+        class GridDrawer {
         public:
-            TSDFDrawer();
+            GridDrawer();
 
-            void drawTSDF(const std::shared_ptr<open3d::geometry::VoxelGrid> &voxelGridPointer);
+            void drawGrid(const std::shared_ptr<open3d::geometry::VoxelGrid> &voxelGridPointer);
 
-            void saveSliceAsPNG(const int imageSliceIndex, const int imageSliceOrientation, const char *filename,
+            void saveSliceAsPNG(int imageSliceIndex, int imageSliceOrientation, const char *filename,
                                 const std::shared_ptr<open3d::geometry::VoxelGrid> &voxelGridPointerSlice);
 
         private:
-            std::shared_ptr<open3d::geometry::VoxelGrid> tsdfPointer;
+            std::shared_ptr<open3d::geometry::VoxelGrid> gridPointer;
             int sliceIndex;
             int sliceOrientation;
 

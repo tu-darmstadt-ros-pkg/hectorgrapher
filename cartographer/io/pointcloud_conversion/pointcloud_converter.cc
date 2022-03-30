@@ -61,7 +61,11 @@ namespace cartographer {
                 const Eigen::Array3i end_cell = tsdf->GetCellIndex(ray_end);
                 const Eigen::Array3i delta = end_cell - begin_cell;
 
-                CHECK(!(delta.x() == 0 && delta.y() == 0 && delta.z() == 0));
+                if ((delta.x() == 0 && delta.y() == 0 && delta.z() == 0)) {
+                    std::cout << "*** Floating point error, probably because of a too small point cloud. ";
+                    std::cout << "Try scaling up the point cloud and truncation parameters! ***" << std::endl;
+                    CHECK(!(delta.x() == 0 && delta.y() == 0 && delta.z() == 0));
+                }
 
                 const int num_samples = delta.cwiseAbs().maxCoeff();
 
@@ -157,7 +161,7 @@ namespace cartographer {
             * @param gridSize the size of the original HybridGrid
             * @return the fragmentation dimension
             */
-            static Eigen::Vector3i getFragmentationForHybridGrid(int numberOfSubmaps, Eigen::Vector3i gridSize) {
+            static Eigen::Vector3i getFragmentationForGrid(int numberOfSubmaps, Eigen::Vector3i gridSize) {
                 Eigen::Vector3i fragmentation = Eigen::Vector3i::Zero();
 
                 if (gridSize.x() > gridSize.y()) {
@@ -243,8 +247,8 @@ namespace cartographer {
              * @param submap pointer to a submap3d-object containing the created grid.
              * @param filename name of the file to be created.
              */
-            static void
-            writeSubmapsOut(std::vector<cartographer::mapping::Submap3D> &submaps, const std::string &filename) {
+            static void writeSubmapsOut(std::vector<cartographer::mapping::Submap3D> &submaps,
+                                        const std::string &filename) {
 
                 // --- Build a pose graph for the submap (use the values from map_builder.lua!) ---
                 const std::string code_pbstream = R"text(
@@ -339,7 +343,7 @@ namespace cartographer {
 //                cartographer::mapping::buildTestWorldPointCloud(path_to_home);
 //                return;
 
-                cartographer::mapping::TSDFDrawer myTSDFDrawer;
+                cartographer::mapping::GridDrawer myTSDFDrawer;
 
                 std::unique_ptr<HybridGridTSDF> myHighResTSDF;
                 std::vector<std::unique_ptr<HybridGridTSDF>> myHighResTSDFSubgrids;
@@ -357,12 +361,18 @@ namespace cartographer {
                 std::shared_ptr<open3d::geometry::PointCloud> myPointCloudPointer =
                         std::make_shared<open3d::geometry::PointCloud>();
 
-                // Read and show the input from the .ply-file.
+                // Read the input from the .ply-file.
                 std::string point_cloud_filename =
                         path_to_home + luaParameterDictionary->GetString("pointcloudPath");
                 open3d::io::ReadPointCloud(point_cloud_filename, *myPointCloudPointer, {"auto", true, true, true});
                 std::cout << "Loaded point cloud with exactly " << myPointCloudPointer->points_.size() << " points."
                           << std::endl;
+
+                if (luaParameterDictionary->GetBool("scale")) {
+                    int scaleRate = luaParameterDictionary->GetInt("scaleRate");
+                    myPointCloudPointer->Scale(scaleRate, Eigen::Vector3d::Zero());
+                    std::cout << "Scaled up to the " << scaleRate << "th. size." << std::endl;
+                }
 
                 if (luaParameterDictionary->GetBool("uniformDownSample")) {
                     int sampleRate = luaParameterDictionary->GetInt("sampleRateUniformDownSample");
@@ -436,7 +446,7 @@ namespace cartographer {
                         open3d::geometry::VoxelGrid::CreateFromPointCloud(*myPointCloudPointer,
                                                                           gridVoxelSideLength_highRes);
 
-//                myTSDFDrawer.drawTSDF(pclVoxelGridPointer);
+//                myTSDFDrawer.drawGrid(pclVoxelGridPointer);
 
 
 
@@ -446,14 +456,14 @@ namespace cartographer {
 
                 cartographer::mapping::ValueConversionTables my_vct;
 
-                // High Resolution
+                // What is the size of the high resolution grid?
                 Eigen::Vector3i minIndexHybridGrid_highRes =
                         (myPointCloudPointer->GetMinBound() / gridVoxelSideLength_highRes).array().ceil().cast<int>();
                 Eigen::Vector3i maxIndexHybridGrid_highRes =
                         (myPointCloudPointer->GetMaxBound() / gridVoxelSideLength_highRes).array().ceil().cast<int>();
                 Eigen::Vector3i gridSizeHybridGrid_highRes = maxIndexHybridGrid_highRes - minIndexHybridGrid_highRes;
 
-                // Low Resolution
+                // What is the size of the low resolution grid?
                 Eigen::Vector3i minIndexHybridGrid_lowRes =
                         (myPointCloudPointer->GetMinBound() /
                          gridVoxelSideLength_lowRes).array().ceil().cast<int>();
@@ -464,10 +474,11 @@ namespace cartographer {
 
                 int numberOfSubmaps = luaParameterDictionary->GetInt("numberOfSubmaps");
 
-                // Fragmentation is the same for low and high resolution
-                Eigen::Vector3i fragmentation = getFragmentationForHybridGrid(numberOfSubmaps,
-                                                                              gridSizeHybridGrid_highRes);
-                numberOfSubmaps = (fragmentation - Eigen::Vector3i::Ones()).prod();
+                // Central method: How should we split the grid in smaller parts?
+                // The fragmentation for both high and low resolution is based on the high resolution grid.
+                Eigen::Vector3i fragmentation = getFragmentationForGrid(numberOfSubmaps,
+                                                                        gridSizeHybridGrid_highRes);
+                numberOfSubmaps = (fragmentation - Eigen::Vector3i::Ones()).prod();     // Will be smaller now
 
                 Eigen::Matrix<int, 3, 8> variations;
                 variations << Eigen::Matrix<int, 3, 4>::Identity(), Eigen::Matrix<int, 3, 4>::Ones() -
@@ -542,9 +553,77 @@ namespace cartographer {
 //                        std::shared_ptr<open3d::geometry::VoxelGrid> subgrid = convertTSDFToVoxelGrid(
 //                                myHighResTSDFSubgrids.at(i).get(),
 //                                gridVoxelSideLength_highRes, absoluteHighResTruncationDistance);
-//                        myTSDFDrawer.drawTSDF(subgrid);
+//                        myTSDFDrawer.drawGrid(subgrid);
 //                    }
 
+
+                    // EVALUATION
+                    //-------------------------------------------------
+                    int evaluation_histo_size = 21;
+                    std::map<int, int> evaluation_tsd;
+                    for (int i = -evaluation_histo_size / 2; i < evaluation_histo_size / 2 + 1; i++) {
+                        evaluation_tsd.insert(std::make_pair(i, 0));
+                    }
+
+                    for (std::pair<Eigen::Array<int, 3, 1>, TSDFVoxel> nextVoxel: *myHighResTSDF) {
+                        double rel_val = myHighResTSDF->GetTSD(nextVoxel.first) - (-absoluteHighResTruncationDistance);
+                        double clamped =
+                                rel_val * (evaluation_histo_size - 0.00001) / (2 * absoluteHighResTruncationDistance);
+                        int bucket = (int) (clamped) - evaluation_histo_size / 2;
+                        evaluation_tsd.at(bucket)++;
+                    }
+
+                    std::cout << "Histogram over TSDs: ";
+                    for (auto val: evaluation_tsd) {
+                        std::cout << val.second << ", ";
+                    }
+                    std::cout << std::endl;
+
+                    //-------------------------------------------------
+                    std::vector<int> evaluation_weight = {0,0,0};
+
+                    for (std::pair<Eigen::Array<int, 3, 1>, TSDFVoxel> nextVoxel: *myHighResTSDF) {
+                        int weight = (int) myHighResTSDF->GetWeight(nextVoxel.first);
+                        if (weight == 1.0)
+                            evaluation_weight.at(0)++;
+                        else if (weight <= 10.0)
+                            evaluation_weight.at(1)++;
+                        else
+                            evaluation_weight.at(2)++;
+                    }
+
+                    std::cout << "Histogram over weights: ";
+                    int number_of_voxels = 0;
+                    for (auto val: evaluation_weight) {
+                        std::cout << val << ", ";
+                        number_of_voxels += val;
+                    }
+                    std::cout << std::endl;
+
+                    //-------------------------------------------------
+                    int border_counts = 0;
+                    float border = 0.9f * absoluteHighResTruncationDistance;
+                    for (std::pair<Eigen::Array<int, 3, 1>, TSDFVoxel> nextVoxel: *myHighResTSDF) {
+
+                        if (myHighResTSDF->GetTSD(nextVoxel.first) < border) {
+                            continue;
+                        }
+
+                        for(int i=0; i<6; i++) {
+                            Eigen::Vector3i neighbor = nextVoxel.first +
+                                    (int)std::copysign(1, i-3) * Eigen::Matrix<int, 3, 3>::Identity().col(i%3).array();
+                            if(myHighResTSDF->GetWeight(neighbor) == 0.0 || myHighResTSDF->GetTSD(neighbor) > -border) {
+                                continue;
+                            }
+                            border_counts++;
+                            myHighResTSDF->SetCell(nextVoxel.first, 0.0, 1.0);
+                            break;
+                        }
+                    }
+
+                    std::cout << "Consistency c = " << 1.0 - (double)border_counts/number_of_voxels << std::endl;
+
+                    //-------------------------------------------------
                     grid_highRes = convertTSDFToVoxelGrid(
                             myHighResTSDF.get(), gridVoxelSideLength_highRes, absoluteHighResTruncationDistance);
 
@@ -599,13 +678,13 @@ namespace cartographer {
 //                        std::shared_ptr<open3d::geometry::VoxelGrid> subgrid = convertOccupancyGridToVoxelGrid(
 //                                dynamic_cast<HybridGrid *>(myHighResHybridGridSubgrids.at(i).get()),
 //                                gridVoxelSideLength_highRes);
-//                        myTSDFDrawer.drawTSDF(subgrid);
+//                        myTSDFDrawer.drawGrid(subgrid);
 //                    }
 
                     grid_highRes = convertOccupancyGridToVoxelGrid(
-                            dynamic_cast<HybridGrid *>(myHighResHybridGrid.get()), gridVoxelSideLength_highRes);
+                            myHighResHybridGrid.get(), gridVoxelSideLength_highRes);
                     grid_lowRes = convertOccupancyGridToVoxelGrid(
-                            dynamic_cast<HybridGrid *>(myLowResHybridGrid.get()), gridVoxelSideLength_lowRes);
+                            myLowResHybridGrid.get(), gridVoxelSideLength_lowRes);
                 }
 
 
@@ -613,8 +692,8 @@ namespace cartographer {
                 // Draw and show the images of the TSDF or Occupancy Grid
                 // std::cout << "Press the left/right keys to slice through the voxel grid!" << std::endl;
                 // std::cout << "Press the key >o< to change the slicing orientation." << std::endl;
-//                myTSDFDrawer.drawTSDF(grid_highRes);
-//                myTSDFDrawer.drawTSDF(grid_lowRes);
+                myTSDFDrawer.drawGrid(grid_highRes);
+//                myTSDFDrawer.drawGrid(grid_lowRes);
 
 // #################################################################################################################
                 // Save some slices as png (uses the high resolution grid!)

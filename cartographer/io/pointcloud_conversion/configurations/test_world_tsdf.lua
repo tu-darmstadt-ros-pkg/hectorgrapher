@@ -6,8 +6,11 @@ options = {
 
     pointcloudPath = "/Downloads/test_world.ply",
 
+    scale = false,
+    scaleRate = 2,
+
     uniformDownSample = true,
-    sampleRateUniformDownSample = 4,
+    sampleRateUniformDownSample = 2,
 
     voxelDownSample = false,
     voxelSizeVoxelDownSample = 0.1,
@@ -29,7 +32,7 @@ options = {
     saveSlicesAsPNG = false,
     imageSliceIndex = -55,
 
-    numberOfSubmaps = 10,
+    numberOfSubmaps = 1,
 
 }
 
