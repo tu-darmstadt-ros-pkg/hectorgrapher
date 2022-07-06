@@ -59,6 +59,10 @@ std::function<float(const transform::Rigid3f&)> CreateLowResolutionMatcher(
         //        "<< casted_grid->resolution();
         break;
       }
+      case GridType::DIRECTIONAL_TSDF: {
+        LOG(FATAL)<<"Not implemented";
+        break;
+      }
       case GridType::NONE:
         LOG(FATAL) << "Gridtype not initialized.";
         break;

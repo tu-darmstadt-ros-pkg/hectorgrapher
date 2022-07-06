@@ -166,6 +166,10 @@ void RealTimeCorrelativeScanMatcher2D::ScoreCandidates(
             discrete_scans[candidate.scan_index], candidate.x_index_offset,
             candidate.y_index_offset);
         break;
+      case GridType::DIRECTIONAL_TSDF: {
+        LOG(FATAL)<<"Not implemented";
+        break;
+      }
       case GridType::NONE:
         LOG(FATAL) << "Gridtype not initialized.";
         break;

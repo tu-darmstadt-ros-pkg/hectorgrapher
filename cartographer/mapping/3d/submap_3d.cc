@@ -348,6 +348,10 @@ proto::Submap Submap3D::ToProto(
                 ->ToProto();
         break;
       }
+      case GridType::DIRECTIONAL_TSDF: {
+        LOG(FATAL)<<"Not implemented";
+        break;
+      }
       case GridType::NONE:
         LOG(FATAL) << "Gridtype not initialized.";
         break;
@@ -414,6 +418,10 @@ void Submap3D::ToResponseProto(
                         response->add_textures());
       AddToTextureProto(*high_res_grid, global_submap_pose,
                         response->add_textures());
+      break;
+    }
+    case GridType::DIRECTIONAL_TSDF: {
+      LOG(FATAL)<<"Not implemented";
       break;
     }
     case GridType::NONE:

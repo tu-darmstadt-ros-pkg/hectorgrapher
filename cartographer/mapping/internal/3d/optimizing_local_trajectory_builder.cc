@@ -502,6 +502,10 @@ void OptimizingLocalTrajectoryBuilder::AddPerScanMatchingResiduals(
           }
           break;
         }
+        case GridType::DIRECTIONAL_TSDF: {
+          LOG(FATAL)<<"Not implemented";
+          break;
+        }
         case GridType::NONE:
           LOG(FATAL) << "Gridtype not initialized.";
           break;
@@ -913,6 +917,10 @@ void OptimizingLocalTrajectoryBuilder::AddPerPointMatchingResiduals(
                       next_control_point->state.rotation.data());
                 }
               }
+              break;
+            }
+            case GridType::DIRECTIONAL_TSDF: {
+              LOG(FATAL)<<"Not implemented";
               break;
             }
             case GridType::NONE:

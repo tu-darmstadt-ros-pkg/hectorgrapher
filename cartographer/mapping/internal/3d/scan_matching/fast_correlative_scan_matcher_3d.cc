@@ -72,6 +72,10 @@ PrecomputationGridStack3D::PrecomputationGridStack3D(
           static_cast<const HybridGridTSDF&>(grid)));
       break;
     }
+    case GridType::DIRECTIONAL_TSDF: {
+      LOG(FATAL)<<"Not implemented";
+      break;
+    }
     case GridType::NONE:
       LOG(FATAL) << "Gridtype not initialized.";
       break;
@@ -142,6 +146,10 @@ FastCorrelativeScanMatcher3D::FastCorrelativeScanMatcher3D(
     case GridType::TSDF: {
       resolution_ = static_cast<const HybridGridTSDF&>(grid).resolution();
       width_in_voxels_ = static_cast<const HybridGridTSDF&>(grid).grid_size();
+      break;
+    }
+    case GridType::DIRECTIONAL_TSDF: {
+      LOG(FATAL)<<"Not implemented";
       break;
     }
     case GridType::NONE:
