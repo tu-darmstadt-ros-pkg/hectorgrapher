@@ -664,7 +664,7 @@ void PoseGraph3D::AddSubmapFromProto(
   const SubmapId submap_id = {submap.submap_id().trajectory_id(),
                               submap.submap_id().submap_index()};
   std::shared_ptr<const Submap3D> submap_ptr =
-      std::make_shared<const Submap3D>(submap.submap_3d());
+      std::make_shared<const Submap3D>(submap.submap_3d(), &conversion_tables_);
 
   {
     absl::MutexLock locker(&mutex_);

@@ -52,7 +52,8 @@ class Submap3D : public Submap {
            ValueConversionTables* conversion_tables,
            const common::Time& start_time);
 
-  explicit Submap3D(const proto::Submap3D& proto);
+  explicit Submap3D(const proto::Submap3D& proto,
+                    ValueConversionTables* conversion_tables);
 
   proto::Submap ToProto(bool include_probability_grid_data) const override;
   void UpdateFromProto(const proto::Submap& proto) override;

@@ -319,8 +319,10 @@ Submap3D::Submap3D(const transform::Rigid3d& local_submap_pose,
   high_resolution_grid_ = std::move(high_resolution_grid);
 }
 
-Submap3D::Submap3D(const proto::Submap3D& proto)
-    : Submap(transform::ToRigid3(proto.local_pose())) {
+Submap3D::Submap3D(const proto::Submap3D& proto,
+                   ValueConversionTables* conversion_tables)
+    : Submap(transform::ToRigid3(proto.local_pose())),
+      conversion_tables_(conversion_tables)  {
   UpdateFromProto(proto);
 }
 

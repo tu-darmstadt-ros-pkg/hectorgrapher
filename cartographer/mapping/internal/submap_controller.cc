@@ -41,7 +41,8 @@ SubmapController<mapping::Submap3D>::CreateSubmap(
               << proto.submap_3d().num_range_data();
     return nullptr;
   }
-  return std::make_shared<mapping::Submap3D>(proto.submap_3d());
+  return std::make_shared<mapping::Submap3D>(proto.submap_3d(),
+                                             &conversion_tables_);
 }
 
 }  // namespace mapping
