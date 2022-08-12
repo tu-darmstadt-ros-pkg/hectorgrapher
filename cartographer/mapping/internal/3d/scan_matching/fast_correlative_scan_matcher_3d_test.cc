@@ -70,6 +70,7 @@ class FastCorrelativeScanMatcher3DTest : public ::testing::Test {
         "full_resolution_depth = " +
         std::to_string(branch_and_bound_depth) +
         ", "
+        "use_rotational_scan_matcher = true, "
         "min_rotational_score = 0.1, "
         // Unknown space has kMinProbability = 0.1, so we need to make sure here
         // to pick a larger number otherwise we always find matches.

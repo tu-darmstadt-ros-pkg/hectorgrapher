@@ -454,6 +454,9 @@ int32 full_resolution_depth
   Number of full resolution grids to use, additional grids will reduce the
   resolution by half each.
 
+bool use_rotational_scan_matcher
+  Use rotational scan matcher for pruning candidates.
+
 double min_rotational_score
   Minimum score for the rotational scan matcher.
 

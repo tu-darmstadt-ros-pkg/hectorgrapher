@@ -40,6 +40,7 @@ POSE_GRAPH = {
     fast_correlative_scan_matcher_3d = {
       branch_and_bound_depth = 8,
       full_resolution_depth = 3,
+      use_rotational_scan_matcher = true,
       min_rotational_score = 0.77,
       min_low_resolution_score = 0.55,
       linear_xy_search_window = 5.,

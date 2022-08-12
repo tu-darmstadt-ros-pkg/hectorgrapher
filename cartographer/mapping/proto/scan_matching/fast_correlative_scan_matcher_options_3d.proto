@@ -24,6 +24,9 @@ message FastCorrelativeScanMatcherOptions3D {
   // resolution by half each.
   int32 full_resolution_depth = 8;
 
+  // Use rotational scan matcher.
+  bool use_rotational_scan_matcher = 10;
+
   // Minimum score for the rotational scan matcher.
   double min_rotational_score = 4;
 

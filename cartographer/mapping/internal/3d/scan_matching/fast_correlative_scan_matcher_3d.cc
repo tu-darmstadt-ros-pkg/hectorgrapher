@@ -42,6 +42,8 @@ CreateFastCorrelativeScanMatcherOptions3D(
       parameter_dictionary->GetInt("branch_and_bound_depth"));
   options.set_full_resolution_depth(
       parameter_dictionary->GetInt("full_resolution_depth"));
+  options.set_use_rotational_scan_matcher(
+      parameter_dictionary->GetBool("use_rotational_scan_matcher"));
   options.set_min_rotational_score(
       parameter_dictionary->GetDouble("min_rotational_score"));
   options.set_min_low_resolution_score(
@@ -298,13 +300,13 @@ std::vector<DiscreteScan3D> FastCorrelativeScanMatcher3D::GenerateDiscreteScans(
   }
   const transform::Rigid3f node_to_submap =
       global_submap_pose.inverse() * global_node_pose;
-  const std::vector<float> scores = rotational_scan_matcher_.Match(
+  const std::vector<float> scores = options_.use_rotational_scan_matcher() ? rotational_scan_matcher_.Match(
       rotational_scan_matcher_histogram,
       transform::GetYaw(node_to_submap.rotation() *
                         gravity_alignment.inverse().cast<float>()),
-      angles);
+      angles) : std::vector<float>();
   for (size_t i = 0; i != angles.size(); ++i) {
-    if (scores[i] < options_.min_rotational_score()) {
+    if (options_.use_rotational_scan_matcher() && scores[i] < options_.min_rotational_score()) {
       continue;
     }
     const Eigen::Vector3f angle_axis(0.f, 0.f, angles[i]);
@@ -316,6 +318,7 @@ std::vector<DiscreteScan3D> FastCorrelativeScanMatcher3D::GenerateDiscreteScans(
         global_submap_pose.rotation().inverse() *
             transform::AngleAxisVectorToRotationQuaternion(angle_axis) *
             global_node_pose.rotation());
+    float score = options_.use_rotational_scan_matcher() ?  : 1.0;
     result.push_back(
         DiscretizeScan(search_parameters, point_cloud, pose, scores[i]));
   }
