@@ -172,6 +172,9 @@ double global_sampling_ratio
 bool log_residual_histograms
   Whether to output histograms for the pose residuals.
 
+bool use_global_constraint_search
+  // Enables global constraint search, otherwise all searches are limited to the specified search window (see FastCorrelativeScanMatcherOptions).
+
 double global_constraint_search_after_n_seconds
   If for the duration specified by this option no global contraint has been
   added between two trajectories, loop closure searches will be performed

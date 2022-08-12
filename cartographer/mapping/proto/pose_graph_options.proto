@@ -51,6 +51,9 @@ message PoseGraphOptions {
   // Whether to output histograms for the pose residuals.
   bool log_residual_histograms = 9;
 
+  // Enables global constraint search, otherwise all searches are limited to the specified search window.
+  bool use_global_constraint_search = 12;
+
   // If for the duration specified by this option no global contraint has been
   // added between two trajectories, loop closure searches will be performed
   // globally rather than in a smaller search window.

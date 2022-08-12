@@ -45,6 +45,7 @@ class MapBuilderTestBase : public T {
       MAP_BUILDER.use_trajectory_builder_2d = true
       MAP_BUILDER.pose_graph.optimize_every_n_nodes = 0
       MAP_BUILDER.pose_graph.global_sampling_ratio = 0.05
+      MAP_BUILDER.pose_graph.use_global_constraint_search = true
       MAP_BUILDER.pose_graph.global_constraint_search_after_n_seconds = 0
       return MAP_BUILDER)text";
     auto map_builder_parameters = testing::ResolveLuaParameters(kMapBuilderLua);

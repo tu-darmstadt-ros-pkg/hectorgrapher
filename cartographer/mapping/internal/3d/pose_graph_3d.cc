@@ -286,7 +286,13 @@ void PoseGraph3D::ComputeConstraint(const NodeId& node_id,
       // arbitrary. Finding the correct yaw component will be handled by the
       // matching procedure in the FastCorrelativeScanMatcher, and the given yaw
       // is essentially ignored.
-      maybe_add_global_constraint = true;
+      // maybe_add_global_constraint = true;
+      if(options_.use_global_constraint_search()) {
+        maybe_add_global_constraint = true;
+      }
+      else {
+        maybe_add_local_constraint = true;
+      }
     }
     constant_data = data_.trajectory_nodes.at(node_id).constant_data.get();
     submap = static_cast<const Submap3D*>(
