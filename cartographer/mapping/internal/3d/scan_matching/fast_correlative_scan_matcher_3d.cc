@@ -318,9 +318,9 @@ std::vector<DiscreteScan3D> FastCorrelativeScanMatcher3D::GenerateDiscreteScans(
         global_submap_pose.rotation().inverse() *
             transform::AngleAxisVectorToRotationQuaternion(angle_axis) *
             global_node_pose.rotation());
-    float score = options_.use_rotational_scan_matcher() ?  : 1.0;
+    float score = options_.use_rotational_scan_matcher() ? scores[i] : 1.0f;
     result.push_back(
-        DiscretizeScan(search_parameters, point_cloud, pose, scores[i]));
+        DiscretizeScan(search_parameters, point_cloud, pose, score));
   }
   return result;
 }
