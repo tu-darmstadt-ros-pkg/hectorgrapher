@@ -1081,9 +1081,7 @@ void OptimizingLocalTrajectoryBuilder::RemoveObsoleteSensorData() {
   while (ct_window_horizon_ <
              control_points_.back().time - control_points_.front().time &&
          std::next(control_points_.begin())->time <
-             point_cloud_data_.front().time +
-                 common::FromSeconds(
-                     point_cloud_data_.front().original_cloud.front().time)) {
+             point_cloud_data_.front().StartTime()) {
     debug_logger_.AddEntry(control_points_.front());
     control_points_.pop_front();
   }
