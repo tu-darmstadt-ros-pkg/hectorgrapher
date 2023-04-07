@@ -1339,7 +1339,7 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
                                       point_cloud_data_.front().StartTime() &&
              control_points_.back().time >
                  point_cloud_data_.front().EndTime()) {
-        for (const auto& point : point_cloud_data_.front().original_cloud) {
+        for (const auto& point : point_cloud_data_.front().points) {
           if (point.position.hasNaN()) {
             accumulated_range_data_in_tracking.returns.push_back(point);
             continue;
@@ -1395,7 +1395,7 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
             point_cloud_data_.front().time);
         const transform::Rigid3f transform =
             (optimized_pose.inverse() * transform_cloud).cast<float>();
-        for (const auto& point : point_cloud_data_.front().original_cloud) {
+        for (const auto& point : point_cloud_data_.front().points) {
           accumulated_range_data_in_tracking.returns.push_back(transform *
                                                                point);
         }
