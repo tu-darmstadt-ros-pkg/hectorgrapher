@@ -26,6 +26,7 @@
 #include "cartographer/mapping/3d/submap_3d.h"
 #include "cartographer/mapping/internal/3d/debug_logger.h"
 #include "cartographer/mapping/internal/3d/imu_integration.h"
+#include "cartographer/mapping/internal/3d/motion_model/motion_model_factory.h"
 #include "cartographer/mapping/internal/3d/state.h"
 #include "cartographer/mapping/internal/motion_filter.h"
 #include "cartographer/mapping/pose_extrapolator.h"
@@ -88,40 +89,6 @@ class OptimizingLocalTrajectoryBuilder {
   void AddControlPoint(common::Time t);
   void AddControlPoint(common::Time t, double dT, double dR, double dt);
 
-  void AddPerScanMatchingResiduals(ceres::Problem& problem);
-  void AddPerPointMatchingResiduals(ceres::Problem& problem);
-  void AddIMUResiduals(ceres::Problem& problem);
-  void AddOdometryResiduals(ceres::Problem& problem);
-
-  struct PointCloudSet {
-    common::Time time;
-    Eigen::Vector3f origin;
-    sensor::TimedPointCloud points;
-    sensor::TimedPointCloud high_resolution_filtered_points;
-    sensor::TimedPointCloud low_resolution_filtered_points;
-    sensor::TimedPointCloud original_cloud;
-    size_t width;
-    float min_point_timestamp;
-    float max_point_timestamp;
-
-    common::Time StartTime() {
-      CHECK(!original_cloud.empty());
-      return time + common::FromSeconds(min_point_timestamp);
-    };
-
-    common::Time EndTime() {
-      CHECK(!original_cloud.empty());
-      return time + common::FromSeconds(max_point_timestamp);
-    };
-  };
-
-  State PredictStateRK4(const State& start_state, common::Time start_time,
-                        common::Time end_time);
-  State PredictStateEuler(const State& start_state, common::Time start_time,
-                          common::Time end_time);
-  State PredictStateOdom(const State& start_state, common::Time start_time,
-                         common::Time end_time);
-
   void RemoveObsoleteSensorData();
 
   std::unique_ptr<MatchingResult> AddAccumulatedRangeData(
@@ -164,6 +131,7 @@ class OptimizingLocalTrajectoryBuilder {
   Eigen::Transform<double, 3, Eigen::Affine> linear_acceleration_calibration_;
   Eigen::Transform<double, 3, Eigen::Affine> angular_velocity_calibration_;
 
+  std::unique_ptr<MotionModel> motion_model_;
   MotionFilter motion_filter_;
   std::unique_ptr<mapping::PoseExtrapolator> extrapolator_;
   std::unique_ptr<ImuIntegrator> imu_integrator_;

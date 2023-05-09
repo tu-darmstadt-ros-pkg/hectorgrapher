@@ -18,6 +18,7 @@
 #define CARTOGRAPHER_SENSOR_IMU_DATA_H_
 
 #include "Eigen/Core"
+#include "Eigen/Geometry"
 #include "cartographer/common/time.h"
 #include "cartographer/sensor/proto/sensor.pb.h"
 
@@ -28,6 +29,7 @@ struct ImuData {
   common::Time time;
   Eigen::Vector3d linear_acceleration;
   Eigen::Vector3d angular_velocity;
+  Eigen::Quaterniond rotation;
 };
 
 // Converts 'imu_data' to a proto::ImuData.

@@ -3,6 +3,9 @@
 #define CARTOGRAPHER_MAPPING_3D_STATE_H_
 
 #include <array>
+
+#include "cartographer/common/time.h"
+#include "cartographer/sensor/point_cloud.h"
 #include "cartographer/transform/rigid_transform.h"
 
 namespace cartographer {
@@ -12,6 +15,7 @@ struct State {
   std::array<double, 3> translation;
   std::array<double, 4> rotation;  // Rotation quaternion as (w, x, y, z).
   std::array<double, 3> velocity;
+  std::array<double, 3> angular_velocity{};
 
   State(const Eigen::Vector3d& translation, const Eigen::Quaterniond& rotation,
         const Eigen::Vector3d& velocity)
@@ -20,8 +24,22 @@ struct State {
         velocity{{velocity.x(), velocity.y(), velocity.z()}} {}
 
   Eigen::Quaterniond ToQuaternion() const {
-    return Eigen::Quaterniond(rotation[0], rotation[1], rotation[2],
-                              rotation[3]);
+    return Eigen::Quaterniond(
+        {rotation[0], rotation[1], rotation[2], rotation[3]});
+  }
+
+  Eigen::Quaterniond Rotation() const { return ToQuaternion(); }
+
+  Eigen::Vector3d Translation() const {
+    return Eigen::Vector3d(translation.data());
+  }
+
+  Eigen::Vector3d AngularVelocity() const {
+    return Eigen::Vector3d(angular_velocity.data());
+  }
+
+  Eigen::Vector3d LinearVelocity() const {
+    return Eigen::Vector3d(velocity.data());
   }
 
   transform::Rigid3d ToRigid() const {
@@ -36,6 +54,28 @@ struct ControlPoint {
   double translation_ratio = 0.0;
   double rotation_ratio = 0.0;
   double time_ratio = 0.0;
+};
+
+struct PointCloudSet {
+  common::Time time;
+  Eigen::Vector3f origin;
+  sensor::TimedPointCloud points;
+  sensor::TimedPointCloud high_resolution_filtered_points;
+  sensor::TimedPointCloud low_resolution_filtered_points;
+  sensor::TimedPointCloud original_cloud;
+  size_t width;
+  float min_point_timestamp;
+  float max_point_timestamp;
+
+  common::Time StartTime() {
+    CHECK(!original_cloud.empty());
+    return time + common::FromSeconds(min_point_timestamp);
+  };
+
+  common::Time EndTime() {
+    CHECK(!original_cloud.empty());
+    return time + common::FromSeconds(max_point_timestamp);
+  };
 };
 
 }  // namespace mapping

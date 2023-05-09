@@ -27,6 +27,8 @@ namespace sensor {
 struct OdometryData {
   common::Time time;
   transform::Rigid3d pose;
+  Eigen::Vector3d linear_velocity;
+  Eigen::Vector3d angular_velocity;
 };
 
 // Converts 'odometry_data' to a proto::OdometryData.
