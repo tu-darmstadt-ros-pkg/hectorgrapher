@@ -63,23 +63,15 @@ OptimizingLocalTrajectoryBuilder::OptimizingLocalTrajectoryBuilder(
       initialization_duration_(common::FromSeconds(
           options.optimizing_local_trajectory_builder_options()
               .initialization_duration())),
-      imu_calibrated_(false),
-      linear_acceleration_calibration_(
-          Eigen::Transform<double, 3, Eigen::Affine>::Identity()),
-      angular_velocity_calibration_(
-          Eigen::Transform<double, 3, Eigen::Affine>::Identity()),
       motion_model_(CreateMotionModel("identity")),  // TODO use config
-      motion_filter_(options.motion_filter_options()),
+      motion_filter_insertion_(options.motion_filter_options()),
       map_update_enabled_(true),
       use_scan_matching_(true),
       num_insertions(0),
       total_insertion_duration(0.0),
       num_optimizations(0),
       total_optimization_duration(0.0),
-      debug_logger_("test_log.csv") {
-  imu_integrator_ = absl::make_unique<ImuIntegrator>(
-      options.optimizing_local_trajectory_builder_options().imu_integrator());
-}
+      debug_logger_("test_log.csv") {}
 
 OptimizingLocalTrajectoryBuilder::~OptimizingLocalTrajectoryBuilder() {}
 
@@ -158,41 +150,16 @@ void OptimizingLocalTrajectoryBuilder::AddControlPoint(common::Time t) {
 void OptimizingLocalTrajectoryBuilder::AddControlPoint(common::Time t,
                                                        double dT, double dR,
                                                        double dt) {
-  if (control_points_.empty()) {
-    if (options_.optimizing_local_trajectory_builder_options()
-            .initialize_map_orientation_with_imu()) {
-      Eigen::Quaterniond g = Eigen::Quaterniond::Identity();
-      LOG(INFO) << "TODO estimate direction of gravity: g "
-                << g.vec().transpose();
-      control_points_.push_back(ControlPoint{
-          t, State(Eigen::Vector3d::Zero(), g, Eigen::Vector3d::Zero()), dT, dR,
-          dt});
-    } else {
-      control_points_.push_back(ControlPoint{
-          t,
-          State(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(),
-                Eigen::Vector3d::Zero()),
-          dT, dR, dt});
-    }
-  } else {
-    if (active_submaps_.submaps().empty()) {
-      control_points_.push_back(
-          ControlPoint{t, control_points_.back().state, dT, dR, dt});
-    } else {
-      control_points_.push_back(
-          ControlPoint{t,
-                       PredictState(control_points_.back().state,
-                                    control_points_.back().time, t),
-                       dT, dR, dt});
-    }
-  }
+  CHECK(motion_model_->isInitialized());
+  CHECK(motion_model_->HasDataUntil(t));
+  control_points_.push_back(
+      ControlPoint{t, motion_model_->ExtrapolateState(t), dT, dR, dt});
 }
 
 void OptimizingLocalTrajectoryBuilder::RemoveObsoleteSensorData() {
   if (control_points_.empty()) {
     return;
   }
-
   while (ct_window_horizon_ <
              control_points_.back().time - control_points_.front().time &&
          std::next(control_points_.begin())->time <
@@ -201,16 +168,6 @@ void OptimizingLocalTrajectoryBuilder::RemoveObsoleteSensorData() {
                      point_cloud_data_.front().original_cloud.front().time)) {
     debug_logger_.AddEntry(control_points_.front());
     control_points_.pop_front();
-  }
-
-  while (imu_data_.size() > 1 &&
-      (imu_data_[1].time <= control_points_.front().time)) {
-    imu_data_.pop_front();
-  }
-
-  while (odometer_data_.size() > 1 &&
-         (odometer_data_[1].time <= control_points_.front().time)) {
-    odometer_data_.pop_front();
   }
 }
 
@@ -254,23 +211,13 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
     return nullptr;
   }
 
-  // Calibrate IMU
-  if (!imu_calibrated_ &&
-      options_.optimizing_local_trajectory_builder_options()
-          .calibrate_imu()) {
-    CalibrateIMU(imu_data_, gravity_constant_,
-                 linear_acceleration_calibration_,
-                 angular_velocity_calibration_);
-    imu_calibrated_ = true;
-  }
-
   // Add control points
   bool added_control_point = false;
   switch (options_.optimizing_local_trajectory_builder_options()
               .control_point_sampling()) {
     case proto::CONSTANT: {
-      while (control_points_.back().time + ct_window_rate_ <
-          odometer_data_.back().time) {
+      while (motion_model_->HasDataUntil(control_points_.back().time +
+                                         ct_window_rate_)) {
         AddControlPoint(control_points_.back().time + ct_window_rate_);
         added_control_point = true;
       }
@@ -287,51 +234,22 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
       break;
     }
     case proto::ADAPTIVE: {
-      if (odometer_data_.size() > 1) {
-        const double max_delta_translation =
-            options_.optimizing_local_trajectory_builder_options()
-                .sampling_max_delta_translation();
-        const double max_delta_rotation =
-            options_.optimizing_local_trajectory_builder_options()
-                .sampling_max_delta_rotation();
-        const double max_delta_time =
-            options_.optimizing_local_trajectory_builder_options()
-                .sampling_max_delta_time();
-        const double min_delta_time =
-            options_.optimizing_local_trajectory_builder_options()
-                .sampling_min_delta_time();
+      LOG(ERROR) << "ADAPTIVE sampling scheme not implemented";
+      // TOOD sample control points based on motion model
 
-        transform::TransformInterpolationBuffer interpolation_buffer;
-        for (const auto& odometer_data : odometer_data_) {
-          interpolation_buffer.Push(odometer_data.time, odometer_data.pose);
-        }
-        common::Time candidate_time = control_points_.back().time;
-        while (candidate_time < interpolation_buffer.latest_time()) {
-          double translation_ratio = 0.0;
-          double rotation_ratio = 0.0;
-          double time_ratio = 0.0;
-          candidate_time = interpolation_buffer.LookupUntilDelta(
-              control_points_.back().time, max_delta_translation,
-              max_delta_rotation, max_delta_time, translation_ratio,
-              rotation_ratio, time_ratio);
-          if (common::ToSeconds(candidate_time -
-              control_points_.back().time) <
-              min_delta_time) {
-            candidate_time = control_points_.back().time +
-                common::FromSeconds(min_delta_time);
-          }
-          if (candidate_time < interpolation_buffer.latest_time()) {
-            if (!control_points_.empty()) {
-//              LOG(INFO) << "Add CP "
-//                        << common::ToSeconds(candidate_time -
-//                                             control_points_.back().time);
-            }
-            AddControlPoint(candidate_time, translation_ratio, rotation_ratio,
-                            time_ratio);
-            added_control_point = true;
-          }
-        }
-      }
+      //      const double max_delta_translation =
+      //          options_.optimizing_local_trajectory_builder_options()
+      //              .sampling_max_delta_translation();
+      //      const double max_delta_rotation =
+      //          options_.optimizing_local_trajectory_builder_options()
+      //              .sampling_max_delta_rotation();
+      //      const double max_delta_time =
+      //          options_.optimizing_local_trajectory_builder_options()
+      //              .sampling_max_delta_time();
+      //      const double min_delta_time =
+      //          options_.optimizing_local_trajectory_builder_options()
+      //              .sampling_min_delta_time();
+
       break;
     }
     default:
@@ -358,9 +276,9 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
     // We assume the map is always aligned with the direction of gravity
     CHECK(matching_submap->local_pose().inverse().rotation().isApprox(
         Eigen::Quaterniond::Identity(), 1e-8));
-    // We transform the states in 'control_points_' in place to be in the
-    // submap frame as expected by the OccupiedSpaceCostFunctor. This is
-    // reverted after solving the optimization problem.
+    // We transform the states in 'control_points_' in place to be in the submap
+    // frame as expected by the CostFunctor. This is reverted after solving the
+    // optimization problem.
     TransformStates(matching_submap->local_pose().inverse());
 
     ScanMatchingOptimizationProblem matching_problem(options_);
@@ -371,8 +289,6 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
                              &matching_submap->high_resolution_hybrid_grid()),
                          dynamic_cast<const HybridGridTSDF*>(
                              &matching_submap->low_resolution_hybrid_grid())};
-        //        tsdf_pyramid_ = {dynamic_cast<const HybridGridTSDF *>(
-        //                             &matching_submap->high_resolution_hybrid_grid())};
       }
       if (options_.optimizing_local_trajectory_builder_options()
               .use_per_point_unwarping()) {
@@ -383,10 +299,6 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
             tsdf_pyramid_, control_points_);
       }
     }
-    matching_problem.AddIMUResiduals(
-        imu_data_, linear_acceleration_calibration_,
-        angular_velocity_calibration_, imu_integrator_, control_points_);
-    matching_problem.AddOdometryResiduals(odometer_data_, control_points_);
 
     ceres::Solver::Summary summary;
     matching_problem.Solve(control_points_, &summary);
@@ -400,17 +312,15 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
   }
 
   num_accumulated_ = 0;
-  const transform::Rigid3d optimized_pose =
-      control_points_.front().state.ToRigid();
   motion_model_->UpdateState(control_points_.back().state,
                              control_points_.back().time);
+  const transform::Rigid3d optimized_pose =
+      control_points_.front().state.ToRigid();
   const common::Time time_optimized_pose = control_points_.front().time;
   sensor::TimedRangeData accumulated_range_data_in_tracking = {
       Eigen::Vector3f::Zero(), {}, {}, point_cloud_data_.front().width};
 
   if (active_submaps_.submaps().empty()) {
-    // To initialize the empty map we add all available range data assuming
-    // zero motion.
     auto control_points_iterator = control_points_.begin();
     for (auto& point_cloud_set : point_cloud_data_) {
       if (point_cloud_set.time < control_points_.back().time) {
@@ -587,7 +497,7 @@ OptimizingLocalTrajectoryBuilder::InsertIntoSubmap(
     const sensor::TimedPointCloud& low_resolution_point_cloud_in_tracking,
     const transform::Rigid3d& pose_estimate,
     const Eigen::Quaterniond& gravity_alignment) {
-  if (motion_filter_.IsSimilar(time, pose_estimate)) {
+  if (motion_filter_insertion_.IsSimilar(time, pose_estimate)) {
     return nullptr;
   }
   const Eigen::VectorXf rotational_scan_matcher_histogram_in_gravity =
@@ -625,12 +535,6 @@ OptimizingLocalTrajectoryBuilder::InsertIntoSubmap(
               rotational_scan_matcher_histogram_in_gravity,
               pose_estimate}),
       std::move(insertion_submaps)});
-}
-
-State OptimizingLocalTrajectoryBuilder::PredictState(
-    const State& start_state, const common::Time start_time,
-    const common::Time end_time) {
-  return motion_model_->ExtrapolateState(end_time);
 }
 
 void OptimizingLocalTrajectoryBuilder::RegisterMetrics(

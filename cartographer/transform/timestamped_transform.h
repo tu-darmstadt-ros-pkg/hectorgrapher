@@ -53,6 +53,8 @@ transform::Rigid3<T> InterpolateTransform(const transform::Rigid3<T>& start,
                                           const common::Time time_start,
                                           const common::Time time_end,
                                           const common::Time time) {
+  if (time == time_start) return start;
+  if (time == time_end) return end;
   CHECK_LE(time_start, time);
   CHECK_GE(time_end, time);
   const double duration = common::ToSeconds(time_end - time_start);

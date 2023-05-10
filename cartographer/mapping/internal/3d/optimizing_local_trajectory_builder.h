@@ -82,9 +82,6 @@ class OptimizingLocalTrajectoryBuilder {
   void SetMapUpdateEnabled(bool map_update_enabled);
   void UseScanMatching(bool use_scan_matching);
 
-  State PredictState(const State& start_state, common::Time start_time,
-                     common::Time end_time);
-
  private:
   void AddControlPoint(common::Time t);
   void AddControlPoint(common::Time t, double dT, double dR, double dt);
@@ -118,23 +115,14 @@ class OptimizingLocalTrajectoryBuilder {
   common::Time initial_data_time_;
 
   std::deque<ControlPoint> control_points_;
-  double gravity_constant_ = 9.80665;
-  std::deque<sensor::ImuData> imu_data_;
-  std::deque<sensor::OdometryData> odometer_data_;
   std::deque<PointCloudSet> point_cloud_data_;
 
   common::Duration ct_window_horizon_;
   common::Duration ct_window_rate_;
   common::Duration initialization_duration_;
 
-  bool imu_calibrated_;
-  Eigen::Transform<double, 3, Eigen::Affine> linear_acceleration_calibration_;
-  Eigen::Transform<double, 3, Eigen::Affine> angular_velocity_calibration_;
-
   std::unique_ptr<MotionModel> motion_model_;
-  MotionFilter motion_filter_;
-  std::unique_ptr<mapping::PoseExtrapolator> extrapolator_;
-  std::unique_ptr<ImuIntegrator> imu_integrator_;
+  MotionFilter motion_filter_insertion_;
   std::vector<const mapping::HybridGridTSDF*> tsdf_pyramid_;
   bool map_update_enabled_;
   bool use_scan_matching_;
