@@ -51,8 +51,6 @@ OptimizingLocalTrajectoryBuilder::OptimizingLocalTrajectoryBuilder(
       ceres_solver_options_(common::CreateCeresSolverOptions(
           options.ceres_scan_matcher_options().ceres_solver_options())),
       active_submaps_(options.submaps_options()),
-      num_accumulated_(0),
-      total_num_accumulated_(0),
       initial_data_time_(common::FromUniversal(0)),
       ct_window_horizon_(common::FromSeconds(
           options.optimizing_local_trajectory_builder_options()
@@ -67,10 +65,6 @@ OptimizingLocalTrajectoryBuilder::OptimizingLocalTrajectoryBuilder(
       motion_filter_insertion_(options.motion_filter_options()),
       map_update_enabled_(true),
       use_scan_matching_(true),
-      num_insertions(0),
-      total_insertion_duration(0.0),
-      num_optimizations(0),
-      total_optimization_duration(0.0),
       debug_logger_("test_log.csv") {}
 
 OptimizingLocalTrajectoryBuilder::~OptimizingLocalTrajectoryBuilder() {}
@@ -91,6 +85,7 @@ OptimizingLocalTrajectoryBuilder::AddRangeData(
     const sensor::TimedPointCloudData& range_data_in_tracking) {
   CHECK_GT(range_data_in_tracking.ranges.size(), 0);
 
+  watches_.GetWatch("add_range_data_1").Start();
   PointCloudSet point_cloud_set;
   point_cloud_set.time = range_data_in_tracking.time;
   point_cloud_set.origin = range_data_in_tracking.origin;
@@ -98,6 +93,8 @@ OptimizingLocalTrajectoryBuilder::AddRangeData(
   point_cloud_set.width = range_data_in_tracking.width;
   point_cloud_set.min_point_timestamp = std::numeric_limits<float>::max();
   point_cloud_set.max_point_timestamp = std::numeric_limits<float>::min();
+  watches_.GetWatch("add_range_data_1").Stop();
+  watches_.GetWatch("add_range_data_2").Start();
   for (const auto& hit : range_data_in_tracking.ranges) {
     if (hit.position.hasNaN()) continue;
     const Eigen::Vector3f delta = hit.position - range_data_in_tracking.origin;
@@ -113,6 +110,8 @@ OptimizingLocalTrajectoryBuilder::AddRangeData(
     }
   }
 
+  watches_.GetWatch("add_range_data_2").Stop();
+  watches_.GetWatch("add_range_data_3").Start();
   auto high_resolution_options =
       options_.high_resolution_adaptive_voxel_filter_options();
   high_resolution_options.set_min_num_points(
@@ -122,6 +121,8 @@ OptimizingLocalTrajectoryBuilder::AddRangeData(
       high_resolution_options);
   point_cloud_set.high_resolution_filtered_points =
       high_resolution_adaptive_voxel_filter.Filter(point_cloud_set.points);
+  //  LOG(INFO)<<"high res "<<
+  //  point_cloud_set.high_resolution_filtered_points.size()<<"\t"<<double(point_cloud_set.high_resolution_filtered_points.size())/double(point_cloud_set.points.size());
 
   auto low_resolution_options =
       options_.low_resolution_adaptive_voxel_filter_options();
@@ -132,10 +133,12 @@ OptimizingLocalTrajectoryBuilder::AddRangeData(
       low_resolution_options);
   point_cloud_set.low_resolution_filtered_points =
       low_resolution_adaptive_voxel_filter.Filter(point_cloud_set.points);
+  //  LOG(INFO)<<"low res "<<
+  //  point_cloud_set.low_resolution_filtered_points.size()<<"\t"<<double(point_cloud_set.low_resolution_filtered_points.size())/double(point_cloud_set.high_resolution_filtered_points.size());
+  watches_.GetWatch("add_range_data_3").Stop();
+  watches_.GetWatch("add_range_data_4").Start();
   point_cloud_data_.push_back(point_cloud_set);
-
-  ++num_accumulated_;
-  ++total_num_accumulated_;
+  watches_.GetWatch("add_range_data_4").Stop();
 
   return MaybeOptimize(range_data_in_tracking.time);
 }
@@ -271,6 +274,7 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
   //  control_points_.back().time);
 
   if (!active_submaps_.submaps().empty()) {
+    watches_.GetWatch("optimization").Start();
     std::shared_ptr<const Submap3D> matching_submap =
         active_submaps_.submaps().front();
     // We assume the map is always aligned with the direction of gravity
@@ -301,17 +305,16 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
     }
 
     ceres::Solver::Summary summary;
+
     matching_problem.Solve(control_points_, &summary);
-    ++num_optimizations;
-    total_optimization_duration += summary.total_time_in_seconds;
     PrintLoggingData();
     //    LOG(INFO) << summary.FullReport();
     // The optimized states in 'control_points_' are in the submap frame and
     // we transform them in place to be in the local SLAM frame again.
     TransformStates(matching_submap->local_pose());
+    watches_.GetWatch("optimization").Stop();
   }
 
-  num_accumulated_ = 0;
   motion_model_->UpdateState(control_points_.back().state,
                              control_points_.back().time);
   const transform::Rigid3d optimized_pose =
@@ -320,6 +323,7 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
   sensor::TimedRangeData accumulated_range_data_in_tracking = {
       Eigen::Vector3f::Zero(), {}, {}, point_cloud_data_.front().width};
 
+  watches_.GetWatch("unwarp").Start();
   if (active_submaps_.submaps().empty()) {
     auto control_points_iterator = control_points_.begin();
     for (auto& point_cloud_set : point_cloud_data_) {
@@ -425,6 +429,7 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
       }
     }
   }
+  watches_.GetWatch("unwarp").Stop();
 
   RemoveObsoleteSensorData();
 
@@ -441,12 +446,14 @@ OptimizingLocalTrajectoryBuilder::AddAccumulatedRangeData(
     return nullptr;
   }
 
+  watches_.GetWatch("voxel_filter").Start();
   sensor::TimedRangeData filtered_range_data_in_tracking = {
       range_data_in_tracking.origin,
       sensor::VoxelFilter(options_.voxel_filter_size())
           .Filter(range_data_in_tracking.returns),
       sensor::VoxelFilter(options_.voxel_filter_size())
           .Filter(range_data_in_tracking.misses)};
+  watches_.GetWatch("voxel_filter").Stop();
 
   if (filtered_range_data_in_tracking.returns.empty()) {
     //    LOG(WARNING) << "Dropped empty range data.";
@@ -454,6 +461,8 @@ OptimizingLocalTrajectoryBuilder::AddAccumulatedRangeData(
   }
 //  sensor::RangeData filtered_range_data_in_local = sensor::TransformRangeData(
 //      filtered_range_data_in_tracking, optimized_pose.cast<float>());
+
+  watches_.GetWatch("adaptive_voxel_filter").Start();
   sensor::TimedRangeData filtered_range_data_in_local =
       sensor::TransformTimedRangeData(range_data_in_tracking,
                                       optimized_pose.cast<float>());
@@ -475,6 +484,7 @@ OptimizingLocalTrajectoryBuilder::AddAccumulatedRangeData(
     LOG(WARNING) << "Dropped empty low resolution point cloud data.";
     return nullptr;
   }
+  watches_.GetWatch("adaptive_voxel_filter").Stop();
 
   const Eigen::Quaterniond gravity_alignment = optimized_pose.rotation();
   std::unique_ptr<InsertionResult> insertion_result = InsertIntoSubmap(
@@ -500,6 +510,8 @@ OptimizingLocalTrajectoryBuilder::InsertIntoSubmap(
   if (motion_filter_insertion_.IsSimilar(time, pose_estimate)) {
     return nullptr;
   }
+
+  watches_.GetWatch("compute_histogram").Start();
   const Eigen::VectorXf rotational_scan_matcher_histogram_in_gravity =
       scan_matching::RotationalScanMatcher::ComputeHistogram(
           sensor::ToPointCloud(sensor::TransformTimedPointCloud(
@@ -512,17 +524,16 @@ OptimizingLocalTrajectoryBuilder::InsertIntoSubmap(
   if (!map_update_enabled_) {
     LOG(WARNING) << "Map Update Disabled!";
   }
+  watches_.GetWatch("compute_histogram").Stop();
 
-  double t_before_insert = common::GetThreadCpuTimeSeconds();
+  watches_.GetWatch("map_insertion").Start();
   std::vector<std::shared_ptr<const mapping::Submap3D>> insertion_submaps =
       map_update_enabled_
           ? active_submaps_.InsertData(
                 filtered_range_data_in_local, local_from_gravity_aligned,
                 rotational_scan_matcher_histogram_in_gravity, time)
           : active_submaps_.submaps();
-  double t_after_insert = common::GetThreadCpuTimeSeconds();
-  ++num_insertions;
-  total_insertion_duration += t_after_insert - t_before_insert;
+  watches_.GetWatch("map_insertion").Stop();
 
   return absl::make_unique<InsertionResult>(InsertionResult{
       std::make_shared<const mapping::TrajectoryNode::Data>(
@@ -553,16 +564,7 @@ void OptimizingLocalTrajectoryBuilder::UseScanMatching(bool use_scan_matching) {
 }
 
 void OptimizingLocalTrajectoryBuilder::PrintLoggingData() {
-  if (num_optimizations > 0) {
-    LOG_EVERY_N(INFO, 100) << "Optimization - Avg: "
-                           << total_optimization_duration / num_optimizations
-                           << "\t total: " << total_optimization_duration;
-  }
-  if (num_insertions > 0) {
-    LOG_EVERY_N(INFO, 100) << "Insertion - Avg: "
-                           << total_insertion_duration / num_insertions
-                           << "\t total: " << total_insertion_duration;
-  }
+  watches_.PrintAllEveryN(100);
 }
 
 }  // namespace mapping

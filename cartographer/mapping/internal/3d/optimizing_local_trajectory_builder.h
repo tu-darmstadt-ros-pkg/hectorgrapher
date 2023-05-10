@@ -28,6 +28,7 @@
 #include "cartographer/mapping/internal/3d/imu_integration.h"
 #include "cartographer/mapping/internal/3d/motion_model/motion_model_factory.h"
 #include "cartographer/mapping/internal/3d/state.h"
+#include "cartographer/mapping/internal/3d/stop_watch.h"
 #include "cartographer/mapping/internal/motion_filter.h"
 #include "cartographer/mapping/pose_extrapolator.h"
 #include "cartographer/metrics/family_factory.h"
@@ -110,8 +111,6 @@ class OptimizingLocalTrajectoryBuilder {
   const proto::LocalTrajectoryBuilderOptions3D options_;
   const ceres::Solver::Options ceres_solver_options_;
   mapping::ActiveSubmaps3D active_submaps_;
-  int num_accumulated_;
-  int total_num_accumulated_;
   common::Time initial_data_time_;
 
   std::deque<ControlPoint> control_points_;
@@ -128,10 +127,7 @@ class OptimizingLocalTrajectoryBuilder {
   bool use_scan_matching_;
 
   //Logging
-  unsigned int num_insertions;
-  double total_insertion_duration;
-  unsigned int num_optimizations;
-  double total_optimization_duration;
+  StopWatchManger watches_;
   DebugLogger debug_logger_;
 };
 
