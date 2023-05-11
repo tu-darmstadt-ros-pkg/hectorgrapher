@@ -61,7 +61,6 @@ struct PointCloudSet {
   Eigen::Vector3f origin;
   sensor::TimedPointCloud points;
   sensor::TimedPointCloud high_resolution_filtered_points;
-  sensor::TimedPointCloud low_resolution_filtered_points;
   sensor::TimedPointCloud original_cloud;
   size_t width;
   float min_point_timestamp;

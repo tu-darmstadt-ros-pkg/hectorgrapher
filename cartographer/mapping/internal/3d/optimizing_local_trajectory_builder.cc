@@ -39,6 +39,7 @@
 #include "cartographer/mapping/proto/scan_matching/ceres_scan_matcher_options_3d.pb.h"
 #include "cartographer/transform/transform.h"
 #include "cartographer/transform/transform_interpolation_buffer.h"
+#include "cartographer/sensor/internal/sampling_filter.h"
 #include "glog/logging.h"
 
 namespace cartographer {
@@ -84,8 +85,8 @@ OptimizingLocalTrajectoryBuilder::AddRangeData(
     const std::string& sensor_id,
     const sensor::TimedPointCloudData& range_data_in_tracking) {
   CHECK_GT(range_data_in_tracking.ranges.size(), 0);
-
-  watches_.GetWatch("add_range_data_1").Start();
+  watches_.GetWatch("total").Start();
+  watches_.GetWatch("add_range_data").Start();
   PointCloudSet point_cloud_set;
   point_cloud_set.time = range_data_in_tracking.time;
   point_cloud_set.origin = range_data_in_tracking.origin;
@@ -93,8 +94,6 @@ OptimizingLocalTrajectoryBuilder::AddRangeData(
   point_cloud_set.width = range_data_in_tracking.width;
   point_cloud_set.min_point_timestamp = std::numeric_limits<float>::max();
   point_cloud_set.max_point_timestamp = std::numeric_limits<float>::min();
-  watches_.GetWatch("add_range_data_1").Stop();
-  watches_.GetWatch("add_range_data_2").Start();
   for (const auto& hit : range_data_in_tracking.ranges) {
     if (hit.position.hasNaN()) continue;
     const Eigen::Vector3f delta = hit.position - range_data_in_tracking.origin;
@@ -109,38 +108,17 @@ OptimizingLocalTrajectoryBuilder::AddRangeData(
       }
     }
   }
-
-  watches_.GetWatch("add_range_data_2").Stop();
-  watches_.GetWatch("add_range_data_3").Start();
-  auto high_resolution_options =
-      options_.high_resolution_adaptive_voxel_filter_options();
-  high_resolution_options.set_min_num_points(
-      high_resolution_options.min_num_points() /
-      options_.num_accumulated_range_data());
-  sensor::AdaptiveVoxelFilter high_resolution_adaptive_voxel_filter(
-      high_resolution_options);
+  sensor::VoxelFilter high_resolution_voxel_filter(
+      options_.high_resolution_adaptive_voxel_filter_options().max_length());
   point_cloud_set.high_resolution_filtered_points =
-      high_resolution_adaptive_voxel_filter.Filter(point_cloud_set.points);
-  //  LOG(INFO)<<"high res "<<
-  //  point_cloud_set.high_resolution_filtered_points.size()<<"\t"<<double(point_cloud_set.high_resolution_filtered_points.size())/double(point_cloud_set.points.size());
-
-  auto low_resolution_options =
-      options_.low_resolution_adaptive_voxel_filter_options();
-  low_resolution_options.set_min_num_points(
-      low_resolution_options.min_num_points() /
-      options_.num_accumulated_range_data());
-  sensor::AdaptiveVoxelFilter low_resolution_adaptive_voxel_filter(
-      low_resolution_options);
-  point_cloud_set.low_resolution_filtered_points =
-      low_resolution_adaptive_voxel_filter.Filter(point_cloud_set.points);
-  //  LOG(INFO)<<"low res "<<
-  //  point_cloud_set.low_resolution_filtered_points.size()<<"\t"<<double(point_cloud_set.low_resolution_filtered_points.size())/double(point_cloud_set.high_resolution_filtered_points.size());
-  watches_.GetWatch("add_range_data_3").Stop();
-  watches_.GetWatch("add_range_data_4").Start();
+      high_resolution_voxel_filter.Filter(point_cloud_set.points);
   point_cloud_data_.push_back(point_cloud_set);
-  watches_.GetWatch("add_range_data_4").Stop();
+  watches_.GetWatch("add_range_data").Stop();
 
-  return MaybeOptimize(range_data_in_tracking.time);
+  auto res = MaybeOptimize(range_data_in_tracking.time);
+  watches_.GetWatch("total").Stop();
+  PrintLoggingData();
+  return res;
 }
 
 void OptimizingLocalTrajectoryBuilder::AddControlPoint(common::Time t) {
@@ -307,7 +285,6 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
     ceres::Solver::Summary summary;
 
     matching_problem.Solve(control_points_, &summary);
-    PrintLoggingData();
     //    LOG(INFO) << summary.FullReport();
     // The optimized states in 'control_points_' are in the submap frame and
     // we transform them in place to be in the local SLAM frame again.
@@ -431,7 +408,9 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
   }
   watches_.GetWatch("unwarp").Stop();
 
+  watches_.GetWatch("RemoveObsoleteSensorData").Start();
   RemoveObsoleteSensorData();
+  watches_.GetWatch("RemoveObsoleteSensorData").Stop();
 
   return AddAccumulatedRangeData(time_optimized_pose, optimized_pose,
                                  accumulated_range_data_in_tracking);
@@ -473,6 +452,7 @@ OptimizingLocalTrajectoryBuilder::AddAccumulatedRangeData(
       adaptive_voxel_filter.Filter(filtered_range_data_in_tracking.returns);
   if (high_resolution_point_cloud_in_tracking.empty()) {
     LOG(WARNING) << "Dropped empty high resolution point cloud data.";
+    watches_.GetWatch("adaptive_voxel_filter").Stop();
     return nullptr;
   }
   sensor::AdaptiveVoxelFilter low_resolution_adaptive_voxel_filter(
@@ -482,6 +462,7 @@ OptimizingLocalTrajectoryBuilder::AddAccumulatedRangeData(
           filtered_range_data_in_tracking.returns);
   if (low_resolution_point_cloud_in_tracking.empty()) {
     LOG(WARNING) << "Dropped empty low resolution point cloud data.";
+    watches_.GetWatch("adaptive_voxel_filter").Stop();
     return nullptr;
   }
   watches_.GetWatch("adaptive_voxel_filter").Stop();
@@ -564,7 +545,7 @@ void OptimizingLocalTrajectoryBuilder::UseScanMatching(bool use_scan_matching) {
 }
 
 void OptimizingLocalTrajectoryBuilder::PrintLoggingData() {
-  watches_.PrintAllEveryN(100);
+  watches_.PrintAllEveryN(500);
 }
 
 }  // namespace mapping
