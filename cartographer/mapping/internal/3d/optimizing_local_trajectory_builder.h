@@ -114,7 +114,8 @@ class OptimizingLocalTrajectoryBuilder {
   common::Time initial_data_time_;
 
   std::deque<ControlPoint> control_points_;
-  std::deque<PointCloudSet> point_cloud_data_;
+  std::deque<PointCloudSet> point_cloud_active_data_;
+  std::deque<PointCloudSet> point_cloud_queue_;
 
   common::Duration ct_window_horizon_;
   common::Duration ct_window_rate_;

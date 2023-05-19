@@ -90,16 +90,16 @@ OptimizingLocalTrajectoryBuilder::AddRangeData(
   PointCloudSet point_cloud_set;
   point_cloud_set.time = range_data_in_tracking.time;
   point_cloud_set.origin = range_data_in_tracking.origin;
-  point_cloud_set.original_cloud = range_data_in_tracking.ranges;
   point_cloud_set.width = range_data_in_tracking.width;
   point_cloud_set.min_point_timestamp = std::numeric_limits<float>::max();
   point_cloud_set.max_point_timestamp = std::numeric_limits<float>::min();
+  sensor::TimedPointCloud pre_filtered_cloud;
   for (const auto& hit : range_data_in_tracking.ranges) {
     if (hit.position.hasNaN()) continue;
     const Eigen::Vector3f delta = hit.position - range_data_in_tracking.origin;
     const float range = delta.norm();
     if (range >= options_.min_range() && range <= options_.max_range()) {
-      point_cloud_set.points.push_back(hit);
+      pre_filtered_cloud.push_back(hit);
       if (hit.time > point_cloud_set.max_point_timestamp) {
         point_cloud_set.max_point_timestamp = hit.time;
       }
@@ -108,11 +108,25 @@ OptimizingLocalTrajectoryBuilder::AddRangeData(
       }
     }
   }
+
+  //  float pre_length = float(options_.submaps_options().high_resolution()
+  //  / 2.0); sensor::TimedPointCloud pre_voxel_filtered_cloud;
+  //  sensor::VoxelFilter pre_voxel_filter(pre_length);
+  //  pre_voxel_filtered_cloud =
+  //      pre_voxel_filter.Filter(pre_filtered_cloud);
   sensor::VoxelFilter high_resolution_voxel_filter(
+      options_.submaps_options().high_resolution());
+  point_cloud_set.high_resolution_cloud =
+      high_resolution_voxel_filter.Filter(pre_filtered_cloud);
+  sensor::VoxelFilter low_resolution_voxel_filter(
+      options_.submaps_options().low_resolution());
+  point_cloud_set.low_resolution_cloud =
+      low_resolution_voxel_filter.Filter(pre_filtered_cloud);
+  sensor::VoxelFilter scan_cloud_voxel_filter(
       options_.high_resolution_adaptive_voxel_filter_options().max_length());
-  point_cloud_set.high_resolution_filtered_points =
-      high_resolution_voxel_filter.Filter(point_cloud_set.points);
-  point_cloud_data_.push_back(point_cloud_set);
+  point_cloud_set.scan_matching_cloud =
+      scan_cloud_voxel_filter.Filter(pre_filtered_cloud);
+  point_cloud_queue_.push_back(point_cloud_set);
   watches_.GetWatch("add_range_data").Stop();
 
   auto res = MaybeOptimize(range_data_in_tracking.time);
@@ -144,9 +158,9 @@ void OptimizingLocalTrajectoryBuilder::RemoveObsoleteSensorData() {
   while (ct_window_horizon_ <
              control_points_.back().time - control_points_.front().time &&
          std::next(control_points_.begin())->time <
-             point_cloud_data_.front().time +
+             point_cloud_active_data_.front().time +
                  common::FromSeconds(
-                     point_cloud_data_.front().original_cloud.front().time)) {
+                     point_cloud_active_data_.front().min_point_timestamp)) {
     debug_logger_.AddEntry(control_points_.front());
     control_points_.pop_front();
   }
@@ -171,16 +185,19 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
   // Check for initialization, if necessary and possible initialize
   if (initial_data_time_ == common::FromUniversal(0)) {
     bool initialized = false;
-    while (!point_cloud_data_.empty() &&
-           motion_model_->HasDataUntil(point_cloud_data_.front().EndTime()) &&
+    while (!point_cloud_queue_.empty() &&
+           motion_model_->HasDataUntil(point_cloud_queue_.front().EndTime()) &&
            !initialized) {
-      if (motion_model_->HasDataBefore(point_cloud_data_.front().StartTime())) {
-        initial_data_time_ = point_cloud_data_.front().time;
-        motion_model_->initialize(point_cloud_data_.front().time);
+      if (motion_model_->HasDataBefore(
+              point_cloud_queue_.front().StartTime())) {
+        initial_data_time_ = point_cloud_queue_.front().time;
+        motion_model_->initialize(point_cloud_queue_.front().time);
         initialized = true;
-        AddControlPoint(point_cloud_data_.front().time);
+        AddControlPoint(point_cloud_queue_.front().time);
+        point_cloud_active_data_.push_back(point_cloud_queue_.front());
+        point_cloud_queue_.pop_front();
       } else {
-        point_cloud_data_.pop_front();
+        point_cloud_queue_.pop_front();
       }
     }
     if (!initialized) return nullptr;
@@ -205,12 +222,12 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
       break;
     }
     case proto::SYNCED_WITH_RANGE_DATA: {
-      for (auto& point_cloud_set : point_cloud_data_) {
-        if ((control_points_.back().time < point_cloud_set.time) &&
-            motion_model_->HasDataUntil(point_cloud_set.EndTime())) {
-          AddControlPoint(point_cloud_set.time);
-          added_control_point = true;
-        }
+      while (!point_cloud_queue_.empty() &&
+             motion_model_->HasDataUntil(point_cloud_queue_.front().time)) {
+        AddControlPoint(point_cloud_queue_.front().time);
+        point_cloud_active_data_.push_back(point_cloud_queue_.front());
+        point_cloud_queue_.pop_front();
+        added_control_point = true;
       }
       break;
     }
@@ -240,16 +257,16 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
     LOG(INFO) << "No control point added.";
     return nullptr;
   }
-  //  LOG(INFO)<<"num control points: "<<control_points_.size();
-  //  LOG(INFO)<<"num clouds points: "<<point_cloud_data_.size();
-  //  for(const auto& cp : control_points_) {
-  //    LOG(INFO)<<"cp dt: "<<common::ToSeconds(cp.time - initial_data_time_);
-  //  }
-  //  for(const auto& pc : point_cloud_data_) {
-  //    LOG(INFO)<<"pc dt: "<<common::ToSeconds(pc.time - initial_data_time_);
-  //  }
-  //  LOG(INFO)<<"dt: "<<common::ToSeconds(point_cloud_data_.back().time -
-  //  control_points_.back().time);
+  //    LOG(INFO)<<"num control points: "<<control_points_.size();
+  //    LOG(INFO)<<"num clouds points: "<<point_cloud_data_.size();
+  //    for(const auto& cp : control_points_) {
+  //      LOG(INFO)<<"cp dt: "<<common::ToSeconds(cp.time - initial_data_time_);
+  //    }
+  //    for(const auto& pc : point_cloud_data_) {
+  //      LOG(INFO)<<"pc dt: "<<common::ToSeconds(pc.time - initial_data_time_);
+  //    }
+  //    LOG(INFO)<<"dt: "<<common::ToSeconds(point_cloud_data_.back().time -
+  //    control_points_.back().time);
 
   if (!active_submaps_.submaps().empty()) {
     watches_.GetWatch("optimization").Start();
@@ -277,7 +294,7 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
         matching_problem.AddPerPointMatchingResiduals();
       } else {
         matching_problem.AddPerScanMatchingResiduals(
-            *active_submaps_.submaps().front(), point_cloud_data_,
+            *active_submaps_.submaps().front(), point_cloud_active_data_,
             tsdf_pyramid_, control_points_);
       }
     }
@@ -298,119 +315,34 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
       control_points_.front().state.ToRigid();
   const common::Time time_optimized_pose = control_points_.front().time;
   sensor::TimedRangeData accumulated_range_data_in_tracking = {
-      Eigen::Vector3f::Zero(), {}, {}, point_cloud_data_.front().width};
+      Eigen::Vector3f::Zero(), {}, {}, point_cloud_active_data_.front().width};
 
   watches_.GetWatch("unwarp").Start();
-  if (active_submaps_.submaps().empty()) {
-    auto control_points_iterator = control_points_.begin();
-    for (auto& point_cloud_set : point_cloud_data_) {
-      if (point_cloud_set.time < control_points_.back().time) {
-        while (control_points_iterator->time <= point_cloud_set.time) {
-          ++control_points_iterator;
-        }
-        CHECK(control_points_iterator != control_points_.begin())
-            << "Delta "
-            << common::ToSeconds(point_cloud_set.time -
-                                 control_points_iterator->time);
-        CHECK(control_points_iterator != control_points_.end());
-        auto transform_cloud = InterpolateTransform(
-            std::prev(control_points_iterator)->state.ToRigid(),
-            control_points_iterator->state.ToRigid(),
-            std::prev(control_points_iterator)->time,
-            control_points_iterator->time, point_cloud_set.time);
-        const transform::Rigid3f transform =
-            (optimized_pose.inverse() * transform_cloud).cast<float>();
-        for (const auto& point : point_cloud_set.original_cloud) {
-          accumulated_range_data_in_tracking.returns.push_back(
-              (transform * point));
-        }
-        accumulated_range_data_in_tracking.origin =
-            (transform * point_cloud_set.origin);
-      }
-    }
-  } else {
+  // unwarp and accumulate
+
+  while (!control_points_.empty()) {
     if (options_.optimizing_local_trajectory_builder_options()
-            .use_per_point_unwarping()) {
-      CHECK(control_points_.front().time <=
-            point_cloud_data_.front().StartTime());
-
-      auto next_control_point = control_points_.begin();
-      bool first_point = true;
-      while (ct_window_horizon_ < control_points_.back().time -
-                                      point_cloud_data_.front().StartTime() &&
-             control_points_.back().time >
-                 point_cloud_data_.front().EndTime()) {
-        for (const auto& point : point_cloud_data_.front().original_cloud) {
-          if (point.position.hasNaN()) {
-            accumulated_range_data_in_tracking.returns.push_back(point);
-            continue;
-          }
-          common::Time point_time =
-              point_cloud_data_.front().time + common::FromSeconds(point.time);
-          while (next_control_point->time <= point_time) {
-            if (std::next(next_control_point) == control_points_.end()) break;
-            next_control_point++;
-          }
-          while (std::prev(next_control_point)->time > point_time) {
-            if (std::prev(next_control_point) == control_points_.begin()) break;
-            next_control_point--;
-          }
-          CHECK(next_control_point != control_points_.begin())
-              << "dt c0-point \t "
-              << common::ToSeconds(next_control_point->time - point_time);
-          CHECK_LE(std::prev(next_control_point)->time, point_time);
-          CHECK_GE(next_control_point->time, point_time);
-
-          auto transform_cloud = InterpolateTransform(
-              std::prev(next_control_point)->state.ToRigid(),
-              next_control_point->state.ToRigid(),
-              std::prev(next_control_point)->time, next_control_point->time,
-              point_time);
-          const transform::Rigid3f transform =
-              (optimized_pose.inverse() * transform_cloud).cast<float>();
-          accumulated_range_data_in_tracking.returns.push_back(transform *
-                                                               point);
-          if (first_point) {
-            accumulated_range_data_in_tracking.origin =
-                (transform * point_cloud_data_.front().origin);
-            first_point = false;
-          }
-        }
-        point_cloud_data_.pop_front();
+            .control_point_sampling() == proto::SYNCED_WITH_RANGE_DATA) {
+      CHECK(control_points_.front().time ==
+            point_cloud_active_data_.front().time);
+      auto transform_cloud = control_points_.front().state.ToRigid();
+      const transform::Rigid3f transform =
+          (optimized_pose.inverse() * transform_cloud).cast<float>();
+      for (const auto& point :
+           point_cloud_active_data_.front().high_resolution_cloud) {
+        accumulated_range_data_in_tracking.returns.push_back(
+            (transform * point));
       }
-    } else {
-      CHECK(control_points_.front().time <= point_cloud_data_.front().time);
-      while (ct_window_horizon_ - ct_window_rate_ <
-             control_points_.back().time - point_cloud_data_.front().time) {
-        while (std::next(control_points_.begin())->time <
-               point_cloud_data_.front().time) {
-          debug_logger_.AddEntry(control_points_.front());
-          control_points_.pop_front();
-        }
-        CHECK(std::next(control_points_.begin()) != control_points_.end());
-        auto transform_cloud = InterpolateTransform(
-            control_points_.begin()->state.ToRigid(),
-            std::next(control_points_.begin())->state.ToRigid(),
-            control_points_.begin()->time,
-            std::next(control_points_.begin())->time,
-            point_cloud_data_.front().time);
-        const transform::Rigid3f transform =
-            (optimized_pose.inverse() * transform_cloud).cast<float>();
-        for (const auto& point : point_cloud_data_.front().original_cloud) {
-          accumulated_range_data_in_tracking.returns.push_back(transform *
-                                                               point);
-        }
-        accumulated_range_data_in_tracking.origin =
-            (transform * point_cloud_data_.front().origin);
-        point_cloud_data_.pop_front();
-      }
+      accumulated_range_data_in_tracking.origin =
+          (transform * point_cloud_active_data_.front().origin);
     }
+    control_points_.pop_front();
+    point_cloud_active_data_.pop_front();
   }
+
   watches_.GetWatch("unwarp").Stop();
 
-  watches_.GetWatch("RemoveObsoleteSensorData").Start();
   RemoveObsoleteSensorData();
-  watches_.GetWatch("RemoveObsoleteSensorData").Stop();
 
   return AddAccumulatedRangeData(time_optimized_pose, optimized_pose,
                                  accumulated_range_data_in_tracking);
@@ -430,8 +362,7 @@ OptimizingLocalTrajectoryBuilder::AddAccumulatedRangeData(
       range_data_in_tracking.origin,
       sensor::VoxelFilter(options_.voxel_filter_size())
           .Filter(range_data_in_tracking.returns),
-      sensor::VoxelFilter(options_.voxel_filter_size())
-          .Filter(range_data_in_tracking.misses)};
+      {}};
   watches_.GetWatch("voxel_filter").Stop();
 
   if (filtered_range_data_in_tracking.returns.empty()) {

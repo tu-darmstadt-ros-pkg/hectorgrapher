@@ -34,15 +34,15 @@ ScanMatchingOptimizationProblem::ScanMatchingOptimizationProblem(
 
 void ScanMatchingOptimizationProblem::Solve(
     std::deque<ControlPoint>& control_points, ceres::Solver::Summary* summary) {
-  problem.SetParameterBlockConstant(
-      control_points.front().state.translation.data());
-  problem.SetParameterBlockConstant(
-      control_points.front().state.rotation.data());
-  if (options_.optimizing_local_trajectory_builder_options()
-          .velocity_in_state()) {
-    problem.SetParameterBlockConstant(
-        control_points.front().state.velocity.data());
-  }
+  //  problem.SetParameterBlockConstant(
+  //      control_points.front().state.translation.data());
+  //  problem.SetParameterBlockConstant(
+  //      control_points.front().state.rotation.data());
+  //  if (options_.optimizing_local_trajectory_builder_options()
+  //          .velocity_in_state()) {
+  //    problem.SetParameterBlockConstant(
+  //        control_points.front().state.velocity.data());
+  //  }
 
   for (size_t i = 1; i < control_points.size(); ++i) {
     problem.SetParameterization(control_points[i].state.rotation.data(),
@@ -56,52 +56,83 @@ void ScanMatchingOptimizationProblem::AddPerScanMatchingResiduals(
     const std::deque<PointCloudSet>& point_cloud_data,
     const std::vector<const mapping::HybridGridTSDF*>& tsdf_pyramid,
     std::deque<ControlPoint>& control_points) {
-  auto next_control_point = control_points.begin();
-  for (auto& point_cloud_set : point_cloud_data) {
-    if (point_cloud_set.time > control_points.back().time) {
-      LOG(INFO)
-          << "Ommitting pointcloud a we do not have enough control points";
-      break;
-    }
-    while (next_control_point->time <= point_cloud_set.time) {
-      if (std::next(next_control_point) == control_points.end()) break;
-      next_control_point++;
-    }
-    CHECK(next_control_point != control_points.begin());
-    CHECK_LE(std::prev(next_control_point)->time, point_cloud_set.time);
-    CHECK_GE(next_control_point->time, point_cloud_set.time);
-    const double duration = common::ToSeconds(
-        next_control_point->time - std::prev(next_control_point)->time);
-    const double interpolation_factor =
-        common::ToSeconds(point_cloud_set.time -
-                          std::prev(next_control_point)->time) /
-        duration;
-    if (options_.optimizing_local_trajectory_builder_options()
-            .use_multi_resolution_matching()) {
-      CHECK(matching_submap.high_resolution_hybrid_grid().GetGridType() ==
-            GridType::TSDF)
-          << "Multi resolution matching only available for GridType::TSDF.";
-      if (options_.optimizing_local_trajectory_builder_options()
-                  .high_resolution_grid_weight() > 0.0 &&
-          !point_cloud_set.high_resolution_filtered_points.empty()) {
-        if (interpolation_factor == 0.0 || interpolation_factor == 1.0) {
-          ControlPoint& control_point = (interpolation_factor == 0.0)
-                                            ? *std::prev(next_control_point)
-                                            : *next_control_point;
-          //          LOG(INFO) << "Discrete Residual";
-          AddMultiResolutionTSDFSpaceCostFunction3DResidual(
-              control_point, point_cloud_set.high_resolution_filtered_points,
-              tsdf_pyramid);
-        } else {
-          LOG(INFO) << "Continuous Residual";
-          AddInterpolatedMultiResolutionTSDFSpaceCostFunction3DResidual(
-              *std::prev(next_control_point), *next_control_point,
-              point_cloud_set.high_resolution_filtered_points, tsdf_pyramid,
-              interpolation_factor);
-        }
+  if (options_.optimizing_local_trajectory_builder_options()
+          .control_point_sampling() == proto::SYNCED_WITH_RANGE_DATA) {
+    auto control_point = control_points.begin();
+    for (auto& point_cloud_set : point_cloud_data) {
+      if (point_cloud_set.time > control_points.back().time) {
+        LOG_EVERY_N(INFO, 100)
+            << "Ommitting pointcloud a we do not have enough control points";
+        break;
       }
-    } else {
-      LOG(ERROR) << "Only Multi Resolution Matching available";
+      while (control_point->time != point_cloud_set.time) {
+        if (control_point == control_points.end()) break;
+        control_point++;
+      }
+      if (options_.optimizing_local_trajectory_builder_options()
+              .use_multi_resolution_matching()) {
+        CHECK(matching_submap.high_resolution_hybrid_grid().GetGridType() ==
+              GridType::TSDF)
+            << "Multi resolution matching only available for GridType::TSDF.";
+        if (options_.optimizing_local_trajectory_builder_options()
+                    .high_resolution_grid_weight() > 0.0 &&
+            !point_cloud_set.scan_matching_cloud.empty()) {
+          AddMultiResolutionTSDFSpaceCostFunction3DResidual(
+              *control_point, point_cloud_set.scan_matching_cloud,
+              tsdf_pyramid);
+        }
+      } else {
+        LOG(ERROR) << "Only Multi Resolution Matching available";
+      }
+    }
+  } else {
+    auto next_control_point = control_points.begin();
+    for (auto& point_cloud_set : point_cloud_data) {
+      if (point_cloud_set.time > control_points.back().time) {
+        LOG(INFO)
+            << "Ommitting pointcloud a we do not have enough control points";
+        break;
+      }
+      while (next_control_point->time <= point_cloud_set.time) {
+        if (std::next(next_control_point) == control_points.end()) break;
+        next_control_point++;
+      }
+      CHECK(next_control_point != control_points.begin());
+      CHECK_LE(std::prev(next_control_point)->time, point_cloud_set.time);
+      CHECK_GE(next_control_point->time, point_cloud_set.time);
+      const double duration = common::ToSeconds(
+          next_control_point->time - std::prev(next_control_point)->time);
+      const double interpolation_factor =
+          common::ToSeconds(point_cloud_set.time -
+                            std::prev(next_control_point)->time) /
+          duration;
+      if (options_.optimizing_local_trajectory_builder_options()
+              .use_multi_resolution_matching()) {
+        CHECK(matching_submap.high_resolution_hybrid_grid().GetGridType() ==
+              GridType::TSDF)
+            << "Multi resolution matching only available for GridType::TSDF.";
+        if (options_.optimizing_local_trajectory_builder_options()
+                    .high_resolution_grid_weight() > 0.0 &&
+            !point_cloud_set.scan_matching_cloud.empty()) {
+          if (interpolation_factor == 0.0 || interpolation_factor == 1.0) {
+            ControlPoint& control_point = (interpolation_factor == 0.0)
+                                              ? *std::prev(next_control_point)
+                                              : *next_control_point;
+            //          LOG(INFO) << "Discrete Residual";
+            AddMultiResolutionTSDFSpaceCostFunction3DResidual(
+                control_point, point_cloud_set.scan_matching_cloud,
+                tsdf_pyramid);
+          } else {
+            LOG(INFO) << "Continuous Residual";
+            AddInterpolatedMultiResolutionTSDFSpaceCostFunction3DResidual(
+                *std::prev(next_control_point), *next_control_point,
+                point_cloud_set.scan_matching_cloud, tsdf_pyramid,
+                interpolation_factor);
+          }
+        }
+      } else {
+        LOG(ERROR) << "Only Multi Resolution Matching available";
+      }
     }
   }
 }
@@ -127,13 +158,13 @@ void ScanMatchingOptimizationProblem::AddIMUResiduals(
   CHECK(options_.optimizing_local_trajectory_builder_options()
             .velocity_in_state())
       << "IMU residuals require velocity_in_state to be enabled.";  // todo(kdaun)
-                                                                    // Add
-                                                                    // rotation
-                                                                    // residual
-                                                                    // which
-                                                                    // works
-                                                                    // without
-                                                                    // velocity
+  // Add
+  // rotation
+  // residual
+  // which
+  // works
+  // without
+  // velocity
   Eigen::Vector3d gravity = gravity_constant_ * Eigen::Vector3d::UnitZ();
   switch (
       options_.optimizing_local_trajectory_builder_options().imu_cost_term()) {

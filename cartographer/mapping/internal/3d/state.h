@@ -59,20 +59,18 @@ struct ControlPoint {
 struct PointCloudSet {
   common::Time time;
   Eigen::Vector3f origin;
-  sensor::TimedPointCloud points;
-  sensor::TimedPointCloud high_resolution_filtered_points;
-  sensor::TimedPointCloud original_cloud;
+  sensor::TimedPointCloud scan_matching_cloud;
+  sensor::TimedPointCloud high_resolution_cloud;
+  sensor::TimedPointCloud low_resolution_cloud;
   size_t width;
   float min_point_timestamp;
   float max_point_timestamp;
 
   common::Time StartTime() {
-    CHECK(!original_cloud.empty());
     return time + common::FromSeconds(min_point_timestamp);
   };
 
   common::Time EndTime() {
-    CHECK(!original_cloud.empty());
     return time + common::FromSeconds(max_point_timestamp);
   };
 };
