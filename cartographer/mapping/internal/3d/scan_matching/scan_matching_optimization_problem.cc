@@ -44,7 +44,7 @@ void ScanMatchingOptimizationProblem::Solve(
   //        control_points.front().state.velocity.data());
   //  }
 
-  for (size_t i = 1; i < control_points.size(); ++i) {
+  for (size_t i = 0; i < control_points.size(); ++i) {
     problem.SetParameterization(control_points[i].state.rotation.data(),
                                 new ceres::QuaternionParameterization());
   }
