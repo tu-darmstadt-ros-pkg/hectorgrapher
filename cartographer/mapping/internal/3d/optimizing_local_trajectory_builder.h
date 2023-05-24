@@ -28,10 +28,10 @@
 #include "cartographer/mapping/internal/3d/imu_integration.h"
 #include "cartographer/mapping/internal/3d/motion_model/motion_model_factory.h"
 #include "cartographer/mapping/internal/3d/state.h"
-#include "cartographer/mapping/internal/3d/stop_watch.h"
 #include "cartographer/mapping/internal/motion_filter.h"
 #include "cartographer/mapping/pose_extrapolator.h"
 #include "cartographer/metrics/family_factory.h"
+#include "cartographer/metrics/stop_watch.h"
 #include "cartographer/sensor/imu_data.h"
 #include "cartographer/sensor/internal/adaptive_voxel_filter.h"
 #include "cartographer/sensor/internal/voxel_filter.h"
@@ -128,7 +128,7 @@ class OptimizingLocalTrajectoryBuilder {
   bool use_scan_matching_;
 
   //Logging
-  StopWatchManger watches_;
+  metrics::StopWatchManger watches_;
   DebugLogger debug_logger_;
 };
 

@@ -9,7 +9,7 @@
 #include "cartographer/common/time.h"
 
 namespace cartographer {
-namespace mapping {
+namespace metrics {
 
 class StopWatch {
  public:
@@ -23,6 +23,8 @@ class StopWatch {
 
 class StopWatchManger {
  public:
+  StopWatchManger(){};
+  StopWatchManger(const std::string& name) : name_(name){};
   ~StopWatchManger();
   StopWatch& GetWatch(const std::string& name);
 
@@ -32,9 +34,10 @@ class StopWatchManger {
  private:
   std::map<std::string, StopWatch> watches_;
   size_t request_since_last_print_ = 0;
+  std::string name_ = "";
 };
 
-}  // namespace mapping
+}  // namespace metrics
 }  // namespace cartographer
 
 #endif  // CARTOGRAPHER_MAPPING_3D_STOP_WATCH_H_

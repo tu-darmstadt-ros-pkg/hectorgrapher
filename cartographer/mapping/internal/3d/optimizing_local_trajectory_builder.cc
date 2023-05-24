@@ -62,22 +62,27 @@ OptimizingLocalTrajectoryBuilder::OptimizingLocalTrajectoryBuilder(
       initialization_duration_(common::FromSeconds(
           options.optimizing_local_trajectory_builder_options()
               .initialization_duration())),
-      motion_model_(CreateMotionModel("identity")),  // TODO use config
+      motion_model_(CreateMotionModel("odometry")),  // TODO use config
       motion_filter_insertion_(options.motion_filter_options()),
       map_update_enabled_(true),
       use_scan_matching_(true),
+      watches_("OptimizingLocalTrajectoryBuilder"),
       debug_logger_("test_log.csv") {}
 
 OptimizingLocalTrajectoryBuilder::~OptimizingLocalTrajectoryBuilder() {}
 
 void OptimizingLocalTrajectoryBuilder::AddImuData(
     const sensor::ImuData& imu_data) {
+  watches_.GetWatch("AddImuData").Start();
   motion_model_->AddIMUData(imu_data);
+  watches_.GetWatch("AddImuData").Stop();
 }
 
 void OptimizingLocalTrajectoryBuilder::AddOdometryData(
     const sensor::OdometryData& odometry_data) {
+  watches_.GetWatch("AddOdometryData").Start();
   motion_model_->AddOdometryData(odometry_data);
+  watches_.GetWatch("AddOdometryData").Stop();
 }
 
 std::unique_ptr<OptimizingLocalTrajectoryBuilder::MatchingResult>
@@ -114,19 +119,28 @@ OptimizingLocalTrajectoryBuilder::AddRangeData(
   //  sensor::VoxelFilter pre_voxel_filter(pre_length);
   //  pre_voxel_filtered_cloud =
   //      pre_voxel_filter.Filter(pre_filtered_cloud);
+
   sensor::VoxelFilter high_resolution_voxel_filter(
-      options_.submaps_options().high_resolution());
+      options_.submaps_options().high_resolution() / 2.0);
   point_cloud_set.high_resolution_cloud =
       high_resolution_voxel_filter.Filter(pre_filtered_cloud);
   sensor::VoxelFilter low_resolution_voxel_filter(
-      options_.submaps_options().low_resolution());
+      options_.submaps_options().low_resolution() / 2.0);
   point_cloud_set.low_resolution_cloud =
       low_resolution_voxel_filter.Filter(pre_filtered_cloud);
   sensor::VoxelFilter scan_cloud_voxel_filter(
-      options_.high_resolution_adaptive_voxel_filter_options().max_length());
+      options_.high_resolution_adaptive_voxel_filter_options().max_length() /
+      2.0);
   point_cloud_set.scan_matching_cloud =
       scan_cloud_voxel_filter.Filter(pre_filtered_cloud);
+
+  //  point_cloud_set.high_resolution_cloud =
+  //      sensor::SamplingFilter(pre_filtered_cloud, 0.25);
+  //  point_cloud_set.low_resolution_cloud =
+  //  point_cloud_set.high_resolution_cloud; point_cloud_set.scan_matching_cloud
+  //  = sensor::SamplingFilter(point_cloud_set.high_resolution_cloud, 0.02);
   point_cloud_queue_.push_back(point_cloud_set);
+
   watches_.GetWatch("add_range_data").Stop();
 
   auto res = MaybeOptimize(range_data_in_tracking.time);
@@ -301,7 +315,15 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
 
     ceres::Solver::Summary summary;
 
+    //    LOG(INFO)<<"before opt";
+    //    for(const auto& c : control_points_) {
+    //      c.state.Print();
+    //    }
     matching_problem.Solve(control_points_, &summary);
+    //    LOG(INFO)<<"after opt";
+    //    for(const auto& c : control_points_) {
+    //      c.state.Print();
+    //    }
     //    LOG(INFO) << summary.FullReport();
     // The optimized states in 'control_points_' are in the submap frame and
     // we transform them in place to be in the local SLAM frame again.

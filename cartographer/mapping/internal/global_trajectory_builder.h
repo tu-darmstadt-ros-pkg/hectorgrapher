@@ -26,6 +26,7 @@
 #include "cartographer/mapping/local_slam_result_data.h"
 #include "cartographer/mapping/trajectory_builder_interface.h"
 #include "cartographer/metrics/family_factory.h"
+#include "cartographer/metrics/stop_watch.h"
 
 namespace cartographer {
 namespace mapping {

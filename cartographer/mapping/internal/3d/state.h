@@ -46,6 +46,7 @@ struct State {
     return {Eigen::Vector3d(translation[0], translation[1], translation[2]),
             ToQuaternion()};
   }
+  void Print() const { LOG(INFO) << ToRigid().DebugString(); }
 };
 
 struct ControlPoint {

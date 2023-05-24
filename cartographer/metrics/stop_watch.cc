@@ -1,12 +1,12 @@
 
-#include "cartographer/mapping/internal/3d/stop_watch.h"
+#include "stop_watch.h"
 
 #include <iomanip>
 
 #include "glog/logging.h"
 
 namespace cartographer {
-namespace mapping {
+namespace metrics {
 void StopWatch::Start() { start_time_ = std::chrono::steady_clock::now(); }
 void StopWatch::Stop() {
   auto end_time = std::chrono::steady_clock::now();
@@ -24,9 +24,8 @@ StopWatch& StopWatchManger::GetWatch(const std::string& name) {
   return watches_[name];
 }
 void StopWatchManger::PrintAll() {
-  LOG(INFO) << "========================="
-            << "StopWatch"
-            << "=========================";
+  LOG(INFO) << "====="
+            << "StopWatch " << name_ << "=====";
   for (auto it = watches_.begin(); it != watches_.end(); it++) {
     LOG(INFO) << std::setw(25) << std::setfill(' ') << it->first
               << "   total:" << it->second.summed_duration_ << "\t avg: "
@@ -46,5 +45,5 @@ void StopWatchManger::PrintAllEveryN(size_t n) {
 
 StopWatchManger::~StopWatchManger() { PrintAll(); }
 
-}  // namespace mapping
+}  // namespace metrics
 }  // namespace cartographer

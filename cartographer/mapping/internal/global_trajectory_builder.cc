@@ -43,7 +43,8 @@ class GlobalTrajectoryBuilder : public mapping::TrajectoryBuilderInterface {
       : trajectory_id_(trajectory_id),
         pose_graph_(pose_graph),
         local_trajectory_builder_(std::move(local_trajectory_builder)),
-        local_slam_result_callback_(local_slam_result_callback) {}
+        local_slam_result_callback_(local_slam_result_callback),
+        watches_("GlobalTrajectoryBuilder") {}
   ~GlobalTrajectoryBuilder() override {}
 
   GlobalTrajectoryBuilder(const GlobalTrajectoryBuilder&) = delete;
@@ -52,6 +53,7 @@ class GlobalTrajectoryBuilder : public mapping::TrajectoryBuilderInterface {
   void AddSensorData(
       const std::string& sensor_id,
       const sensor::TimedPointCloudData& timed_point_cloud_data) override {
+    watches_.GetWatch("AddTimedPointCloudData").Start();
     CHECK(local_trajectory_builder_)
         << "Cannot add TimedPointCloudData without a LocalTrajectoryBuilder.";
     std::unique_ptr<typename LocalTrajectoryBuilder::MatchingResult>
@@ -59,6 +61,7 @@ class GlobalTrajectoryBuilder : public mapping::TrajectoryBuilderInterface {
             sensor_id, timed_point_cloud_data);
     if (matching_result == nullptr) {
       // The range data has not been fully accumulated yet.
+      watches_.GetWatch("AddTimedPointCloudData").Stop();
       return;
     }
     kLocalSlamMatchingResults->Increment();
@@ -81,23 +84,28 @@ class GlobalTrajectoryBuilder : public mapping::TrajectoryBuilderInterface {
           std::move(matching_result->range_data_in_local),
           std::move(insertion_result));
     }
+    watches_.GetWatch("AddTimedPointCloudData").Stop();
   }
 
   void AddSensorData(const std::string& sensor_id,
                      const sensor::ImuData& imu_data) override {
+    watches_.GetWatch("AddImuData").Start();
     if (local_trajectory_builder_) {
       local_trajectory_builder_->AddImuData(imu_data);
     }
     pose_graph_->AddImuData(trajectory_id_, imu_data);
+    watches_.GetWatch("AddImuData").Stop();
   }
 
   void AddSensorData(const std::string& sensor_id,
                      const sensor::OdometryData& odometry_data) override {
+    watches_.GetWatch("AddOdomData").Start();
     CHECK(odometry_data.pose.IsValid()) << odometry_data.pose;
     if (local_trajectory_builder_) {
       local_trajectory_builder_->AddOdometryData(odometry_data);
     }
     pose_graph_->AddOdometryData(trajectory_id_, odometry_data);
+    watches_.GetWatch("AddOdomData").Stop();
   }
 
   void AddSensorData(
@@ -135,6 +143,7 @@ class GlobalTrajectoryBuilder : public mapping::TrajectoryBuilderInterface {
   PoseGraph* const pose_graph_;
   std::unique_ptr<LocalTrajectoryBuilder> local_trajectory_builder_;
   LocalSlamResultCallback local_slam_result_callback_;
+  metrics::StopWatchManger watches_;
 };
 
 }  // namespace
