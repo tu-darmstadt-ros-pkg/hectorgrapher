@@ -70,4 +70,5 @@ message OptimizingLocalTrajectoryBuilderOptions {
   double odometry_translation_normalization = 32;
   double odometry_rotation_normalization = 33;
   MotionModel motion_model = 34;
+  bool use_scan_preunwarping = 35;
 }

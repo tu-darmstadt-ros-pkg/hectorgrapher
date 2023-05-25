@@ -97,6 +97,9 @@ CreateOptimizingLocalTrajectoryBuilderOptions(
   CHECK(proto::MotionModel_Parse(motion_model_string, &motion_model_type))
       << "Unknown MotionModel_Parse type: " << motion_model_string;
   options.set_motion_model(motion_model_type);
+  options.set_use_scan_preunwarping(
+      parameter_dictionary->GetBool("use_scan_preunwarping"));
+
   return options;
 }
 

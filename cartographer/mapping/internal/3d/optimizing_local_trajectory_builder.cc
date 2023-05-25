@@ -238,12 +238,27 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
       break;
     }
     case proto::SYNCED_WITH_RANGE_DATA: {
-      while (!point_cloud_queue_.empty() &&
-             motion_model_->HasDataUntil(point_cloud_queue_.front().time)) {
-        AddControlPoint(point_cloud_queue_.front().time);
-        point_cloud_active_data_.push_back(point_cloud_queue_.front());
-        point_cloud_queue_.pop_front();
-        added_control_point = true;
+      if (options_.optimizing_local_trajectory_builder_options()
+              .use_scan_preunwarping()) {
+        while (
+            !point_cloud_queue_.empty() &&
+            motion_model_->HasDataUntil(point_cloud_queue_.front().EndTime())) {
+          AddControlPoint(point_cloud_queue_.front().time);
+          watches_.GetWatch("unwarp").Start();
+          Unwarp(point_cloud_queue_.front());
+          watches_.GetWatch("unwarp").Stop();
+          point_cloud_active_data_.push_back(point_cloud_queue_.front());
+          point_cloud_queue_.pop_front();
+          added_control_point = true;
+        }
+      } else {
+        while (!point_cloud_queue_.empty() &&
+               motion_model_->HasDataUntil(point_cloud_queue_.front().time)) {
+          AddControlPoint(point_cloud_queue_.front().time);
+          point_cloud_active_data_.push_back(point_cloud_queue_.front());
+          point_cloud_queue_.pop_front();
+          added_control_point = true;
+        }
       }
       break;
     }
@@ -500,7 +515,25 @@ void OptimizingLocalTrajectoryBuilder::UseScanMatching(bool use_scan_matching) {
 }
 
 void OptimizingLocalTrajectoryBuilder::PrintLoggingData() {
-  watches_.PrintAllEveryN(500);
+  watches_.PrintAllEveryN(50);
+}
+
+void OptimizingLocalTrajectoryBuilder::Unwarp(PointCloudSet& point_cloud_set) {
+  Unwarp(point_cloud_set.high_resolution_cloud, point_cloud_set.time);
+  Unwarp(point_cloud_set.low_resolution_cloud, point_cloud_set.time);
+  Unwarp(point_cloud_set.scan_matching_cloud, point_cloud_set.time);
+}
+void OptimizingLocalTrajectoryBuilder::Unwarp(
+    sensor::TimedPointCloud& point_cloud, const common::Time& cloud_time) {
+  for (size_t idx = 0; idx < point_cloud.size(); ++idx) {
+    common::Time t0 = cloud_time;
+    common::Time t1 = t0 + common::FromSeconds(point_cloud[idx].time);
+    transform::Rigid3d transform = motion_model_->RelativeTransform(t0, t1);
+    point_cloud[idx] = {
+        transform.cast<float>() *
+            point_cloud_queue_.front().high_resolution_cloud[idx].position,
+        point_cloud_queue_.front().high_resolution_cloud[idx].time};
+  }
 }
 
 }  // namespace mapping

@@ -107,6 +107,9 @@ class OptimizingLocalTrajectoryBuilder {
   MaybeOptimize(common::Time time);
 
   void PrintLoggingData();
+  void Unwarp(PointCloudSet& point_cloud_set);
+  void Unwarp(sensor::TimedPointCloud& point_cloud,
+              const common::Time& cloud_time);
 
   const proto::LocalTrajectoryBuilderOptions3D options_;
   const ceres::Solver::Options ceres_solver_options_;
