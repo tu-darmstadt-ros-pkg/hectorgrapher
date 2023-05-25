@@ -30,10 +30,12 @@
 #define MOTION_MODEL_FACTORY_H_
 
 #include "cartographer/mapping/internal/3d/motion_model/motion_model.h"
+#include "cartographer/mapping/proto/3d/optimizing_local_trajectory_builder_options.pb.h"
 
 namespace cartographer {
 namespace mapping {
-std::unique_ptr<MotionModel> CreateMotionModel(const std::string& model_type);
+std::unique_ptr<MotionModel> CreateMotionModel(
+    const proto::MotionModel& model_type);
 
 }  // namespace mapping
 }  // namespace cartographer

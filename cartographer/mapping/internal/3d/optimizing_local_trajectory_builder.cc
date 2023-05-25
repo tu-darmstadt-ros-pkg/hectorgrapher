@@ -62,7 +62,9 @@ OptimizingLocalTrajectoryBuilder::OptimizingLocalTrajectoryBuilder(
       initialization_duration_(common::FromSeconds(
           options.optimizing_local_trajectory_builder_options()
               .initialization_duration())),
-      motion_model_(CreateMotionModel("odometry")),  // TODO use config
+      motion_model_(CreateMotionModel(
+          options.optimizing_local_trajectory_builder_options()
+              .motion_model())),
       motion_filter_insertion_(options.motion_filter_options()),
       map_update_enabled_(true),
       use_scan_matching_(true),

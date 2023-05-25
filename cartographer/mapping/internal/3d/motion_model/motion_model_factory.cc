@@ -34,15 +34,16 @@
 
 namespace cartographer {
 namespace mapping {
-std::unique_ptr<MotionModel> CreateMotionModel(const std::string& model_type) {
-  LOG(INFO) << "Motion model: " << model_type;
-  if (model_type == "identity") {
+std::unique_ptr<MotionModel> CreateMotionModel(
+    const proto::MotionModel& model_type) {
+  LOG(INFO) << "Motion model: " << proto::MotionModel_Name(model_type);
+  if (model_type == proto::IDENTITY) {
     return std::make_unique<MotionModel>();
-  } else if (model_type == "imu") {
+  } else if (model_type == proto::IMU) {
     return std::make_unique<IMUMotionModel>();
-  } else if (model_type == "odometry") {
+  } else if (model_type == proto::ODOMETRY) {
     return std::make_unique<OdomMotionModel>();
-  } else if (model_type == "constant_velocity") {
+  } else if (model_type == proto::CONSTANT_VELOCITY) {
     return std::make_unique<ConstVelMotionModel>();
   } else {
     LOG(ERROR) << "Unknown model: " << model_type

@@ -33,6 +33,15 @@ enum ControlPointSampling {
   SYNCED_WITH_RANGE_DATA = 2;
   ADAPTIVE = 3;
 }
+
+enum MotionModel {
+  INVALID_MOTION_MODEL = 0;
+  IDENTITY = 1;
+  CONSTANT_VELOCITY = 2;
+  IMU = 3;
+  ODOMETRY = 4;
+}
+
 message OptimizingLocalTrajectoryBuilderOptions {
   double high_resolution_grid_weight = 6;
   double low_resolution_grid_weight = 7;
@@ -60,4 +69,5 @@ message OptimizingLocalTrajectoryBuilderOptions {
   bool velocity_in_state = 31;
   double odometry_translation_normalization = 32;
   double odometry_rotation_normalization = 33;
+  MotionModel motion_model = 34;
 }

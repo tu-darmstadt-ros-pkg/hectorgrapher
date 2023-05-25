@@ -91,7 +91,12 @@ CreateOptimizingLocalTrajectoryBuilderOptions(
       parameter_dictionary->GetDouble("odometry_translation_normalization"));
   options.set_odometry_rotation_normalization(
       parameter_dictionary->GetDouble("odometry_rotation_normalization"));
-
+  const std::string motion_model_string =
+      parameter_dictionary->GetString("motion_model");
+  proto::MotionModel motion_model_type;
+  CHECK(proto::MotionModel_Parse(motion_model_string, &motion_model_type))
+      << "Unknown MotionModel_Parse type: " << motion_model_string;
+  options.set_motion_model(motion_model_type);
   return options;
 }
 
