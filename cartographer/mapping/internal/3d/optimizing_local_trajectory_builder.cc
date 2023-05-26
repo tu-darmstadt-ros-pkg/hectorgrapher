@@ -129,18 +129,21 @@ OptimizingLocalTrajectoryBuilder::AddRangeData(
   sensor::VoxelFilter low_resolution_voxel_filter(
       options_.submaps_options().low_resolution() / 2.0);
   point_cloud_set.low_resolution_cloud =
-      low_resolution_voxel_filter.Filter(pre_filtered_cloud);
-  sensor::VoxelFilter scan_cloud_voxel_filter(
-      options_.high_resolution_adaptive_voxel_filter_options().max_length() /
-      2.0);
-  point_cloud_set.scan_matching_cloud =
-      scan_cloud_voxel_filter.Filter(pre_filtered_cloud);
+      low_resolution_voxel_filter.Filter(point_cloud_set.high_resolution_cloud);
 
-  //  point_cloud_set.high_resolution_cloud =
-  //      sensor::SamplingFilter(pre_filtered_cloud, 0.25);
-  //  point_cloud_set.low_resolution_cloud =
-  //  point_cloud_set.high_resolution_cloud; point_cloud_set.scan_matching_cloud
-  //  = sensor::SamplingFilter(point_cloud_set.high_resolution_cloud, 0.02);
+  sensor::AdaptiveVoxelFilter scan_cloud_adaptive_voxel_filter(
+      options_.high_resolution_adaptive_voxel_filter_options());
+  point_cloud_set.scan_matching_cloud = scan_cloud_adaptive_voxel_filter.Filter(
+      point_cloud_set.high_resolution_cloud);
+
+  //  LOG_EVERY_N(INFO, 50)<<"raw res cloud size
+  //  "<<range_data_in_tracking.ranges.size(); LOG_EVERY_N(INFO, 50)<<"pre cloud
+  //  size "<<pre_filtered_cloud.size(); LOG_EVERY_N(INFO, 50)<<"high res cloud
+  //  size "<<point_cloud_set.high_resolution_cloud.size(); LOG_EVERY_N(INFO,
+  //  50)<<"low res cloud size "<<point_cloud_set.low_resolution_cloud.size();
+  //  LOG_EVERY_N(INFO, 50)<<"match cloud size
+  //  "<<point_cloud_set.scan_matching_cloud.size();
+
   point_cloud_queue_.push_back(point_cloud_set);
 
   watches_.GetWatch("add_range_data").Stop();
@@ -286,7 +289,7 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
       LOG(FATAL) << "Unsupported control_point_sampling type.";
   }
   if (!added_control_point) {
-    LOG(INFO) << "No control point added.";
+    //    LOG(INFO) << "No control point added.";
     return nullptr;
   }
   //    LOG(INFO)<<"num control points: "<<control_points_.size();
@@ -516,7 +519,7 @@ void OptimizingLocalTrajectoryBuilder::UseScanMatching(bool use_scan_matching) {
 }
 
 void OptimizingLocalTrajectoryBuilder::PrintLoggingData() {
-  watches_.PrintAllEveryN(50);
+  watches_.PrintAllEveryN(500);
 }
 
 void OptimizingLocalTrajectoryBuilder::Unwarp(PointCloudSet& point_cloud_set) {

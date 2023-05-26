@@ -65,8 +65,8 @@ PointCloudType AdaptivelyVoxelFiltered(
     if (result.size() >= options.min_num_points()) {
       // Binary search to find the right amount of filtering. 'low_length' gave
       // a sufficiently dense 'result', 'high_length' did not. We stop when the
-      // edge length is at most 10% off.
-      while ((high_length - low_length) / low_length > 1e-1f) {
+      // edge length is at most 30% off.
+      while ((high_length - low_length) / low_length > 3e-1f) {
         const float mid_length = (low_length + high_length) / 2.f;
         const PointCloudType candidate =
             VoxelFilter(mid_length).Filter(point_cloud);
