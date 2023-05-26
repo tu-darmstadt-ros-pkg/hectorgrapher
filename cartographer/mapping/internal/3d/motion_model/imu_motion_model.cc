@@ -31,7 +31,16 @@
 namespace cartographer {
 namespace mapping {
 
+
+State IMUMotionModel::initialize(const common::Time& time) {
+  last_state_time_ = time;
+  last_state_ = stateAt(time, true);
+  initialized_ = true;
+  return last_state_;
+}
+
 State IMUMotionModel::ExtrapolateState(const common::Time& time) const {
+  if(time == last_state_time_) return last_state_;
   bool has_enclosing_data = imu_buffer_.size() > 1 &&
                             imu_buffer_.back().time >= time &&
                             imu_buffer_.front().time <= last_state_time_;
@@ -61,11 +70,11 @@ State IMUMotionModel::stateAt(const common::Time& time,
   res.translation = {{pos.x(), pos.y(), pos.z()}};
   if (use_imu_data) {
     if (imu_buffer_.empty()) {
-      LOG(WARNING) << "Odom buffer empty defaulting to identity";
+      LOG(WARNING) << "IMU buffer empty defaulting to identity";
       return res;
     }
     if (imu_buffer_.size() == 1) {
-      LOG(WARNING) << "Only single message in buffer.";
+      LOG(WARNING) << "Only single message in IMU buffer.";
       return res;
     }
     if (time <= imu_buffer_.front().time) {

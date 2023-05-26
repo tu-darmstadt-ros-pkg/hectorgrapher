@@ -210,6 +210,7 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
         motion_model_->initialize(point_cloud_queue_.front().time);
         initialized = true;
         AddControlPoint(point_cloud_queue_.front().time);
+        LOG(INFO)<<"first cp "<<control_points_.front().state.DebugString();
         point_cloud_active_data_.push_back(point_cloud_queue_.front());
         point_cloud_queue_.pop_front();
       } else {
@@ -528,7 +529,7 @@ void OptimizingLocalTrajectoryBuilder::Unwarp(
   for (size_t idx = 0; idx < point_cloud.size(); ++idx) {
     common::Time t0 = cloud_time;
     common::Time t1 = t0 + common::FromSeconds(point_cloud[idx].time);
-    transform::Rigid3d transform = motion_model_->RelativeTransform(t0, t1);
+    transform::Rigid3d transform = transform::Rigid3d::Rotation(motion_model_->RelativeTransform(t0, t1).rotation());
     point_cloud[idx] = {
         transform.cast<float>() *
             point_cloud_queue_.front().high_resolution_cloud[idx].position,

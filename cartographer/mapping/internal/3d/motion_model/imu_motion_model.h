@@ -36,6 +36,7 @@ namespace mapping {
 
 class IMUMotionModel : public MotionModel {
  public:
+  State initialize(const common::Time& time) override;
   State ExtrapolateState(const common::Time& time) const override;
   bool HasDataUntil(const common::Time& time) const override;
   void UpdateState(const State& state, const common::Time& time) override;
