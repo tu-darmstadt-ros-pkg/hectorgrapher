@@ -92,64 +92,11 @@ OptimizingLocalTrajectoryBuilder::AddRangeData(
     const std::string& sensor_id,
     const sensor::TimedPointCloudData& range_data_in_tracking) {
   CHECK_GT(range_data_in_tracking.ranges.size(), 0);
-  watches_.GetWatch("total").Start();
   watches_.GetWatch("add_range_data").Start();
-  PointCloudSet point_cloud_set;
-  point_cloud_set.time = range_data_in_tracking.time;
-  point_cloud_set.origin = range_data_in_tracking.origin;
-  point_cloud_set.width = range_data_in_tracking.width;
-  point_cloud_set.min_point_timestamp = std::numeric_limits<float>::max();
-  point_cloud_set.max_point_timestamp = std::numeric_limits<float>::min();
-  sensor::TimedPointCloud pre_filtered_cloud;
-  for (const auto& hit : range_data_in_tracking.ranges) {
-    if (hit.position.hasNaN()) continue;
-    const Eigen::Vector3f delta = hit.position - range_data_in_tracking.origin;
-    const float range = delta.norm();
-    if (range >= options_.min_range() && range <= options_.max_range()) {
-      pre_filtered_cloud.push_back(hit);
-      if (hit.time > point_cloud_set.max_point_timestamp) {
-        point_cloud_set.max_point_timestamp = hit.time;
-      }
-      if (hit.time < point_cloud_set.min_point_timestamp) {
-        point_cloud_set.min_point_timestamp = hit.time;
-      }
-    }
-  }
-
-  //  float pre_length = float(options_.submaps_options().high_resolution()
-  //  / 2.0); sensor::TimedPointCloud pre_voxel_filtered_cloud;
-  //  sensor::VoxelFilter pre_voxel_filter(pre_length);
-  //  pre_voxel_filtered_cloud =
-  //      pre_voxel_filter.Filter(pre_filtered_cloud);
-
-  sensor::VoxelFilter high_resolution_voxel_filter(
-      options_.submaps_options().high_resolution() / 2.0);
-  point_cloud_set.high_resolution_cloud =
-      high_resolution_voxel_filter.Filter(pre_filtered_cloud);
-  sensor::VoxelFilter low_resolution_voxel_filter(
-      options_.submaps_options().low_resolution() / 2.0);
-  point_cloud_set.low_resolution_cloud =
-      low_resolution_voxel_filter.Filter(point_cloud_set.high_resolution_cloud);
-
-  sensor::AdaptiveVoxelFilter scan_cloud_adaptive_voxel_filter(
-      options_.high_resolution_adaptive_voxel_filter_options());
-  point_cloud_set.scan_matching_cloud = scan_cloud_adaptive_voxel_filter.Filter(
-      point_cloud_set.high_resolution_cloud);
-
-  //  LOG_EVERY_N(INFO, 50)<<"raw res cloud size
-  //  "<<range_data_in_tracking.ranges.size(); LOG_EVERY_N(INFO, 50)<<"pre cloud
-  //  size "<<pre_filtered_cloud.size(); LOG_EVERY_N(INFO, 50)<<"high res cloud
-  //  size "<<point_cloud_set.high_resolution_cloud.size(); LOG_EVERY_N(INFO,
-  //  50)<<"low res cloud size "<<point_cloud_set.low_resolution_cloud.size();
-  //  LOG_EVERY_N(INFO, 50)<<"match cloud size
-  //  "<<point_cloud_set.scan_matching_cloud.size();
-
-  point_cloud_queue_.push_back(point_cloud_set);
-
+  point_cloud_queue_.emplace_back(range_data_in_tracking, options_);
+  std::unique_ptr<OptimizingLocalTrajectoryBuilder::MatchingResult> res =
+      MaybeOptimize(range_data_in_tracking.time);
   watches_.GetWatch("add_range_data").Stop();
-
-  auto res = MaybeOptimize(range_data_in_tracking.time);
-  watches_.GetWatch("total").Stop();
   PrintLoggingData();
   return res;
 }
@@ -193,7 +140,7 @@ void OptimizingLocalTrajectoryBuilder::TransformStates(
     const auto& velocity = control_point.state.velocity;
     const Eigen::Vector3d new_velocity =
         transform.rotation() *
-        Eigen::Vector3d(velocity[0], velocity[1], velocity[2]);
+        Eigen::Vector3d(velocity.data());
     control_point.state =
         State(new_pose.translation(), new_pose.rotation(), new_velocity);
   }
@@ -213,7 +160,7 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
         motion_model_->initialize(point_cloud_queue_.front().time);
         initialized = true;
         AddControlPoint(point_cloud_queue_.front().time);
-        LOG(INFO)<<"first cp "<<control_points_.front().state.DebugString();
+//        LOG(INFO)<<"first cp "<<control_points_.front().state.DebugString();
         point_cloud_active_data_.push_back(point_cloud_queue_.front());
         point_cloud_queue_.pop_front();
       } else {
@@ -372,7 +319,7 @@ OptimizingLocalTrajectoryBuilder::MaybeOptimize(const common::Time time) {
       const transform::Rigid3f transform =
           (optimized_pose.inverse() * transform_cloud).cast<float>();
       for (const auto& point :
-           point_cloud_active_data_.front().high_resolution_cloud) {
+           point_cloud_active_data_.front().insertion_cloud) {
         accumulated_range_data_in_tracking.returns.push_back(
             (transform * point));
       }
@@ -396,24 +343,8 @@ OptimizingLocalTrajectoryBuilder::AddAccumulatedRangeData(
     const common::Time time, const transform::Rigid3d& optimized_pose,
     const sensor::TimedRangeData& range_data_in_tracking) {
   if (range_data_in_tracking.returns.empty()) {
-    //    LOG(WARNING) << "Dropped empty range data.";
     return nullptr;
   }
-
-  watches_.GetWatch("voxel_filter").Start();
-  sensor::TimedRangeData filtered_range_data_in_tracking = {
-      range_data_in_tracking.origin,
-      sensor::VoxelFilter(options_.voxel_filter_size())
-          .Filter(range_data_in_tracking.returns),
-      {}};
-  watches_.GetWatch("voxel_filter").Stop();
-
-  if (filtered_range_data_in_tracking.returns.empty()) {
-    //    LOG(WARNING) << "Dropped empty range data.";
-    return nullptr;
-  }
-//  sensor::RangeData filtered_range_data_in_local = sensor::TransformRangeData(
-//      filtered_range_data_in_tracking, optimized_pose.cast<float>());
 
   watches_.GetWatch("adaptive_voxel_filter").Start();
   sensor::TimedRangeData filtered_range_data_in_local =
@@ -423,7 +354,7 @@ OptimizingLocalTrajectoryBuilder::AddAccumulatedRangeData(
   sensor::AdaptiveVoxelFilter adaptive_voxel_filter(
       options_.high_resolution_adaptive_voxel_filter_options());
   const sensor::TimedPointCloud high_resolution_point_cloud_in_tracking =
-      adaptive_voxel_filter.Filter(filtered_range_data_in_tracking.returns);
+      adaptive_voxel_filter.Filter(range_data_in_tracking.returns);
   if (high_resolution_point_cloud_in_tracking.empty()) {
     LOG(WARNING) << "Dropped empty high resolution point cloud data.";
     watches_.GetWatch("adaptive_voxel_filter").Stop();
@@ -433,7 +364,7 @@ OptimizingLocalTrajectoryBuilder::AddAccumulatedRangeData(
       options_.low_resolution_adaptive_voxel_filter_options());
   const sensor::TimedPointCloud low_resolution_point_cloud_in_tracking =
       low_resolution_adaptive_voxel_filter.Filter(
-          filtered_range_data_in_tracking.returns);
+          range_data_in_tracking.returns);
   if (low_resolution_point_cloud_in_tracking.empty()) {
     LOG(WARNING) << "Dropped empty low resolution point cloud data.";
     watches_.GetWatch("adaptive_voxel_filter").Stop();
@@ -441,25 +372,31 @@ OptimizingLocalTrajectoryBuilder::AddAccumulatedRangeData(
   }
   watches_.GetWatch("adaptive_voxel_filter").Stop();
 
-  const Eigen::Quaterniond gravity_alignment = optimized_pose.rotation();
+  const Eigen::Quaterniond& gravity_alignment = optimized_pose.rotation();
   std::unique_ptr<InsertionResult> insertion_result = InsertIntoSubmap(
-      time, filtered_range_data_in_local, filtered_range_data_in_tracking,
+      time, filtered_range_data_in_local, range_data_in_tracking,
       high_resolution_point_cloud_in_tracking,
       low_resolution_point_cloud_in_tracking, optimized_pose,
       gravity_alignment);
 
-  return absl::make_unique<MatchingResult>(MatchingResult{
-      time, optimized_pose, std::move(filtered_range_data_in_local),
-      std::move(insertion_result)});
+  return absl::make_unique<MatchingResult>(
+      MatchingResult{time, optimized_pose, filtered_range_data_in_local,
+                     std::move(insertion_result)});
 }
 
 std::unique_ptr<OptimizingLocalTrajectoryBuilder::InsertionResult>
 OptimizingLocalTrajectoryBuilder::InsertIntoSubmap(
     const common::Time time,
-    const sensor::TimedRangeData& filtered_range_data_in_local,
-    const sensor::TimedRangeData& filtered_range_data_in_tracking,
-    const sensor::TimedPointCloud& high_resolution_point_cloud_in_tracking,
-    const sensor::TimedPointCloud& low_resolution_point_cloud_in_tracking,
+    const sensor::TimedRangeData&
+        filtered_range_data_in_local,  // Inserted into Submap
+    const sensor::TimedRangeData&
+        filtered_range_data_in_tracking,  // Used to compute histogram
+    const sensor::TimedPointCloud&
+        high_resolution_point_cloud_in_tracking,  // Added to
+                                                  // TrajectoryNode::Data
+    const sensor::TimedPointCloud&
+        low_resolution_point_cloud_in_tracking,  // Added to
+                                                 // TrajectoryNode::Data
     const transform::Rigid3d& pose_estimate,
     const Eigen::Quaterniond& gravity_alignment) {
   if (motion_filter_insertion_.IsSimilar(time, pose_estimate)) {
@@ -523,8 +460,7 @@ void OptimizingLocalTrajectoryBuilder::PrintLoggingData() {
 }
 
 void OptimizingLocalTrajectoryBuilder::Unwarp(PointCloudSet& point_cloud_set) {
-  Unwarp(point_cloud_set.high_resolution_cloud, point_cloud_set.time);
-  Unwarp(point_cloud_set.low_resolution_cloud, point_cloud_set.time);
+  Unwarp(point_cloud_set.insertion_cloud, point_cloud_set.time);
   Unwarp(point_cloud_set.scan_matching_cloud, point_cloud_set.time);
 }
 void OptimizingLocalTrajectoryBuilder::Unwarp(
@@ -535,8 +471,8 @@ void OptimizingLocalTrajectoryBuilder::Unwarp(
     transform::Rigid3d transform = transform::Rigid3d::Rotation(motion_model_->RelativeTransform(t0, t1).rotation());
     point_cloud[idx] = {
         transform.cast<float>() *
-            point_cloud_queue_.front().high_resolution_cloud[idx].position,
-        point_cloud_queue_.front().high_resolution_cloud[idx].time};
+            point_cloud_queue_.front().insertion_cloud[idx].position,
+        point_cloud_queue_.front().insertion_cloud[idx].time};
   }
 }
 

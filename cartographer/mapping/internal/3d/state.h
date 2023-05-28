@@ -5,7 +5,11 @@
 #include <array>
 
 #include "cartographer/common/time.h"
+#include "cartographer/mapping/proto/3d/local_trajectory_builder_options_3d.pb.h"
+#include "cartographer/sensor/internal/adaptive_voxel_filter.h"
+#include "cartographer/sensor/internal/voxel_filter.h"
 #include "cartographer/sensor/point_cloud.h"
+#include "cartographer/sensor/timed_point_cloud_data.h"
 #include "cartographer/transform/rigid_transform.h"
 
 namespace cartographer {
@@ -61,17 +65,66 @@ struct PointCloudSet {
   common::Time time;
   Eigen::Vector3f origin;
   sensor::TimedPointCloud scan_matching_cloud;
-  sensor::TimedPointCloud high_resolution_cloud;
-  sensor::TimedPointCloud low_resolution_cloud;
-  size_t width;
-  float min_point_timestamp;
-  float max_point_timestamp;
+  sensor::TimedPointCloud insertion_cloud;
+  size_t width{};
+  float min_point_timestamp{};
+  float max_point_timestamp{};
+  PointCloudSet() = default;
+  PointCloudSet(const sensor::TimedPointCloudData& range_data_in_tracking,
+                const proto::LocalTrajectoryBuilderOptions3D& options) {
+    time = range_data_in_tracking.time;
+    origin = range_data_in_tracking.origin;
+    width = range_data_in_tracking.width;
+    min_point_timestamp = std::numeric_limits<float>::max();
+    max_point_timestamp = std::numeric_limits<float>::min();
+    sensor::TimedPointCloud pre_filtered_cloud;
+    const float max_range_squared = std::pow(options.max_range(), 2);
+    const float min_range_squared = std::pow(options.min_range(), 2);
+    for (const auto& hit : range_data_in_tracking.ranges) {
+      if (hit.position.hasNaN()) continue;
+      const Eigen::Vector3f delta =
+          hit.position - range_data_in_tracking.origin;
+      const float range = delta.squaredNorm();
+      if (range >= min_range_squared && range <= max_range_squared) {
+        pre_filtered_cloud.push_back(hit);
+        if (hit.time > max_point_timestamp) {
+          max_point_timestamp = hit.time;
+        }
+        if (hit.time < min_point_timestamp) {
+          min_point_timestamp = hit.time;
+        }
+      }
+    }
 
-  common::Time StartTime() {
+    //  float pre_length = float(options_.submaps_options().high_resolution()
+    //  / 2.0); sensor::TimedPointCloud pre_voxel_filtered_cloud;
+    //  sensor::VoxelFilter pre_voxel_filter(pre_length);
+    //  pre_voxel_filtered_cloud =
+    //      pre_voxel_filter.Filter(pre_filtered_cloud);
+
+    sensor::VoxelFilter high_resolution_voxel_filter(
+        options.submaps_options().high_resolution() / 2.f);
+    insertion_cloud = high_resolution_voxel_filter.Filter(pre_filtered_cloud);
+    sensor::AdaptiveVoxelFilter scan_cloud_adaptive_voxel_filter(
+        options.high_resolution_adaptive_voxel_filter_options());
+    scan_matching_cloud =
+        scan_cloud_adaptive_voxel_filter.Filter(insertion_cloud);
+
+    //  LOG_EVERY_N(INFO, 50)<<"raw res cloud size
+    //  "<<range_data_in_tracking.ranges.size(); LOG_EVERY_N(INFO, 50)<<"pre
+    //  cloud size "<<pre_filtered_cloud.size(); LOG_EVERY_N(INFO, 50)<<"high
+    //  res cloud size "<<point_cloud_set.high_resolution_cloud.size();
+    //  LOG_EVERY_N(INFO, 50)<<"low res cloud size
+    //  "<<point_cloud_set.low_resolution_cloud.size(); LOG_EVERY_N(INFO,
+    //  50)<<"match cloud size
+    //  "<<point_cloud_set.scan_matching_cloud.size();
+  };
+
+  common::Time StartTime() const {
     return time + common::FromSeconds(min_point_timestamp);
   };
 
-  common::Time EndTime() {
+  common::Time EndTime() const {
     return time + common::FromSeconds(max_point_timestamp);
   };
 };
