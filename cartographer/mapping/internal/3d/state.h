@@ -59,6 +59,9 @@ struct ControlPoint {
   double translation_ratio = 0.0;
   double rotation_ratio = 0.0;
   double time_ratio = 0.0;
+  double estimated_translation = -1.0;
+  double estimated_rotation = -1.0;
+  double delta_time = -1.0;
 };
 
 struct PointCloudSet {

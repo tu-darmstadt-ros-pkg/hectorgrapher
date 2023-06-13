@@ -81,6 +81,10 @@ void ScanMatchingOptimizationProblem::AddPerScanMatchingResiduals(
               *control_point, point_cloud_set.scan_matching_cloud,
               tsdf_pyramid);
         }
+        if (options_.optimizing_local_trajectory_builder_options()
+                .odometry_translation_weight() > 0.0) {
+          AddOdometryResidual(*control_point);
+        }
       } else {
         LOG(ERROR) << "Only Multi Resolution Matching available";
       }
@@ -232,6 +236,45 @@ void ScanMatchingOptimizationProblem::AddIMUResiduals(
     default:
       LOG(FATAL) << "Unknown proto::IMUCostTerm";
   }
+}
+
+void ScanMatchingOptimizationProblem::AddOdometryResidual(
+    ControlPoint& control_point) {
+  double residual_translation_weight =
+      options_.optimizing_local_trajectory_builder_options()
+          .odometry_translation_weight();
+  double residual_rotation_weight =
+      options_.optimizing_local_trajectory_builder_options()
+          .odometry_rotation_weight();
+  if (options_.optimizing_local_trajectory_builder_options()
+          .use_adaptive_odometry_weights()) {
+    double translation_distance = control_point.estimated_translation;
+    double rotation_distance = control_point.estimated_rotation;
+    double delta_time = control_point.delta_time;
+    const double translation_normalization =
+        options_.optimizing_local_trajectory_builder_options()
+            .odometry_translation_normalization() *
+        delta_time;
+    const double rotation_normalization =
+        options_.optimizing_local_trajectory_builder_options()
+            .odometry_rotation_normalization() *
+        delta_time;
+    residual_translation_weight =
+        options_.optimizing_local_trajectory_builder_options()
+            .odometry_translation_weight() /
+        sqrt(translation_distance + translation_normalization);
+    residual_rotation_weight =
+        options_.optimizing_local_trajectory_builder_options()
+            .odometry_rotation_weight() /
+        sqrt(rotation_distance + rotation_normalization);
+  }
+  problem.AddResidualBlock(
+      new ceres::AutoDiffCostFunction<AbsoluteRigidCostFunction, 6, 3, 4>(
+          new AbsoluteRigidCostFunction(residual_translation_weight,
+                                        residual_rotation_weight,
+                                        control_point.state.ToRigid())),
+      nullptr, control_point.state.translation.data(),
+      control_point.state.rotation.data());
 }
 
 void ScanMatchingOptimizationProblem::AddOdometryResiduals(

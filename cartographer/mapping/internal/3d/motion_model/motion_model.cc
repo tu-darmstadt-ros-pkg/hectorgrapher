@@ -87,6 +87,8 @@ void MotionModel::deleteUntilBefore(const common::Time& time) {
     odom_buffer_.pop_front();
   }
 }
+State MotionModel::LastState() const { return last_state_; }
+common::Time MotionModel::LastTime() const { return last_state_time_; }
 
 }  // namespace mapping
 }  // namespace cartographer

@@ -104,8 +104,18 @@ OptimizingLocalTrajectoryBuilder::AddRangeData(
 void OptimizingLocalTrajectoryBuilder::AddControlPoint(common::Time t) {
   CHECK(motion_model_->isInitialized());
   CHECK(motion_model_->HasDataUntil(t));
-  control_points_.push_back(
-      ControlPoint{t, motion_model_->ExtrapolateState(t)});
+  State last_state = motion_model_->LastState();
+
+  double delta_time = common::ToSeconds(t - motion_model_->LastTime());
+  State current_state = motion_model_->ExtrapolateState(t);
+  transform::Rigid3d delta =
+      last_state.ToRigid().inverse() * current_state.ToRigid();
+  double delta_translation = delta.translation().norm();
+  double delta_rotation =
+      delta.rotation().angularDistance(Eigen::Quaterniond::Identity());
+  control_points_.push_back(ControlPoint{t, current_state, 0.0, 0.0, 0.0,
+                                         delta_translation, delta_rotation,
+                                         delta_time});
 }
 
 void OptimizingLocalTrajectoryBuilder::AddControlPoint(common::Time t,
@@ -113,8 +123,11 @@ void OptimizingLocalTrajectoryBuilder::AddControlPoint(common::Time t,
                                                        double dt) {
   CHECK(motion_model_->isInitialized());
   CHECK(motion_model_->HasDataUntil(t));
-  control_points_.push_back(
-      ControlPoint{t, motion_model_->ExtrapolateState(t), dT, dR, dt});
+  State last_state = motion_model_->LastState();
+  State current_state = motion_model_->ExtrapolateState(t);
+  transform::Rigid3d delta =
+      last_state.ToRigid().inverse() * current_state.ToRigid();
+  control_points_.push_back(ControlPoint{t, current_state, dT, dR, dt});
 }
 
 void OptimizingLocalTrajectoryBuilder::RemoveObsoleteSensorData() {

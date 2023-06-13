@@ -52,6 +52,8 @@ class MotionModel {
                                                const common::Time& t1);
   void AddIMUData(const sensor::ImuData& imu_data);
   void AddOdometryData(const sensor::OdometryData& odom_data);
+  State LastState() const;
+  common::Time LastTime() const;
 
  protected:
   // Deletes IMU and Odom buffer, keeping one message before time

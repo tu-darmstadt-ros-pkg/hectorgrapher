@@ -23,6 +23,7 @@
 #include "cartographer/mapping/3d/hybrid_grid_tsdf.h"
 #include "cartographer/mapping/3d/submap_3d.h"
 #include "cartographer/mapping/internal/3d/imu_integration.h"
+#include "cartographer/mapping/internal/3d/scan_matching/absolute_rigid_cost_function.h"
 #include "cartographer/mapping/internal/3d/state.h"
 #include "cartographer/mapping/internal/optimization/optimization_problem_options.h"
 #include "cartographer/mapping/proto/3d/local_trajectory_builder_options_3d.pb.h"
@@ -58,6 +59,9 @@ class ScanMatchingOptimizationProblem {
       Eigen::Transform<double, 3, Eigen::Affine> angular_velocity_calibration,
       const std::unique_ptr<ImuIntegrator>& imu_integrator,
       std::deque<ControlPoint>& control_points);
+
+  void AddOdometryResidual(ControlPoint& control_point);
+
   void AddOdometryResiduals(
       const std::deque<sensor::OdometryData>& odometer_data_list,
       std::deque<ControlPoint>& control_points);
