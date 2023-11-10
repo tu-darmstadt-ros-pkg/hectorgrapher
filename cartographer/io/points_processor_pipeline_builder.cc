@@ -19,6 +19,7 @@
 #include "absl/memory/memory.h"
 #include "cartographer/io/coloring_points_processor.h"
 #include "cartographer/io/counting_points_processor.h"
+#include "cartographer/io/dynamic_objects_removal_points_processor.h"
 #include "cartographer/io/fixed_ratio_sampling_points_processor.h"
 #include "cartographer/io/frame_id_filtering_points_processor.h"
 #include "cartographer/io/hybrid_grid_points_processor.h"
@@ -90,6 +91,7 @@ void RegisterBuiltInPointsProcessors(
   RegisterPlainPointsProcessor<OutlierRemovingPointsProcessor>(builder);
   RegisterPlainPointsProcessor<ColoringPointsProcessor>(builder);
   RegisterPlainPointsProcessor<IntensityToColorPointsProcessor>(builder);
+  RegisterPlainPointsProcessor<DynamicObjectsRemovalPointsProcessor>(builder);
   RegisterFileWritingPointsProcessor<PcdWritingPointsProcessor>(
       file_writer_factory, builder);
   RegisterFileWritingPointsProcessor<MeshWritingPointsProcessor>(

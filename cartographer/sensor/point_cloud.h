@@ -42,6 +42,8 @@ using PointCloud = std::vector<RangefinderPoint>;
 // third entry is 0.f (and the fourth entry is time).
 using TimedPointCloud = std::vector<TimedRangefinderPoint>;
 
+using CustomPointCloud = std::vector<CustomRangefinderPoint>;
+
 PointCloud ToPointCloud(const TimedPointCloud& timed_point_cloud);
 
 struct PointCloudWithIntensities {
@@ -60,6 +62,10 @@ PointCloud TransformPointCloud(const PointCloud& point_cloud,
 // Transforms 'point_cloud' according to 'transform'.
 TimedPointCloud TransformTimedPointCloud(const TimedPointCloud& point_cloud,
                                          const transform::Rigid3f& transform);
+
+CustomPointCloud TransformCustomPointCloud(
+    const CustomPointCloud& point_cloud,
+    const transform::Rigid3f& transform);
 
 // Returns a new point cloud without points that fall outside the region defined
 // by 'min_z' and 'max_z'.

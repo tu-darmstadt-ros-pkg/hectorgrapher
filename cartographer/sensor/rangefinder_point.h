@@ -22,6 +22,7 @@
 #include "Eigen/Core"
 #include "cartographer/sensor/proto/sensor.pb.h"
 #include "cartographer/transform/transform.h"
+#include "cartographer/io/color.h"
 #include "glog/logging.h"
 
 namespace cartographer {
@@ -37,6 +38,14 @@ struct RangefinderPoint {
 struct TimedRangefinderPoint {
   Eigen::Vector3f position;
   float time;
+};
+
+struct CustomRangefinderPoint {
+  Eigen::Vector3f position;
+  float probability;
+  int index;
+  float intensity;
+  io::FloatColor color;
 };
 
 template <class T>
@@ -55,6 +64,14 @@ inline TimedRangefinderPoint operator*(const transform::Rigid3<T>& lhs,
   return result;
 }
 
+template <class T>
+inline CustomRangefinderPoint operator*(const transform::Rigid3<T>& lhs,
+                                       const CustomRangefinderPoint& rhs) {
+  CustomRangefinderPoint result = rhs;
+  result.position = lhs * rhs.position;
+  return result;
+}
+
 inline bool operator==(const RangefinderPoint& lhs,
                        const RangefinderPoint& rhs) {
   return lhs.position == rhs.position;
@@ -63,6 +80,15 @@ inline bool operator==(const RangefinderPoint& lhs,
 inline bool operator==(const TimedRangefinderPoint& lhs,
                        const TimedRangefinderPoint& rhs) {
   return lhs.position == rhs.position && lhs.time == rhs.time;
+}
+
+inline bool operator==(const CustomRangefinderPoint &lhs,
+                       const CustomRangefinderPoint &rhs) {
+  return lhs.position == rhs.position
+      && lhs.probability == rhs.probability
+      && lhs.index == rhs.index
+      && lhs.intensity == rhs.intensity
+      && lhs.color == rhs.color;
 }
 
 inline RangefinderPoint FromProto(
